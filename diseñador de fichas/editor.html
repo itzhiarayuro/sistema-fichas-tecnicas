@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Editor Visual de Fichas Técnicas (A4)</title>
+    <link rel="stylesheet" href="css/style.css">
+    <!-- Google Fonts -->
+    <link
+        href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Open+Sans:wght@400;600&family=Montserrat:wght@400;700&display=swap"
+        rel="stylesheet">
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+
+    <div class="app-container">
+        <!-- TOOLBAR (Left) -->
+        <div class="toolbar">
+            <div class="tool-group">
+                <button class="tool-btn active" id="tool-select" title="Seleccionar (V)">
+                    <i class="fa-solid fa-arrow-pointer"></i>
+                </button>
+                <button class="tool-btn" id="tool-rect" title="Rectángulo (R)">
+                    <i class="fa-regular fa-square"></i>
+                </button>
+                <button class="tool-btn" id="tool-text" title="Texto (T)">
+                    <i class="fa-solid fa-font"></i>
+                </button>
+                <button class="tool-btn" id="tool-line" title="Línea (L)">
+                    <i class="fa-solid fa-minus"></i>
+                </button>
+                <button class="tool-btn" id="tool-img" title="Imagen Placeholder (I)">
+                    <i class="fa-regular fa-image"></i>
+                </button>
+            </div>
+
+            <div class="tool-group">
+                <button class="tool-btn action" id="action-undo" title="Deshacer (Ctrl+Z)">
+                    <i class="fa-solid fa-rotate-left"></i>
+                </button>
+                <button class="tool-btn action" id="action-redo" title="Rehacer (Ctrl+Y)">
+                    <i class="fa-solid fa-rotate-right"></i>
+                </button>
+            </div>
+
+            <div class="tool-group bottom">
+                <button class="tool-btn action" id="action-import" title="Importar HTML">
+                    <i class="fa-solid fa-file-import"></i>
+                </button>
+                <input type="file" id="file-import-input" accept=".html,.htm" style="display: none;">
+                <button class="tool-btn action" id="action-export" title="Exportar HTML">
+                    <i class="fa-solid fa-file-export"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- LAYERS PALETTE (Left-Inner) -->
+        <div class="panel layers-panel">
+            <div class="panel-header">Capas</div>
+            <div class="layers-list" id="layers-list">
+                <!-- Layers items injected here -->
+            </div>
+        </div>
+
+        <!-- MAIN WORKSPACE -->
+        <div class="workspace">
+            <div class="ruler-top" id="ruler-top"></div>
+            <div class="ruler-left" id="ruler-left"></div>
+
+            <div class="canvas-viewport" id="viewport">
+                <div class="canvas-container" id="canvas-container">
+                    <!-- A4 PAGE -->
+                    <div class="page-canvas" id="canvas">
+                        <!-- Elements injected here -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="status-bar">
+                <span id="coords-display">X: 0px Y: 0px</span>
+                <span id="zoom-display">100%</span>
+            </div>
+        </div>
+
+        <!-- PROPERTIES INSPECTOR (Right) -->
+        <div class="panel properties-panel">
+            <div class="panel-header">Propiedades</div>
+
+            <div class="prop-group" id="prop-general">
+                <div class="prop-row">
+                    <label>ID</label>
+                    <input type="text" id="prop-id" class="prop-input">
+                </div>
+                <div class="prop-row two-col">
+                    <div>
+                        <label>X (px)</label>
+                        <input type="number" id="prop-x" class="prop-input">
+                    </div>
+                    <div>
+                        <label>Y (px)</label>
+                        <input type="number" id="prop-y" class="prop-input">
+                    </div>
+                </div>
+                <div class="prop-row two-col">
+                    <div>
+                        <label>W (px)</label>
+                        <input type="number" id="prop-w" class="prop-input">
+                    </div>
+                    <div>
+                        <label>H (px)</label>
+                        <input type="number" id="prop-h" class="prop-input">
+                    </div>
+                </div>
+            </div>
+
+            <div class="prop-group" id="prop-style">
+                <div class="prop-section-title">Estilo</div>
+                <div class="prop-row">
+                    <label>Fondo</label>
+                    <div class="color-picker-wrapper">
+                        <input type="color" id="prop-bg-color" value="#ffffff">
+                        <input type="text" id="prop-bg-text" class="prop-input small" value="#ffffff">
+                        <input type="checkbox" id="prop-bg-transparent" title="Transparente"> T
+                    </div>
+                </div>
+                <div class="prop-row">
+                    <label>Borde</label>
+                    <div class="border-controls">
+                        <input type="number" id="prop-border-width" class="prop-input x-small" min="0" value="1"> px
+                        <input type="color" id="prop-border-color" value="#000000">
+                    </div>
+                </div>
+                <div class="prop-row">
+                    <label>Z-Index</label>
+                    <input type="number" id="prop-zindex" class="prop-input">
+                </div>
+            </div>
+
+            <div class="prop-group hidden" id="prop-text">
+                <div class="prop-section-title">Texto</div>
+                <div class="prop-row">
+                    <textarea id="prop-content" class="prop-input multiline" rows="3"></textarea>
+                </div>
+                <div class="prop-row">
+                    <label>Fuente</label>
+                    <select id="prop-font-family" class="prop-input">
+                        <option value="Arial, sans-serif">Arial</option>
+                        <option value="'Times New Roman', serif">Times New Roman</option>
+                        <option value="'Courier New', monospace">Courier New</option>
+                        <option value="'Montserrat', sans-serif">Montserrat</option>
+                        <option value="'Roboto', sans-serif">Roboto</option>
+                    </select>
+                </div>
+                <div class="prop-row two-col">
+                    <div>
+                        <label>Tamaño</label>
+                        <input type="number" id="prop-font-size" class="prop-input" value="12">
+                    </div>
+                    <div>
+                        <label>Peso</label>
+                        <select id="prop-font-weight" class="prop-input">
+                            <option value="400">Normal</option>
+                            <option value="700">Bold</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="prop-row button-row">
+                    <button class="icon-btn" id="align-left"><i class="fa-solid fa-align-left"></i></button>
+                    <button class="icon-btn" id="align-center"><i class="fa-solid fa-align-center"></i></button>
+                    <button class="icon-btn" id="align-right"><i class="fa-solid fa-align-right"></i></button>
+                </div>
+            </div>
+
+            <div class="prop-group">
+                <button class="full-btn btn-delete" id="btn-delete-el">Eliminar Elemento</button>
+            </div>
+
+            <div class="config-panel">
+                <div class="prop-section-title">Configuración</div>
+                <div class="prop-row">
+                    <label>Grid</label>
+                    <input type="checkbox" id="config-grid-show" checked> Mostrar
+                    <input type="checkbox" id="config-grid-snap"> Snap
+                </div>
+                <div class="prop-row">
+                    <label>Zoom</label>
+                    <input type="range" id="config-zoom" min="25" max="200" value="100">
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/app.js"></script>
+</body>
+
+</html>
