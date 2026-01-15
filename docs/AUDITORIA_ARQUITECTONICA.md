@@ -1,60 +1,62 @@
-# Documento de Auditoría y Evaluación para Arquitecto Senior
-## Sistema de Gestión de Fichas Técnicas de Pozos
+# Auditoría Técnica 360°: Evaluación de Arquitectura y Calidad
+## Proyecto: Sistema de Fichas Técnicas de Pozos (SFT)
 
-Este documento ha sido generado para facilitar una evaluación externa profunda sobre la integridad, seguridad y eficiencia del sistema actual.
-
----
-
-### 1. Resumen Ejecutivo de la Arquitectura
-El sistema es una aplicación **Local-First** construida sobre **Next.js 14+ (App Router)**. Su objetivo es transformar datos crudos de Excel y fotografías en fichas técnicas PDF parametrizables mediante un diseñador visual tipo canvas.
-
-- **Frontend**: React, TailwindCSS, Lucide Icons.
-- **Estado**: Zustand con persistencia (IndexedDB/LocalStorage).
-- **Persistencia de Binarios**: BlobStore personalizado para manejo de imágenes fuera del estado de memoria.
-- **Procesamiento**: Web Workers para el parsing de Excel pesado.
-- **Salida**: jsPDF para la generación de documentos del lado del cliente.
+Este documento proporciona una visión holística del sistema para una revisión por parte de un Arquitecto Senior, cubriendo desde la estructura de datos hasta la viabilidad de negocio a largo plazo.
 
 ---
 
-### 2. Estructura de Datos y Flujo (Reciprocidad)
-El sistema mantiene una "Sincronía Bidireccional" entre tres capas:
-1.  **Capa de Importación**: `parsers/excelParser.ts` (Normaliza variaciones de Excel).
-2.  **Capa de Dominio**: `types/pozo.ts` (Modelo de verdad, 33 campos planos + estructuras anidadas).
-3.  **Capa de Presentación**: `constants/fieldMapping.ts` (Puente entre el modelo y el diseñador visual).
-
-**Punto de Evaluación**: Verificar si existen fugas de coherencia entre los campos del Excel y los slots definidos en `AVAILABLE_DATA_FIELDS`.
+### 1. Filosofía de Ingeniería y Paradigma
+El sistema opera bajo el paradigma **Offline-First & Client-Side Heavy**. 
+- **Decisión de Diseño**: Se ha delegado toda la computación al cliente (Parsing, Rendering, Persistence, PDF Generation) para eliminar costos de infraestructura y maximizar la privacidad de los datos.
+- **Estatus**: Funcional pero al límite de las capacidades del navegador en proyectos de gran escala (+500 pozos simultáneos).
 
 ---
 
-### 3. Análisis de Vulnerabilidades Potenciales (Seguridad)
-- **Sanitización**: El sistema permite importar fragmentos HTML para el diseñador. Se debe evaluar el riesgo de **XSS (Cross-Site Scripting)** en el `HTMLImporter.tsx`.
-- **Límite de Recursos**: Al no tener backend, el sistema es vulnerable a ataques de "Agotamiento de RAM" si se cargan miles de fotos base64 simultáneamente (Mitigado parcialmente por `BlobStore`).
-- **Seguridad de Datos**: Todo reside en el navegador del usuario. Evaluar si la falta de cifrado en reposo (`IndexedDB`) es aceptable para la sensibilidad de los datos del proyecto.
+### 2. Capa de Datos y Modelo de Dominio (La Fuente de Verdad)
+El modelo de datos ha evolucionado de una estructura jerárquica a una **aplanada híbrida**.
+- **Jerarquía Real**: `src/types/pozo.ts` (Estructura `Identificacion`, `Ubicacion`, `Componentes`).
+- **Mapeo de Presentación**: `src/constants/fieldMapping.ts` actúa como un **Adaptador** para el diseñador visual.
+- **Punto de Evaluación**: Evaluar si el uso de "Strings como Rutas" (ej: `tuberias.tuberias[0].diametro`) es suficientemente robusto ante cambios en el esquema o si requiere un sistema de **Lenses** o **Selectors** tipados.
 
 ---
 
-### 4. Redundancia y Deuda Técnica
-- **Mapeo Manual**: El archivo `fieldMapping.ts` contiene definiciones manuales de rutas de objetos (ej. `identificacion.idPozo.value`). Evaluar si una aproximación reflexiva o basada en esquemas sería más óptima.
-- **Doble Lógica de PDF**: Coexisten `pdfGenerator.ts` (Legacy/Automático) y `designBasedPdfGenerator.ts` (Nuevo/Visual). Evaluar el impacto de mantener ambos o la necesidad de una unificación inmediata.
+### 3. El Motor de Diseño (UX & Rendering)
+El diseñador visual (`DesignCanvas.tsx`) es el componente más complejo.
+- **Geometría**: Posicionamiento absoluto en `mm` con conversión a `px` mediante un factor dinámico de Zoom.
+- **Paginación Dinámica**: Implementada en `designBasedPdfGenerator.ts`. Detecta el desbordamiento de slots (Fotos/Tuberías) y replica el diseño en múltiples páginas manteniendo encabezados constantes.
+- **Punto de Evaluación**: Verificar la eficiencia del algoritmo de ordenamiento por `zIndex` y la gestión de eventos de Drag & Drop para evitar fugas de memoria en sesiones largas de diseño.
 
 ---
 
-### 5. Áreas Críticas para el Arquitecto (Lo que aún no vemos)
-- **Reciprocidad de Datos**: ¿Qué sucede si el modelo de datos `Pozo` evoluciona pero el `FichaDesignVersion` del usuario tiene campos antiguos? (Falta una capa de Migración de Esquemas).
-- **Manejo de Memoria**: El sistema realiza múltiples clones de estado profundo (`deepClone`) para el historial Undo/Redo. En diseños complejos con muchas imágenes, esto podría degradar la performance drásticamente.
-- **Inyección de Código Malicioso**: Verificar que ninguna dependencia de terceros (npm) esté realizando llamadas externas fuera de la ejecución local.
+### 4. Robustez y Tolerancia a Fallos
+- **Integridad**: `src/lib/storage/blobStore.ts` gestiona binarios para evitar inflar el estado de Zustand (Zustand State Bloat).
+- **Recuperación**: El sistema utiliza un patrón de **Snapshotting**. 
+- **Fallo Silencioso**: El parser de Excel ignora columnas desconocidas y asigna valores seguros ante datos malformados.
+- **Punto de Evaluación**: Evaluar la estrategia de "Modo Degradado" cuando los recursos del navegador (RAM/IndexedDB) se aproximan a sus límites críticos.
 
 ---
 
-### 6. Mapa de Archivos Clave para Revisión
-1.  `src/stores/globalStore.ts`: Cerebro del estado global.
-2.  `src/lib/storage/blobStore.ts`: Gestión de memoria para archivos grandes.
-3.  `src/lib/pdf/designBasedPdfGenerator.ts`: Algoritmo de renderizado y paginación.
-4.  `src/components/designer/DesignCanvas.tsx`: Lógica de manipulación espacial y transformaciones.
+### 5. Vulnerabilidades y Riesgos (Seguridad 360°)
+- **Front-end Injection**: Uso de fragmentos HTML en el diseñador. Evaluar necesidad de auditoría de sanitización en el renderizado previo a la generación de PDF.
+- **Suministro (Supply Chain)**: Dependencia en librerías externas para parsing de Excel y generación de PDF. Evaluar riesgos de seguridad en estas dependencias.
+- **Privacidad**: Todo el procesamiento es local. Riesgo: Si el PC del usuario es comprometido, toda la base de datos IndexedDB es accesible.
 
 ---
 
-### PREGUNTAS CLAVE PARA EL EVALUADOR:
-1.  ¿Es la estructura de `FichaDesignVersion` escalable para soportar tablas dinámicas complejas o solo sirve para campos fijos?
-2.  ¿Existe algún riesgo de desbordamiento de búfer o pérdida de datos al persistir estados grandes en `IndexedDB`?
-3.  ¿Cómo afectaría la inclusión de un backend futuro al desacoplamiento actual del sistema?
+### 6. Escalabilidad y Futuro (Roadmap Técnico)
+- **Persistencia**: Actualmente basada en navegador. Evaluar transición a **SQLite (WASM)** u **OPFS** para bases de datos de miles de registros.
+- **Multiusuario**: El sistema no tiene control de concurrencia. Evaluar la dificultad de implementar **CRDTs** o un sistema de merge de estados si se añade un servidor central.
+- **Reciprocidad de Esquemas**: Implementar un sistema de **V-Migrations** (Migración de Versiones) para cuando el formato del JSON de las plantillas cambie.
+
+---
+
+### 7. Guía de Auditoría para el Revisor
+Se recomienda al Auditor Senior enfocar sus esfuerzos en los siguientes "Smells" potenciales:
+1.  **Memory Management**: Revisar `src/lib/managers/resourceManager.ts` para confirmar que las URLs de objetos (Blobs) se están liberando correctamente (`URL.revokeObjectURL`).
+2.  **Concurrency**: Evaluar si el uso de un solo Worker para Excel es suficiente o si la interfaz se bloquea durante la generación de PDFs masivos.
+3.  **Code Consistency**: Revisar la redundancia entre los componentes de UI que manejan formularios y el diseñador visual (DRY - Don't Repeat Yourself).
+
+---
+
+### Conclusión del Autor (Antigravity AI)
+El sistema es una pieza de ingeniería sólida que prioriza la autonomía del usuario. Su mayor fortaleza (ser 100% local) es también su mayor desafío arquitectónico en términos de manejo de recursos finitos en el cliente.
