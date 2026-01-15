@@ -115,6 +115,8 @@ export function DesignPreview({ version, isOpen, onClose }: DesignPreviewProps) 
                         >
                             {/* Render Shapes */}
                             {version.shapes?.map((shape) => {
+                                if (shape.isVisible === false) return null;
+
                                 if (shape.type === 'rectangle') {
                                     return (
                                         <div
@@ -128,6 +130,7 @@ export function DesignPreview({ version, isOpen, onClose }: DesignPreviewProps) 
                                                 backgroundColor: shape.fillColor || 'transparent',
                                                 border: shape.strokeColor ? `${shape.strokeWidth || 1}px solid ${shape.strokeColor}` : 'none',
                                                 borderRadius: shape.borderRadius ? `${shape.borderRadius}px` : 0,
+                                                opacity: shape.opacity ?? 1,
                                                 zIndex: shape.zIndex
                                             }}
                                         />
@@ -146,6 +149,7 @@ export function DesignPreview({ version, isOpen, onClose }: DesignPreviewProps) 
                                                 height: `${shape.height}mm`,
                                                 backgroundColor: shape.fillColor || 'transparent',
                                                 border: shape.strokeColor ? `${shape.strokeWidth || 1}px solid ${shape.strokeColor}` : 'none',
+                                                opacity: shape.opacity ?? 1,
                                                 zIndex: shape.zIndex
                                             }}
                                         />
@@ -161,11 +165,38 @@ export function DesignPreview({ version, isOpen, onClose }: DesignPreviewProps) 
                                                 left: `${shape.x}mm`,
                                                 top: `${shape.y}mm`,
                                                 width: `${shape.width}mm`,
-                                                height: `${shape.strokeWidth || 1}px`,
+                                                height: `${(shape.strokeWidth || 1) / MM_TO_PX}mm`,
                                                 backgroundColor: shape.strokeColor || '#000000',
+                                                opacity: shape.opacity ?? 1,
                                                 zIndex: shape.zIndex
                                             }}
                                         />
+                                    );
+                                }
+
+                                if (shape.type === 'triangle') {
+                                    return (
+                                        <div
+                                            key={shape.id}
+                                            className="absolute"
+                                            style={{
+                                                left: `${shape.x}mm`,
+                                                top: `${shape.y}mm`,
+                                                width: `${shape.width}mm`,
+                                                height: `${shape.height}mm`,
+                                                opacity: shape.opacity ?? 1,
+                                                zIndex: shape.zIndex
+                                            }}
+                                        >
+                                            <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+                                                <polygon
+                                                    points="50,0 100,100 0,100"
+                                                    fill={shape.fillColor || 'transparent'}
+                                                    stroke={shape.strokeColor || '#374151'}
+                                                    strokeWidth={shape.strokeWidth ? (shape.strokeWidth * (100 / (shape.width * MM_TO_PX))) : 1}
+                                                />
+                                            </svg>
+                                        </div>
                                     );
                                 }
 
@@ -184,12 +215,43 @@ export function DesignPreview({ version, isOpen, onClose }: DesignPreviewProps) 
                                                 fontWeight: shape.fontWeight || 'normal',
                                                 color: shape.color || '#000000',
                                                 textAlign: shape.textAlign || 'left',
+                                                opacity: shape.opacity ?? 1,
                                                 zIndex: shape.zIndex,
                                                 display: 'flex',
                                                 alignItems: 'center'
                                             }}
                                         >
                                             {shape.content || 'Texto'}
+                                        </div>
+                                    );
+                                }
+
+                                if (shape.type === 'image') {
+                                    return (
+                                        <div
+                                            key={shape.id}
+                                            className="absolute"
+                                            style={{
+                                                left: `${shape.x}mm`,
+                                                top: `${shape.y}mm`,
+                                                width: `${shape.width}mm`,
+                                                height: `${shape.height}mm`,
+                                                zIndex: shape.zIndex,
+                                                opacity: shape.opacity ?? 1
+                                            }}
+                                        >
+                                            {shape.imageUrl ? (
+                                                // eslint-disable-next-line @next/next/no-img-element
+                                                <img
+                                                    src={shape.imageUrl}
+                                                    alt="Asset"
+                                                    className="w-full h-full object-contain"
+                                                />
+                                            ) : (
+                                                <div className="w-full h-full bg-gray-100 flex items-center justify-center text-gray-300">
+                                                    Imagen
+                                                </div>
+                                            )}
                                         </div>
                                     );
                                 }

@@ -29,13 +29,88 @@ export function DesignToolbar({
     onGridSizeChange,
     onPreview
 }: DesignToolbarProps) {
-    const { updateVersion, duplicateVersion } = useDesignStore();
+    const { updateVersion, duplicateVersion, undo, redo, past, future, currentVersionId } = useDesignStore();
 
     if (!version) return null;
 
+    const canUndo = currentVersionId ? (past[currentVersionId]?.length || 0) > 0 : false;
+    const canRedo = currentVersionId ? (future[currentVersionId]?.length || 0) > 0 : false;
+
     const handleDuplicate = () => {
-        const newId = duplicateVersion(version.id, `${version.name} (copia)`);
-        // TODO: Cambiar a la nueva versión
+        duplicateVersion(version.id, `${version.name} (copia)`);
+    };
+
+    const handleExportHTML = () => {
+        // Generar HTML simple
+        const html = `
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>${version.name}</title>
+    <style>
+        body { margin: 0; padding: 0; background: #f0f0f0; display: flex; justify-content: center; align-items: center; min-height: 100vh; font-family: sans-serif; }
+        .page {
+            position: relative;
+            background: white;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .element { position: absolute; box-sizing: border-box; }
+        @media print {
+            body { background: none; display: block; }
+            .page { box-shadow: none; margin: 0; page-break-after: always; }
+        }
+    </style>
+</head>
+<body>
+    <div class="page" style="width: ${version.pageSize === 'A4' ? '210mm' : '215.9mm'}; height: ${version.pageSize === 'A4' ? '297mm' : '279.4mm'};">
+        ${version.shapes?.map(s => {
+            if (s.isVisible === false) return '';
+            const style = [
+                `left: ${s.x}mm`, `top: ${s.y}mm`, `width: ${s.width}mm`, `height: ${s.height}mm`,
+                `z-index: ${s.zIndex}`, `opacity: ${s.opacity ?? 1}`,
+                s.type === 'rectangle' || s.type === 'circle' ? `background-color: ${s.fillColor || 'transparent'}` : '',
+                (s.type === 'rectangle' || s.type === 'circle') && s.strokeColor ? `border: ${s.strokeWidth}px solid ${s.strokeColor}` : '',
+                s.borderRadius ? `border-radius: ${s.borderRadius}px` : (s.type === 'circle' ? 'border-radius: 50%' : ''),
+                s.type === 'text' ? `font-family: ${s.fontFamily || 'Inter'}; font-size: ${s.fontSize}pt; color: ${s.color || '#000'}; text-align: ${s.textAlign || 'left'}; display: flex; align-items: center;` : ''
+            ].join(';');
+
+            let content = '';
+            if (s.type === 'text') content = s.content || '';
+            if (s.type === 'image' && s.imageUrl) content = `<img src="${s.imageUrl}" style="width:100%; height:100%; object-fit:contain;">`;
+            if (s.type === 'line') content = `<div style="width:100%; height:${s.strokeWidth}px; background:${s.strokeColor || '#000'};"></div>`;
+
+            return `<div class="element" style="${style}">${content}</div>`;
+        }).join('')}
+        
+        ${version.placements.map(p => {
+            if (p.isVisible === false) return '';
+            const style = [
+                `left: ${p.x}mm`, `top: ${p.y}mm`, `width: ${p.width}mm`, `height: ${p.height}mm`,
+                `z-index: ${p.zIndex}`,
+                `font-family: ${p.fontFamily || 'Inter'}`, `font-size: ${p.fontSize}pt`,
+                `color: ${p.color || '#000'}`, `text-align: ${p.textAlign || 'left'}`,
+                p.backgroundColor ? `background-color: ${p.backgroundColor}` : '',
+                p.borderRadius ? `border-radius: ${p.borderRadius}px` : '',
+                p.padding ? `padding: ${p.padding}px` : '',
+                'display: flex; flex-direction: column; justify-content: center;'
+            ].join(';');
+            return `<div class="element" style="${style}">{{${p.fieldId}}}</div>`;
+        }).join('')}
+    </div>
+</body>
+</html>`;
+
+        const blob = new Blob([html], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${version.name.replace(/\s+/g, '_')}.html`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     };
 
     return (
@@ -57,6 +132,32 @@ export function DesignToolbar({
 
             {/* Center: Controles */}
             <div className="flex items-center gap-3">
+                {/* Undo/Redo */}
+                <div className="flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-lg p-1">
+                    <button
+                        onClick={undo}
+                        disabled={!canUndo}
+                        className={`p-1.5 rounded transition-colors ${canUndo ? 'text-gray-600 hover:text-primary hover:bg-white shadow-sm' : 'text-gray-300 cursor-not-allowed'}`}
+                        title="Deshacer (Ctrl+Z)"
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                        </svg>
+                    </button>
+                    <button
+                        onClick={redo}
+                        disabled={!canRedo}
+                        className={`p-1.5 rounded transition-colors ${canRedo ? 'text-gray-600 hover:text-primary hover:bg-white shadow-sm' : 'text-gray-300 cursor-not-allowed'}`}
+                        title="Rehacer (Ctrl+Y)"
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" />
+                        </svg>
+                    </button>
+                </div>
+
+                <div className="h-6 w-px bg-gray-200" />
+
                 {/* Zoom */}
                 <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1">
                     <button
@@ -178,24 +279,26 @@ export function DesignToolbar({
                 {/* Preview PDF */}
                 <button
                     onClick={onPreview}
-                    className="flex items-center gap-2 bg-gradient-to-r from-primary to-purple-600 text-white px-4 py-2 rounded-lg font-medium hover:shadow-lg transition-all active:scale-95"
+                    className="flex items-center gap-2 bg-white border border-primary text-primary px-3 py-2 rounded-lg font-medium hover:bg-primary-50 transition-all active:scale-95 text-xs"
                     title="Preview con datos reales"
                 >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                        />
-                        <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                        />
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                     </svg>
                     Preview
+                </button>
+
+                {/* Export HTML */}
+                <button
+                    onClick={handleExportHTML}
+                    className="flex items-center gap-2 bg-gradient-to-r from-primary to-purple-600 text-white px-3 py-2 rounded-lg font-medium hover:shadow-lg transition-all active:scale-95 text-xs"
+                    title="Exportar HTML"
+                >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    Exportar
                 </button>
             </div>
         </div>

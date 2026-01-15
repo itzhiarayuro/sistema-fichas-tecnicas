@@ -21,13 +21,13 @@ interface PDFRequestBody {
 export async function POST(request: NextRequest) {
   try {
     const body: PDFRequestBody = await request.json();
-    
+
     // Validar datos requeridos
     if (!body.ficha || !body.pozo) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: 'Datos incompletos: se requiere ficha y pozo' 
+        {
+          success: false,
+          error: 'Datos incompletos: se requiere ficha y pozo'
         },
         { status: 400 }
       );
@@ -35,15 +35,27 @@ export async function POST(request: NextRequest) {
 
     const { ficha, pozo, options = {} } = body;
 
+    // Validación de fotos (Requisito: al menos una foto para generar PDF)
+    const fotosCount = pozo.fotos?.fotos?.length || 0;
+    if (fotosCount === 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'No se puede generar PDF: la ficha no tiene fotos asociadas. Por favor, cargue al menos una foto.'
+        },
+        { status: 400 }
+      );
+    }
+
     // Generar PDF
     const generator = new PDFGenerator();
     const result = await generator.generatePDF(ficha, pozo, options);
 
     if (!result.success || !result.blob) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: result.error || 'Error al generar PDF' 
+        {
+          success: false,
+          error: result.error || 'Error al generar PDF'
         },
         { status: 500 }
       );
@@ -64,9 +76,9 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Error en API /api/pdf:', error);
     return NextResponse.json(
-      { 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Error interno del servidor' 
+      {
+        success: false,
+        error: error instanceof Error ? error.message : 'Error interno del servidor'
       },
       { status: 500 }
     );

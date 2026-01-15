@@ -38,6 +38,8 @@ interface UseSyncEngineReturn {
   reorderSections: (fromIndex: number, toIndex: number, source?: ChangeSource) => void;
   /** Toggle visibilidad de sección */
   toggleSectionVisibility: (sectionId: string, visible: boolean, source?: ChangeSource) => void;
+  /** Actualizar una personalización */
+  updateCustomization: (path: string[], value: unknown, source?: ChangeSource) => void;
   /** Forzar sincronización inmediata */
   flush: () => void;
   /** Reinicializar con nuevo estado */
@@ -131,6 +133,17 @@ export function useSyncEngine({
     engineRef.current.toggleSectionVisibility(sectionId, visible, source);
   }, []);
 
+  // Actualizar personalización
+  const updateCustomization = useCallback((
+    path: string[],
+    value: unknown,
+    source: ChangeSource = 'editor'
+  ) => {
+    if (!engineRef.current) return;
+    setIsPending(true);
+    engineRef.current.updateCustomization(path, value, source);
+  }, []);
+
   // Forzar flush
   const flush = useCallback(() => {
     engineRef.current?.flush();
@@ -154,6 +167,7 @@ export function useSyncEngine({
     updateField,
     reorderSections,
     toggleSectionVisibility,
+    updateCustomization,
     flush,
     reinitialize,
   }), [

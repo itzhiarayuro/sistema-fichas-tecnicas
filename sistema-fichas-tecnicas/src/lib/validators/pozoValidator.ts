@@ -9,7 +9,7 @@
  * - No destructivo: Nunca modifica los datos, solo reporta
  */
 
-import { Pozo, TuberiaInfo, SumideroInfo, FotoInfo, TipoTuberia, TipoSumidero, TipoFoto } from '@/types/pozo';
+import { Pozo, TuberiaInfo, SumideroInfo, FotoInfo, TipoTuberia, TipoSumidero, TipoFoto, TipoCamara } from '@/types/pozo';
 import { FieldValue } from '@/types/ficha';
 import { ErrorType, ErrorSeverity } from '@/lib/errors/errorTypes';
 
@@ -354,6 +354,21 @@ function validateComponentes(pozo: Pozo, result: PozoValidationResult): void {
       });
       result.fieldsWithIssues.push('numeroPeldanos');
     }
+  }
+
+  // Validar tipo de cámara
+  const tipoCamara = extractValue(pozo.tipoCamara || componentes.tipoCamara);
+  if (!isEmpty(tipoCamara) && !isValidEnum(tipoCamara, TipoCamara)) {
+    result.errors.push({
+      code: 'TIPO_CAMARA_INVALID',
+      message: `Tipo de cámara invalid: ${tipoCamara}`,
+      userMessage: 'El tipo de cámara no es válido para el sistema actual',
+      type: ErrorType.DATA,
+      severity: ErrorSeverity.ERROR,
+      field: 'tipoCamara',
+      value: tipoCamara,
+    });
+    result.fieldsWithIssues.push('tipoCamara');
   }
 }
 

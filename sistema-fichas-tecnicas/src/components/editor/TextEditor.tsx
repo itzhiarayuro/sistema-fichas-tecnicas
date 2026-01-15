@@ -40,7 +40,10 @@ interface TextEditorProps {
   /** Tamaño del texto */
   size?: 'sm' | 'md' | 'lg';
   /** Variante de estilo */
+  /** Variante de estilo */
   variant?: 'default' | 'minimal' | 'bordered';
+  /** Tipo de input (text, date, number, etc) */
+  inputType?: 'text' | 'date' | 'number' | 'email';
 }
 
 const sourceConfig: Record<FieldSource, { label: string; bgColor: string; textColor: string; borderColor: string }> = {
@@ -84,6 +87,7 @@ export function TextEditor({
   showTraceability = true,
   size = 'md',
   variant = 'default',
+  inputType = 'text',
 }: TextEditorProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [localValue, setLocalValue] = useState(fieldValue.value);
@@ -198,7 +202,7 @@ export function TextEditor({
           ) : (
             <input
               ref={inputRef as React.RefObject<HTMLInputElement>}
-              type="text"
+              type={inputType}
               value={localValue}
               onChange={handleChange}
               onBlur={handleBlur}

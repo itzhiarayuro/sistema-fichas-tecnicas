@@ -20,7 +20,9 @@
 
 import { FichaSection } from './FichaSection';
 import { TextEditor } from '../TextEditor';
+import { SelectEditor } from '../SelectEditor';
 import { FieldIndicator } from '../FieldIndicator';
+import { TipoCamara } from '@/types/pozo';
 import type { FieldValue } from '@/types/ficha';
 
 interface EstructuraData {
@@ -29,29 +31,29 @@ interface EstructuraData {
   anoInstalacion: FieldValue;
   tipoCamara: FieldValue;
   estructuraPavimento: FieldValue;
-  
+
   // 🟠 Importante
   existeTapa: FieldValue;
   estadoTapa: FieldValue;
   materialTapa: FieldValue;
-  
+
   // 🟢 Opcional
   existeCono: FieldValue;
   tipoCono: FieldValue;
   materialCono: FieldValue;
   estadoCono: FieldValue;
-  
+
   // 🟠 Importante
   existeCilindro: FieldValue;
   diametroCilindro: FieldValue;
   materialCilindro: FieldValue;
   estadoCilindro: FieldValue;
-  
+
   // 🟢 Opcional
   existeCanuela: FieldValue;
   materialCanuela: FieldValue;
   estadoCanuela: FieldValue;
-  
+
   // 🟢 Opcional
   existePeldanos: FieldValue;
   numeroPeldanos: FieldValue;
@@ -211,12 +213,13 @@ export function EstructuraSection({
               placeholder="YYYY"
               showSource={true}
             />
-            <TextEditor
+            <SelectEditor
               label="Tipo de Cámara"
               fieldValue={data.tipoCamara}
+              options={Object.values(TipoCamara)}
               editable={!locked}
               onCommit={handleFieldCommit('tipoCamara')}
-              placeholder="Circular/Rectangular/Cuadrada"
+              placeholder="Seleccionar tipo..."
               showSource={true}
             />
             <TextEditor

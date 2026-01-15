@@ -45,7 +45,7 @@ function createTestPozo(overrides?: Partial<Pozo>): Pozo {
       diametroCilindro: fv(''),
       sistema: fv('Sistema 1'),
       anoInstalacion: fv('2020'),
-      tipoCamara: fv('Circular'),
+      tipoCamara: fv('TÍPICA DE FONDO'),
       estructuraPavimento: fv('Asfalto'),
       materialTapa: fv('Hierro'),
       existeCono: fv('No'),
@@ -335,6 +335,44 @@ describe('Pozo Validator', () => {
       const result = validatePozo(pozo);
 
       expect(result.errors.filter(e => e.code === 'NUMERO_PELDANOS_INVALID')).toHaveLength(0);
+    });
+
+    it('should reject invalid tipoCamara', () => {
+      const pozo = createTestPozo({
+        componentes: {
+          ...createTestPozo().componentes,
+          tipoCamara: fv('Invalid Type'),
+        },
+      });
+      const result = validatePozo(pozo);
+
+      expect(result.isValid).toBe(false);
+      expect(result.errors.some(e => e.code === 'TIPO_CAMARA_INVALID')).toBe(true);
+    });
+
+    it('should accept valid tipoCamara from enum', () => {
+      const pozo = createTestPozo({
+        componentes: {
+          ...createTestPozo().componentes,
+          tipoCamara: fv('DE CAÍDA'),
+        },
+      });
+      const result = validatePozo(pozo);
+
+      expect(result.errors.filter(e => e.code === 'TIPO_CAMARA_INVALID')).toHaveLength(0);
+    });
+
+    it('should accept empty tipoCamara (blank)', () => {
+      const pozo = createTestPozo({
+        componentes: {
+          ...createTestPozo().componentes,
+          tipoCamara: fv(''),
+        },
+      });
+      const result = validatePozo(pozo);
+
+      expect(result.isValid).toBe(true);
+      expect(result.errors.filter(e => e.code === 'TIPO_CAMARA_INVALID')).toHaveLength(0);
     });
   });
 

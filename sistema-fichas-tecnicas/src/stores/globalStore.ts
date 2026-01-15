@@ -44,6 +44,7 @@ interface GlobalState {
   // Datos cargados (inmutables después de carga)
   pozos: Map<string, Pozo>;
   photos: Map<string, FotoInfo>;
+  uploadedImages: { id: string; name: string; date: number; data: string }[];
 
   // Configuración global
   config: GlobalConfig;
@@ -59,6 +60,10 @@ interface GlobalState {
   setPozos: (pozos: Map<string, Pozo>) => void;
   addPozo: (pozo: Pozo) => void;
   removePozo: (pozoId: string) => void;
+
+  // Acciones de imágenes subidas
+  addUploadedImage: (image: { name: string; data: string }) => void;
+  removeUploadedImage: (id: string) => void;
 
   // Acciones de fotos
   indexPhotos: (photos: FotoInfo[]) => void;
@@ -185,6 +190,7 @@ export const useGlobalStore = create<GlobalState>()(
       // Initial state
       pozos: new Map(),
       photos: new Map(),
+      uploadedImages: [],
       config: defaultConfig,
       templates: defaultTemplates,
       currentStep: 'upload',
@@ -211,6 +217,23 @@ export const useGlobalStore = create<GlobalState>()(
         newPozos.delete(pozoId);
         return { pozos: newPozos };
       }),
+
+      // Uploaded Images actions
+      addUploadedImage: (image) => set((state) => ({
+        uploadedImages: [
+          ...state.uploadedImages,
+          {
+            id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2),
+            name: image.name,
+            date: Date.now(),
+            data: image.data
+          }
+        ]
+      })),
+
+      removeUploadedImage: (id) => set((state) => ({
+        uploadedImages: state.uploadedImages.filter(img => img.id !== id)
+      })),
 
       // Photo actions
       indexPhotos: (photos) => set(() => {
@@ -312,6 +335,7 @@ export const useGlobalStore = create<GlobalState>()(
         config: state.config,
         templates: state.templates,
         guidedMode: state.guidedMode,
+        uploadedImages: state.uploadedImages,
         // Don't persist pozos and photos - they should be reloaded
       }),
     }

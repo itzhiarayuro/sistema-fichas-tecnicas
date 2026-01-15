@@ -31,7 +31,7 @@ interface IdentificacionData {
   fecha: FieldValue;
   levanto: FieldValue;
   estado: FieldValue;
-  
+
   // 🟠 Importante
   direccion: FieldValue;
   barrio: FieldValue;
@@ -106,7 +106,7 @@ function FieldWithUnit({
 export function IdentificacionSection({
   id,
   data,
-  locked = true, // Identificación es obligatoria por defecto
+  locked = false, // Ahora editable por defecto
   visible = true,
   onFieldChange,
   onToggleVisibility,
@@ -157,7 +157,7 @@ export function IdentificacionSection({
                 showSource={true}
               />
             </div>
-            
+
             <FieldWithUnit
               label="Coordenada X (Longitud)"
               fieldValue={data.coordenadaX}
@@ -166,7 +166,7 @@ export function IdentificacionSection({
               onCommit={handleFieldCommit('coordenadaX')}
               required={true}
             />
-            
+
             <FieldWithUnit
               label="Coordenada Y (Latitud)"
               fieldValue={data.coordenadaY}
@@ -175,7 +175,7 @@ export function IdentificacionSection({
               onCommit={handleFieldCommit('coordenadaY')}
               required={true}
             />
-            
+
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1 flex items-center gap-1">
                 Fecha de Inspección
@@ -187,9 +187,10 @@ export function IdentificacionSection({
                 onCommit={handleFieldCommit('fecha')}
                 placeholder="YYYY-MM-DD"
                 showSource={true}
+                inputType="date"
               />
             </div>
-            
+
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1 flex items-center gap-1">
                 Inspector
@@ -203,7 +204,7 @@ export function IdentificacionSection({
                 showSource={true}
               />
             </div>
-            
+
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1 flex items-center gap-1">
                 Estado General
@@ -240,7 +241,7 @@ export function IdentificacionSection({
                 showSource={true}
               />
             </div>
-            
+
             <div>
               <label className="block text-xs font-medium text-gray-500 mb-1 flex items-center gap-1">
                 Barrio
@@ -254,7 +255,7 @@ export function IdentificacionSection({
                 showSource={true}
               />
             </div>
-            
+
             <FieldWithUnit
               label="Elevación"
               fieldValue={data.elevacion}
@@ -263,7 +264,7 @@ export function IdentificacionSection({
               onCommit={handleFieldCommit('elevacion')}
               important={true}
             />
-            
+
             <FieldWithUnit
               label="Profundidad"
               fieldValue={data.profundidad}

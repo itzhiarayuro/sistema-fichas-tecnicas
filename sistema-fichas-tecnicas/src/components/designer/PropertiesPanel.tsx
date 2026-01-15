@@ -26,8 +26,8 @@ export function PropertiesPanel({ version, selectedPlacementId, selectedShapeId 
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
                     </svg>
                 </div>
-                <p className="text-sm text-gray-500 font-medium">Selecciona un campo para editar</p>
-                <p className="text-xs text-gray-400 mt-1">Haz clic en cualquier elemento del canvas</p>
+                <p className="text-sm text-gray-500 font-medium">Selecciona un elemento para editar</p>
+                <p className="text-xs text-gray-400 mt-1">Haz clic en cualquier campo o figura del canvas</p>
             </aside>
         );
     }
@@ -59,7 +59,7 @@ export function PropertiesPanel({ version, selectedPlacementId, selectedShapeId 
     if (shape) {
         return (
             <aside className="w-full bg-white border-l border-gray-200 overflow-y-auto h-full">
-                <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-purple/5 to-pink/5 sticky top-0 z-10">
+                <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 sticky top-0 z-10">
                     <div className="flex items-center justify-between mb-2">
                         <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wider">Propiedades</h2>
                         <button
@@ -83,19 +83,19 @@ export function PropertiesPanel({ version, selectedPlacementId, selectedShapeId 
                         <div className="grid grid-cols-2 gap-3">
                             <div>
                                 <label className="text-[10px] text-gray-600 mb-1 block font-medium">X</label>
-                                <input type="number" value={shape.x} onChange={(e) => handleUpdateShape({ x: parseFloat(e.target.value) || 0 })} className="w-full bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 text-xs focus:ring-2 focus:ring-purple/20 focus:border-purple outline-none" />
+                                <input type="number" value={shape.x} onChange={(e) => handleUpdateShape({ x: parseFloat(e.target.value) || 0 })} className="w-full bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" />
                             </div>
                             <div>
                                 <label className="text-[10px] text-gray-600 mb-1 block font-medium">Y</label>
-                                <input type="number" value={shape.y} onChange={(e) => handleUpdateShape({ y: parseFloat(e.target.value) || 0 })} className="w-full bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 text-xs focus:ring-2 focus:ring-purple/20 focus:border-purple outline-none" />
+                                <input type="number" value={shape.y} onChange={(e) => handleUpdateShape({ y: parseFloat(e.target.value) || 0 })} className="w-full bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" />
                             </div>
                             <div>
                                 <label className="text-[10px] text-gray-600 mb-1 block font-medium">Ancho</label>
-                                <input type="number" value={shape.width} onChange={(e) => handleUpdateShape({ width: parseFloat(e.target.value) || 10 })} className="w-full bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 text-xs focus:ring-2 focus:ring-purple/20 focus:border-purple outline-none" />
+                                <input type="number" value={shape.width} onChange={(e) => handleUpdateShape({ width: parseFloat(e.target.value) || 10 })} className="w-full bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" />
                             </div>
                             <div>
                                 <label className="text-[10px] text-gray-600 mb-1 block font-medium">Alto</label>
-                                <input type="number" value={shape.height} onChange={(e) => handleUpdateShape({ height: parseFloat(e.target.value) || 5 })} className="w-full bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 text-xs focus:ring-2 focus:ring-purple/20 focus:border-purple outline-none" />
+                                <input type="number" value={shape.height} onChange={(e) => handleUpdateShape({ height: parseFloat(e.target.value) || 5 })} className="w-full bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" />
                             </div>
                         </div>
                     </section>
@@ -119,7 +119,7 @@ export function PropertiesPanel({ version, selectedPlacementId, selectedShapeId 
                         </div>
                         <div>
                             <label className="text-[10px] text-gray-600 mb-1 block font-medium">Grosor Borde</label>
-                            <input type="number" value={shape.strokeWidth || 1} onChange={(e) => handleUpdateShape({ strokeWidth: parseInt(e.target.value) || 1 })} className="w-full bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 text-xs focus:ring-2 focus:ring-purple/20 focus:border-purple outline-none" />
+                            <input type="number" value={shape.strokeWidth || 1} onChange={(e) => handleUpdateShape({ strokeWidth: parseInt(e.target.value) || 1 })} className="w-full bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" />
                         </div>
                     </section>
 
@@ -129,11 +129,11 @@ export function PropertiesPanel({ version, selectedPlacementId, selectedShapeId 
                             <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Texto</h3>
                             <div>
                                 <label className="text-[10px] text-gray-600 mb-1 block font-medium">Contenido</label>
-                                <textarea value={shape.content || ''} onChange={(e) => handleUpdateShape({ content: e.target.value })} rows={3} className="w-full bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 text-xs focus:ring-2 focus:ring-purple/20 focus:border-purple outline-none" />
+                                <textarea value={shape.content || ''} onChange={(e) => handleUpdateShape({ content: e.target.value })} rows={3} className="w-full bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" />
                             </div>
                             <div>
                                 <label className="text-[10px] text-gray-600 mb-1 block font-medium">Tamaño (pt)</label>
-                                <input type="number" value={shape.fontSize || 12} onChange={(e) => handleUpdateShape({ fontSize: parseInt(e.target.value) || 12 })} className="w-full bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 text-xs focus:ring-2 focus:ring-purple/20 focus:border-purple outline-none" />
+                                <input type="number" value={shape.fontSize || 12} onChange={(e) => handleUpdateShape({ fontSize: parseInt(e.target.value) || 12 })} className="w-full bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" />
                             </div>
                             <div>
                                 <label className="text-[10px] text-gray-600 mb-1 block font-medium">Color</label>
@@ -145,16 +145,121 @@ export function PropertiesPanel({ version, selectedPlacementId, selectedShapeId 
                         </section>
                     )}
 
-                    {/* Border Radius (solo para rectangle) */}
-                    {shape.type === 'rectangle' && (
+                    {/* Imagen (solo para type='image') */}
+                    {shape.type === 'image' && (
+                        <section className="space-y-3 pt-4 border-t border-gray-100">
+                            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Imagen</h3>
+                            <div>
+                                <label className="text-[10px] text-gray-600 mb-1 block font-medium">Fuente de Imagen</label>
+                                <div className="space-y-2">
+                                    <button
+                                        onClick={() => document.getElementById('shape-image-upload')?.click()}
+                                        className="w-full py-2 px-3 border border-gray-200 bg-white hover:bg-gray-50 rounded-md text-xs font-semibold text-gray-700 flex items-center justify-center gap-2 transition-colors"
+                                    >
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                                        </svg>
+                                        Subir Local...
+                                    </button>
+                                    <input
+                                        id="shape-image-upload"
+                                        type="file"
+                                        className="hidden"
+                                        accept="image/*"
+                                        onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (file) {
+                                                const reader = new FileReader();
+                                                reader.onload = (ev) => {
+                                                    handleUpdateShape({ imageUrl: ev.target?.result as string });
+                                                };
+                                                reader.readAsDataURL(file);
+                                            }
+                                        }}
+                                    />
+                                    <label className="text-[10px] text-gray-500 mt-2 block italic">O pega el enlace abajo:</label>
+                                    <textarea
+                                        value={shape.imageUrl || ''}
+                                        onChange={(e) => handleUpdateShape({ imageUrl: e.target.value })}
+                                        rows={3}
+                                        className="w-full bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 text-[10px] font-mono focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                                        placeholder="data:image/... o https://..."
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="text-[10px] text-gray-600 mb-1 block font-medium">Opacidad ({Math.round((shape.opacity ?? 1) * 100)}%)</label>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max="1"
+                                    step="0.01"
+                                    value={shape.opacity ?? 1}
+                                    onChange={(e) => handleUpdateShape({ opacity: parseFloat(e.target.value) })}
+                                    className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                                />
+                            </div>
+                        </section>
+                    )}
+
+                    {/* Border Radius (solo para rectangle e image) */}
+                    {(shape.type === 'rectangle' || shape.type === 'image') && (
                         <section className="space-y-3 pt-4 border-t border-gray-100">
                             <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Bordes</h3>
                             <div>
                                 <label className="text-[10px] text-gray-600 mb-1 block font-medium">Border Radius</label>
-                                <input type="number" value={shape.borderRadius || 0} onChange={(e) => handleUpdateShape({ borderRadius: parseInt(e.target.value) || 0 })} className="w-full bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 text-xs focus:ring-2 focus:ring-purple/20 focus:border-purple outline-none" />
+                                <input type="number" value={shape.borderRadius || 0} onChange={(e) => handleUpdateShape({ borderRadius: parseInt(e.target.value) || 0 })} className="w-full bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" />
                             </div>
                         </section>
                     )}
+
+                    {/* Estado y Orden */}
+                    <section className="space-y-3 pt-4 border-t border-gray-100">
+                        <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Estado y Orden</h3>
+                        <div>
+                            <label className="text-[10px] text-gray-600 mb-1 block font-medium">Z-Index (Capa)</label>
+                            <input
+                                type="number"
+                                value={shape.zIndex || 1}
+                                onChange={(e) => handleUpdateShape({ zIndex: parseInt(e.target.value) || 1 })}
+                                className="w-full bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                            />
+                        </div>
+                        <div className="flex items-center gap-4 py-1">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={shape.isVisible !== false}
+                                    onChange={(e) => handleUpdateShape({ isVisible: e.target.checked })}
+                                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                />
+                                <span className="text-xs text-gray-700">Visible</span>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                    type="checkbox"
+                                    checked={shape.isLocked === true}
+                                    onChange={(e) => handleUpdateShape({ isLocked: e.target.checked })}
+                                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                />
+                                <span className="text-xs text-gray-700">Bloqueado</span>
+                            </label>
+                        </div>
+                        <div className="py-1">
+                            <label className="flex items-center gap-2 cursor-pointer p-2 bg-blue-50/50 rounded-md border border-blue-100 hover:bg-blue-50 transition-colors">
+                                <input
+                                    type="checkbox"
+                                    checked={shape.repeatOnEveryPage === true}
+                                    onChange={(e) => handleUpdateShape({ repeatOnEveryPage: e.target.checked })}
+                                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                />
+                                <div>
+                                    <span className="text-xs font-bold text-blue-700 block">Encabezado de Página</span>
+                                    <span className="text-[9px] text-blue-500">Se repetirá en todas las hojas</span>
+                                </div>
+                            </label>
+                        </div>
+                    </section>
                 </div>
             </aside>
         );
@@ -399,17 +504,51 @@ export function PropertiesPanel({ version, selectedPlacementId, selectedShapeId 
                     )}
                 </section>
 
-                {/* Z-Index */}
+                {/* Z-Index y Estado */}
                 <section className="space-y-3 pt-4 border-t border-gray-100">
-                    <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Capa</h3>
+                    <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Capa y Estado</h3>
                     <div>
                         <label className="text-[10px] text-gray-600 mb-1 block font-medium">Z-Index</label>
                         <input
                             type="number"
                             value={placement.zIndex}
                             onChange={(e) => handleUpdate({ zIndex: parseInt(e.target.value) || 1 })}
-                            className="w-full bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                            className="w-full bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
                         />
+                    </div>
+                    <div className="flex items-center gap-4 py-1">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={placement.isVisible !== false}
+                                onChange={(e) => handleUpdate({ isVisible: e.target.checked })}
+                                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                            />
+                            <span className="text-xs text-gray-700">Visible</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={placement.isLocked === true}
+                                onChange={(e) => handleUpdate({ isLocked: e.target.checked })}
+                                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                            />
+                            <span className="text-xs text-gray-700">Bloqueado</span>
+                        </label>
+                    </div>
+                    <div className="py-1">
+                        <label className="flex items-center gap-2 cursor-pointer p-2 bg-primary/5 rounded-md border border-primary/10 hover:bg-primary/10 transition-colors">
+                            <input
+                                type="checkbox"
+                                checked={placement.repeatOnEveryPage === true}
+                                onChange={(e) => handleUpdate({ repeatOnEveryPage: e.target.checked })}
+                                className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary/20"
+                            />
+                            <div>
+                                <span className="text-xs font-bold text-primary block">Encabezado de Página</span>
+                                <span className="text-[9px] text-primary/60">Se repetirá en todas las hojas</span>
+                            </div>
+                        </label>
                     </div>
                 </section>
             </div>

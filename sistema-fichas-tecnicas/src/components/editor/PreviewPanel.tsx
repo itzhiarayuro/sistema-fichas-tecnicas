@@ -109,7 +109,10 @@ export function PreviewPanel({
 
   // Estilos personalizados para el modo estándar
   const styles = useMemo(() => {
-    const colors = customizations?.colors ?? {
+    // Prioridad: 1. Props personalizadas, 2. Estado de la ficha, 3. Valores por defecto
+    const custom = customizations || fichaState?.customizations;
+
+    const colors = custom?.colors ?? {
       headerBg: '#1F4E79',
       headerText: '#FFFFFF',
       sectionBg: '#FFFFFF',
@@ -119,14 +122,14 @@ export function PreviewPanel({
       borderColor: '#E5E7EB',
     };
 
-    const fonts = customizations?.fonts ?? {
+    const fonts = custom?.fonts ?? {
       titleSize: 16,
       labelSize: 12,
       valueSize: 12,
       fontFamily: 'Inter',
     };
 
-    const spacing = customizations?.spacing ?? {
+    const spacing = custom?.spacing ?? {
       sectionGap: 16,
       fieldGap: 8,
       padding: 16,
@@ -134,7 +137,7 @@ export function PreviewPanel({
     };
 
     return { colors, fonts, spacing };
-  }, [customizations]);
+  }, [customizations, fichaState?.customizations]);
 
   // Obtener valores de campos con trazabilidad
   const identificacion = useMemo(() => ({

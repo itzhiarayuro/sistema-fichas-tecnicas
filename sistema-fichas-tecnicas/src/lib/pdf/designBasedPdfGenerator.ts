@@ -1,98 +1,231 @@
 import { jsPDF } from 'jspdf';
-import { FichaDesignVersion } from '@/types/fichaDesign';
+import { FichaDesignVersion, FieldPlacement, ShapeElement } from '@/types/fichaDesign';
 import { Pozo } from '@/types/pozo';
 import { FIELD_PATHS } from '@/constants/fieldMapping';
+
+// Helper para obtener valor de ruta (ej: "identificacion.idPozo.value")
+const getValueByPath = (obj: any, path: string) => {
+    if (!path) return undefined;
+    try {
+        return path.split('.').reduce((acc, part) => {
+            if (!acc) return undefined;
+            if (part.includes('[') && part.includes(']')) {
+                const [name, indexStr] = part.split(/[\[\]]/);
+                const index = parseInt(indexStr);
+                return acc[name]?.[index];
+            }
+            return acc[part];
+        }, obj);
+    } catch (e) {
+        return undefined;
+    }
+};
 
 export async function generatePdfFromDesign(
     design: FichaDesignVersion,
     pozo: Pozo
 ): Promise<{ success: boolean; blob?: Blob; error?: string }> {
     try {
+        const orientation = design.orientation === 'portrait' ? 'p' : 'l';
         const doc = new jsPDF({
-            orientation: design.orientation,
-            unit: design.unit,
+            orientation,
+            unit: 'mm',
             format: design.pageSize.toLowerCase() as any,
         });
 
-        // Helper para obtener valor de ruta (ej: "identificacion.idPozo.value")
-        const getValueByPath = (obj: any, path: string) => {
-            if (!path) return undefined;
-            return path.split('.').reduce((acc, part) => {
-                if (part.includes('[') && part.includes(']')) {
-                    const [name, index] = part.split(/[\[\]]/);
-                    return acc?.[name]?.[parseInt(index)];
-                }
-                return acc?.[part];
-            }, obj);
+        // 1. Combinar y ordenar todos los elementos por zIndex
+        const allElements = [
+            ...(design.shapes || []).map(s => ({ ...s, isShape: true })),
+            ...(design.placements || []).map(p => ({ ...p, isShape: false }))
+        ].sort((a, b) => (Number(a.zIndex) || 0) - (Number(b.zIndex) || 0));
+
+        // 2. Determinar cuántas páginas necesitamos
+        // Calculamos basándonos en la categoría que tenga más elementos pendientes vs el diseño
+        const getPageCount = () => {
+            const counts = {
+                foto: { onDesign: 0, inData: pozo.fotos?.fotos?.length || 0 },
+                tub: { onDesign: 0, inData: pozo.tuberias?.tuberias?.length || 0 },
+                sum: { onDesign: 0, inData: pozo.sumideros?.sumideros?.length || 0 }
+            };
+
+            // Encontrar cuántos "slots" hay en el diseño para cada categoría
+            design.placements.forEach(p => {
+                if (p.fieldId.startsWith('foto_')) counts.foto.onDesign++;
+                if (p.fieldId.startsWith('tub_')) counts.tub.onDesign++;
+                if (p.fieldId.startsWith('sum_')) counts.sum.onDesign++;
+            });
+
+            const pagesNeeded = [
+                counts.foto.onDesign > 0 ? Math.ceil(counts.foto.inData / counts.foto.onDesign) : 1,
+                counts.tub.onDesign > 0 ? Math.ceil(counts.tub.inData / counts.tub.onDesign) : 1,
+                counts.sum.onDesign > 0 ? Math.ceil(counts.sum.inData / counts.sum.onDesign) : 1
+            ];
+
+            return Math.max(1, ...pagesNeeded);
         };
 
-        const MM_TO_PX = 3.78; // Consistencia con el canvas si fuera necesario, pero doc usa mm
+        const pageCount = getPageCount();
 
-        // 1. Renderizar Shapes
-        if (design.shapes) {
-            design.shapes.forEach((shape) => {
-                if (shape.type === 'rectangle' || shape.type === 'circle') {
-                    if (shape.fillColor) {
-                        doc.setFillColor(shape.fillColor);
-                        doc.rect(shape.x, shape.y, shape.width, shape.height, shape.fillColor !== 'transparent' ? 'F' : 'D');
+        // Determinar "slots por categoría" para el desplazamiento de índices
+        const slots = {
+            foto: design.placements.filter(p => p.fieldId.startsWith('foto_')).length,
+            tub: design.placements.filter(p => p.fieldId.startsWith('tub_')).length,
+            sum: design.placements.filter(p => p.fieldId.startsWith('sum_')).length
+        };
+
+        // 3. Renderizar cada página
+        for (let pIdx = 0; pIdx < pageCount; pIdx++) {
+            if (pIdx > 0) doc.addPage();
+
+            for (const el of allElements) {
+                // Saltarnos si no es visible
+                if (el.isVisible === false) continue;
+
+                // Si no es la primera página, solo renderizar :
+                // a) Elementos marcados como repeatOnEveryPage
+                // b) Elementos de campos indexados (fotos, tuberías) que vamos a desplazar
+                const isRepeatable = (el as any).repeatOnEveryPage;
+                const fieldId = el.isShape ? undefined : (el as any).fieldId;
+                const isIndexedField = fieldId && (fieldId.startsWith('foto_') || fieldId.startsWith('tub_') || fieldId.startsWith('sum_'));
+
+                if (pIdx > 0 && !isRepeatable && !isIndexedField) {
+                    continue;
+                }
+
+                // Manejar opacidad global para el elemento
+                const opacity = (el as any).opacity ?? 1;
+                if (opacity < 1) {
+                    doc.setGState(new (doc as any).GState({ opacity: opacity }));
+                } else {
+                    doc.setGState(new (doc as any).GState({ opacity: 1 }));
+                }
+
+                if (el.isShape) {
+                    const shape = el as ShapeElement;
+                    await renderShape(doc, shape);
+                } else {
+                    const placement = el as FieldPlacement;
+
+                    let path = FIELD_PATHS[placement.fieldId] || '';
+                    if (isIndexedField && pIdx > 0) {
+                        let offset = 0;
+                        if (placement.fieldId.startsWith('foto_')) offset = pIdx * slots.foto;
+                        else if (placement.fieldId.startsWith('tub_')) offset = pIdx * slots.tub;
+                        else if (placement.fieldId.startsWith('sum_')) offset = pIdx * slots.sum;
+
+                        path = path.replace(/\[(\d+)\]/, (_, index) => `[${parseInt(index) + offset}]`);
                     }
-                    if (shape.strokeColor) {
-                        doc.setDrawColor(shape.strokeColor);
-                        doc.setLineWidth(shape.strokeWidth || 0.1);
-                        doc.rect(shape.x, shape.y, shape.width, shape.height, 'D');
-                    }
+
+                    await renderField(doc, placement, pozo, path);
                 }
-
-                if (shape.type === 'line') {
-                    doc.setDrawColor(shape.strokeColor || '#000000');
-                    doc.setLineWidth(shape.strokeWidth || 0.5);
-                    doc.line(shape.x, shape.y, shape.x + shape.width, shape.y);
-                }
-
-                if (shape.type === 'text' && shape.content) {
-                    doc.setFontSize(shape.fontSize || 10);
-                    doc.setTextColor(shape.color || '#000000');
-                    doc.text(shape.content, shape.x, shape.y + (shape.fontSize || 10) * 0.35, {
-                        maxWidth: shape.width,
-                        align: shape.textAlign || 'left'
-                    });
-                }
-            });
-        }
-
-        // 2. Renderizar Placements (Campos)
-        if (design.placements) {
-            design.placements.forEach((placement) => {
-                const fontSize = placement.fontSize || 10;
-                const color = placement.color || '#000000';
-
-                doc.setFontSize(fontSize);
-                doc.setTextColor(color);
-
-                const path = FIELD_PATHS[placement.fieldId] || '';
-                let content = String(getValueByPath(pozo, path) || '-');
-
-                let currentY = placement.y + (fontSize * 0.35);
-
-                if (placement.showLabel) {
-                    doc.setFontSize(fontSize * 0.7);
-                    doc.setTextColor('#666666');
-                    doc.text(`${placement.customLabel || placement.fieldId}:`, placement.x, currentY);
-                    currentY += (fontSize * 0.4);
-                    doc.setFontSize(fontSize);
-                    doc.setTextColor(color);
-                }
-
-                doc.text(content, placement.x, currentY, {
-                    maxWidth: placement.width,
-                    align: placement.textAlign || 'left'
-                });
-            });
+            }
         }
 
         return { success: true, blob: doc.output('blob') };
     } catch (error) {
         console.error('Error generating design-based PDF:', error);
         return { success: false, error: error instanceof Error ? error.message : 'Error desconocido' };
+    }
+}
+
+async function renderShape(doc: jsPDF, shape: ShapeElement) {
+    if (shape.type === 'rectangle' || shape.type === 'circle' || shape.type === 'triangle') {
+        const style = (shape.fillColor && shape.fillColor !== 'transparent' && shape.strokeColor && shape.strokeColor !== 'transparent') ? 'FD' :
+            (shape.fillColor && shape.fillColor !== 'transparent') ? 'F' : 'D';
+
+        if (shape.fillColor && shape.fillColor !== 'transparent') doc.setFillColor(shape.fillColor);
+        if (shape.strokeColor && shape.strokeColor !== 'transparent') {
+            doc.setDrawColor(shape.strokeColor);
+            doc.setLineWidth(shape.strokeWidth || 0.1);
+        }
+
+        if (shape.type === 'circle') {
+            const radius = Math.min(shape.width, shape.height) / 2;
+            doc.ellipse(shape.x + radius, shape.y + radius, radius, radius, style);
+        } else if (shape.type === 'rectangle') {
+            doc.rect(shape.x, shape.y, shape.width, shape.height, style);
+        } else if (shape.type === 'triangle') {
+            doc.triangle(
+                shape.x + shape.width / 2, shape.y,
+                shape.x + shape.width, shape.y + shape.height,
+                shape.x, shape.y + shape.height,
+                style
+            );
+        }
+    }
+
+    if (shape.type === 'line') {
+        doc.setDrawColor(shape.strokeColor || '#000000');
+        doc.setLineWidth(shape.strokeWidth || 0.5);
+        doc.line(shape.x, shape.y, shape.x + shape.width, shape.y + shape.height);
+    }
+
+    if (shape.type === 'text' && shape.content) {
+        const fontSize = shape.fontSize || 10;
+        doc.setFontSize(fontSize);
+        doc.setTextColor(shape.color || '#000000');
+        const font = shape.fontFamily?.toLowerCase().includes('times') ? 'times' :
+            shape.fontFamily?.toLowerCase().includes('courier') ? 'courier' : 'helvetica';
+        const fontStyle = shape.fontWeight === 'bold' ? 'bold' : 'normal';
+        doc.setFont(font, fontStyle);
+        doc.text(shape.content, shape.x, shape.y + (fontSize * 0.35), {
+            maxWidth: shape.width,
+            align: shape.textAlign || 'left'
+        });
+    }
+
+    if (shape.type === 'image' && shape.imageUrl) {
+        try {
+            doc.addImage(shape.imageUrl, 'JPEG', shape.x, shape.y, shape.width, shape.height, undefined, 'FAST');
+        } catch (e) {
+            console.warn('Could not add shape image to PDF', e);
+        }
+    }
+}
+
+async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, path: string) {
+    const value = getValueByPath(pozo, path);
+    const isPhoto = placement.fieldId.startsWith('foto_');
+
+    if (isPhoto && value && typeof value === 'string' && value.startsWith('data:image')) {
+        try {
+            doc.addImage(value, 'JPEG', placement.x, placement.y, placement.width, placement.height, undefined, 'FAST');
+        } catch (e) {
+            console.warn(`Could not add photo from path ${path} to PDF`, e);
+            doc.setDrawColor('#cccccc');
+            doc.rect(placement.x, placement.y, placement.width, placement.height, 'D');
+        }
+    } else if (!isPhoto) {
+        const content = String(value ?? '-');
+        const fontSize = placement.fontSize || 10;
+        const color = placement.color || '#000000';
+
+        if (placement.backgroundColor && placement.backgroundColor !== 'transparent') {
+            doc.setFillColor(placement.backgroundColor);
+            doc.rect(placement.x, placement.y, placement.width, placement.height, 'F');
+        }
+
+        let currentY = placement.y;
+        if (placement.showLabel) {
+            doc.setFontSize(fontSize * 0.65);
+            doc.setTextColor('#999999');
+            doc.setFont('helvetica', 'bold');
+            doc.text(placement.customLabel || placement.fieldId, placement.x + 1, currentY + (fontSize * 0.4));
+            currentY += (fontSize * 0.5);
+        } else {
+            currentY += (fontSize * 0.4);
+        }
+
+        doc.setFontSize(fontSize);
+        doc.setTextColor(color);
+        const font = placement.fontFamily?.toLowerCase().includes('times') ? 'times' :
+            placement.fontFamily?.toLowerCase().includes('courier') ? 'courier' : 'helvetica';
+        const style = placement.fontWeight === 'bold' ? 'bold' : 'normal';
+        doc.setFont(font, style);
+
+        doc.text(content, placement.x + 1, currentY + (fontSize * 0.35), {
+            maxWidth: placement.width - 2,
+            align: placement.textAlign || 'left'
+        });
     }
 }

@@ -11,3 +11,5 @@ export { VersionManager } from './VersionManager';
 export { DesignRenderer } from './DesignRenderer';
 export { DesignPreview } from './DesignPreview';
 export { ResizeHandle } from './ResizeHandle';
+export * from './ImagesPanel';
+export { LayersPanel } from './LayersPanel';

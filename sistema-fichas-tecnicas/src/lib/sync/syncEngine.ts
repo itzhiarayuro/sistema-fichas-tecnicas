@@ -286,6 +286,25 @@ export class SyncEngine {
   }
 
   /**
+   * Actualiza una personalización
+   */
+  updateCustomization(
+    path: string[],
+    value: unknown,
+    source: ChangeSource
+  ): SyncChange | null {
+    return this.applyChange({
+      type: 'customization_change',
+      source,
+      payload: {
+        type: 'customization_change',
+        path,
+        value,
+      },
+    });
+  }
+
+  /**
    * Suscribe un listener para cambios sincronizados
    */
   subscribe(listener: SyncListener): () => void {

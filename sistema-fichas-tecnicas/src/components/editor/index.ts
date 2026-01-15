@@ -10,6 +10,7 @@ export { ToolBar } from './ToolBar';
 
 // Editores inline
 export { TextEditor, TextEditorReadOnly } from './TextEditor';
+export { SelectEditor } from './SelectEditor';
 export { ImageEditor } from './ImageEditor';
 export { ImageGrid } from './ImageGrid';
 

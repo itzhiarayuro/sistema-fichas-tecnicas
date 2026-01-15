@@ -104,12 +104,19 @@ interface UIState {
     showDesigns: boolean;
     showElements: boolean;
     showProperties: boolean;
+    showLayers: boolean;
     designsWidth: number;
     elementsWidth: number;
     propertiesWidth: number;
+    layersWidth: number;
   };
-  toggleDesignerPanel: (panel: 'designs' | 'elements' | 'properties') => void;
-  setDesignerPanelWidth: (panel: 'designs' | 'elements' | 'properties', width: number) => void;
+  toggleDesignerPanel: (panel: 'designs' | 'elements' | 'properties' | 'layers') => void;
+  setDesignerPanelWidth: (panel: 'designs' | 'elements' | 'properties' | 'layers', width: number) => void;
+
+  // Mobile Menu
+  mobileMenuOpen: boolean;
+  toggleMobileMenu: () => void;
+  setMobileMenuOpen: (open: boolean) => void;
 }
 
 // Default toast duration in milliseconds
@@ -137,10 +144,13 @@ export const useUIStore = create<UIState>((set, get) => ({
     showDesigns: true,
     showElements: true,
     showProperties: true,
+    showLayers: false,
     designsWidth: 260,
     elementsWidth: 280,
     propertiesWidth: 320,
+    layersWidth: 220,
   },
+  mobileMenuOpen: false,
 
   // Selection actions
   setSelectedPozoId: (id) => set({ selectedPozoId: id }),
@@ -231,18 +241,51 @@ export const useUIStore = create<UIState>((set, get) => ({
 
   setDegradedMode: (enabled) => set({ degradedMode: enabled }),
 
-  toggleDesignerPanel: (panel) => set((state) => ({
-    designerPanels: {
-      ...state.designerPanels,
-      [panel === 'designs' ? 'showDesigns' : (panel === 'elements' ? 'showElements' : 'showProperties')]:
-        !state.designerPanels[panel === 'designs' ? 'showDesigns' : (panel === 'elements' ? 'showElements' : 'showProperties')]
-    }
-  })),
+  toggleDesignerPanel: (panel) => set((state) => {
+    const showKey = panel === 'designs' ? 'showDesigns' :
+      panel === 'elements' ? 'showElements' :
+        panel === 'properties' ? 'showProperties' : 'showLayers';
 
-  setDesignerPanelWidth: (panel, width) => set((state) => ({
-    designerPanels: {
-      ...state.designerPanels,
-      [panel === 'designs' ? 'designsWidth' : (panel === 'elements' ? 'elementsWidth' : 'propertiesWidth')]: width
-    }
-  })),
+    const isShowing = !state.designerPanels[showKey];
+    const widthKey = panel === 'designs' ? 'designsWidth' :
+      panel === 'elements' ? 'elementsWidth' :
+        panel === 'properties' ? 'propertiesWidth' : 'layersWidth';
+
+    // Default widths if becoming visible and width was 0
+    const defaultWidths = {
+      designs: 260,
+      elements: 280,
+      properties: 320,
+      layers: 220
+    };
+
+    return {
+      designerPanels: {
+        ...state.designerPanels,
+        [showKey]: isShowing,
+        // If showing and current width is 0, restore default
+        [widthKey]: (isShowing && state.designerPanels[widthKey] === 0) ? defaultWidths[panel] : state.designerPanels[widthKey]
+      }
+    };
+  }),
+
+  setDesignerPanelWidth: (panel, width) => set((state) => {
+    const showKey = panel === 'designs' ? 'showDesigns' :
+      panel === 'elements' ? 'showElements' :
+        panel === 'properties' ? 'showProperties' : 'showLayers';
+    const widthKey = panel === 'designs' ? 'designsWidth' :
+      panel === 'elements' ? 'elementsWidth' :
+        panel === 'properties' ? 'propertiesWidth' : 'layersWidth';
+
+    return {
+      designerPanels: {
+        ...state.designerPanels,
+        [widthKey]: width,
+        [showKey]: width > 0
+      }
+    };
+  }),
+
+  toggleMobileMenu: () => set((state) => ({ mobileMenuOpen: !state.mobileMenuOpen })),
+  setMobileMenuOpen: (open) => set({ mobileMenuOpen: open }),
 }));

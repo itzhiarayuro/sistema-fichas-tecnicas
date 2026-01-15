@@ -68,7 +68,7 @@ function createInitialFichaState(pozoId: string): FichaState {
         type: 'identificacion',
         order: 0,
         visible: true,
-        locked: true,
+        locked: false,
         content: {},
       },
       {
@@ -232,6 +232,7 @@ export default function EditorPage() {
     updateField,
     reorderSections,
     toggleSectionVisibility,
+    updateCustomization,
     reinitialize,
   } = useSyncEngine({
     initialState: initialFichaState,
@@ -400,7 +401,7 @@ export default function EditorPage() {
         otras: [],
       };
     }
-    const fotos = pozo.fotos.fotos || [];
+    const fotos = pozo.fotos?.fotos || [];
     return {
       principal: fotos.filter(f => ['general', 'tapa', 'principal'].includes(String(f.tipo || '').toLowerCase())),
       entradas: fotos.filter(f => String(f.tipo || '').toLowerCase() === 'entrada'),
@@ -462,14 +463,25 @@ export default function EditorPage() {
 
   // Handler para cambios de personalización
   const handleCustomizationsChange = useCallback((changes: Partial<FichaCustomization>) => {
-    setCustomizations((prev) => ({
-      ...prev,
-      ...changes,
-      colors: changes.colors ? { ...prev.colors, ...changes.colors } : prev.colors,
-      fonts: changes.fonts ? { ...prev.fonts, ...changes.fonts } : prev.fonts,
-      spacing: changes.spacing ? { ...prev.spacing, ...changes.spacing } : prev.spacing,
-    }));
-  }, []);
+    setCustomizations((prev) => {
+      const next = {
+        ...prev,
+        ...changes,
+        colors: changes.colors ? { ...prev.colors, ...changes.colors } : prev.colors,
+        fonts: changes.fonts ? { ...prev.fonts, ...changes.fonts } : prev.fonts,
+        spacing: changes.spacing ? { ...prev.spacing, ...changes.spacing } : prev.spacing,
+      };
+
+      // Sincronizar con el engine para que se refleje en la vista previa y se persista
+      if (changes.colors) updateCustomization(['colors'], next.colors);
+      if (changes.fonts) updateCustomization(['fonts'], next.fonts);
+      if (changes.spacing) updateCustomization(['spacing'], next.spacing);
+      if (changes.template) updateCustomization(['template'], next.template);
+      if (changes.isGlobal !== undefined) updateCustomization(['isGlobal'], next.isGlobal);
+
+      return next;
+    });
+  }, [updateCustomization]);
 
   // Handler para selección de plantilla
   const handleTemplateSelect = useCallback((template: Template) => {
@@ -658,6 +670,7 @@ export default function EditorPage() {
     <PreviewPanel
       fichaState={syncedState}
       pozo={pozo}
+      customizations={customizations}
       showEditIndicators={true}
     />
   );
@@ -673,22 +686,60 @@ export default function EditorPage() {
       onGeneratePDF={async () => {
         if (!syncedState || !pozo) return;
 
+        // Validación de fotos antes de generar
+        const fotosCount = pozo.fotos?.fotos?.length || 0;
+        if (fotosCount === 0) {
+          addToast({
+            type: 'error',
+            message: 'No se puede generar PDF: la ficha no tiene fotos asociadas.',
+            duration: 5000,
+          });
+          return;
+        }
+
         addToast({
           type: 'info',
           message: 'Generando PDF...',
         });
 
-        const result = await generateFichaPDF(syncedState, pozo);
-        if (result.success) {
-          downloadPDF(result);
+        // Intentar generar vía API para mayor consistencia con el servidor
+        try {
+          const response = await fetch('/api/pdf', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              ficha: syncedState,
+              pozo,
+            }),
+          });
+
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Error al generar PDF');
+          }
+
+          const blob = await response.blob();
+          const filename = `ficha_${pozo.idPozo?.value || pozo.identificacion.idPozo.value}_${Date.now()}.pdf`;
+
+          // Usar helper de descarga
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = filename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          URL.revokeObjectURL(url);
+
           addToast({
             type: 'success',
             message: 'PDF generado correctamente',
           });
-        } else {
+        } catch (error) {
+          console.error('Error:', error);
           addToast({
             type: 'error',
-            message: `Error al generar PDF: ${result.error}`,
+            message: error instanceof Error ? error.message : 'Error al generar PDF',
           });
         }
       }}

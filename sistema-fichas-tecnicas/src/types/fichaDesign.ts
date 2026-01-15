@@ -15,7 +15,7 @@ export interface AvailableField {
     defaultHeight: number; // en mm
 }
 
-export type ShapeType = 'rectangle' | 'circle' | 'line' | 'text';
+export type ShapeType = 'rectangle' | 'circle' | 'line' | 'triangle' | 'text' | 'image';
 
 export interface ShapeElement {
     id: string;
@@ -39,6 +39,15 @@ export interface ShapeElement {
     fontWeight?: 'normal' | 'bold';
     color?: string;
     textAlign?: 'left' | 'center' | 'right';
+
+    // Para tipo 'image'
+    imageUrl?: string;
+    opacity?: number;
+
+    // Estado del elemento
+    isVisible?: boolean;
+    isLocked?: boolean;
+    repeatOnEveryPage?: boolean;
 }
 
 export type DesignElement = FieldPlacement | ShapeElement;
@@ -48,7 +57,7 @@ export function isFieldPlacement(element: DesignElement): element is FieldPlacem
 }
 
 export function isShapeElement(element: DesignElement): element is ShapeElement {
-    return 'type' in element && ['rectangle', 'circle', 'line', 'text'].includes((element as ShapeElement).type);
+    return 'type' in element && ['rectangle', 'circle', 'line', 'triangle', 'text', 'image'].includes((element as ShapeElement).type);
 }
 
 export interface FieldPlacement {
@@ -76,6 +85,11 @@ export interface FieldPlacement {
 
     // Para campos repetibles
     repeatIndex?: number; // Ej: foto 1, foto 2, etc.
+
+    // Estado del elemento
+    isVisible?: boolean;
+    isLocked?: boolean;
+    repeatOnEveryPage?: boolean;
 }
 
 export interface FichaDesignVersion {
@@ -104,8 +118,14 @@ export interface DesignState {
     versions: FichaDesignVersion[];
     currentVersionId: string | null;
 
+    // History State
+    past: Record<string, FichaDesignVersion[]>; // versionId -> history
+    future: Record<string, FichaDesignVersion[]>; // versionId -> future
+
     // Acciones
     createVersion: (name: string, description?: string) => string;
+    addVersion: (version: FichaDesignVersion) => void;
+    deduplicateVersions: () => void;
     updateVersion: (id: string, updates: Partial<FichaDesignVersion>) => void;
     deleteVersion: (id: string) => void;
     duplicateVersion: (id: string, newName: string) => string;
@@ -125,71 +145,73 @@ export interface DesignState {
     // Getters
     getCurrentVersion: () => FichaDesignVersion | null;
     getVersionById: (id: string) => FichaDesignVersion | undefined;
+
+    // History
+    undo: () => void;
+    redo: () => void;
 }
 
 // 56 Campos disponibles del sistema
 export const AVAILABLE_FIELDS: AvailableField[] = [
     // POZO (33 campos)
     { id: 'pozo_id', label: 'ID Pozo', fieldPath: 'identificacion.idPozo.value', category: 'pozo', isRepeatable: false, defaultWidth: 60, defaultHeight: 10 },
-    { id: 'pozo_fecha', label: 'Fecha', fieldPath: 'identificacion.fecha.value', category: 'pozo', isRepeatable: false, defaultWidth: 50, defaultHeight: 10 },
-    { id: 'pozo_coordX', label: 'Coordenada X', fieldPath: 'identificacion.coordenadaX.value', category: 'pozo', isRepeatable: false, defaultWidth: 50, defaultHeight: 10 },
-    { id: 'pozo_coordY', label: 'Coordenada Y', fieldPath: 'identificacion.coordenadaY.value', category: 'pozo', isRepeatable: false, defaultWidth: 50, defaultHeight: 10 },
-    { id: 'pozo_direccion', label: 'Dirección', fieldPath: 'ubicacion.direccion.value', category: 'pozo', isRepeatable: false, defaultWidth: 120, defaultHeight: 10 },
-    { id: 'pozo_barrio', label: 'Barrio', fieldPath: 'ubicacion.barrio.value', category: 'pozo', isRepeatable: false, defaultWidth: 80, defaultHeight: 10 },
-    { id: 'pozo_localidad', label: 'Localidad', fieldPath: 'ubicacion.localidad.value', category: 'pozo', isRepeatable: false, defaultWidth: 80, defaultHeight: 10 },
-    { id: 'pozo_upz', label: 'UPZ', fieldPath: 'ubicacion.upz.value', category: 'pozo', isRepeatable: false, defaultWidth: 60, defaultHeight: 10 },
-    { id: 'pozo_materialTapa', label: 'Material Tapa', fieldPath: 'componentes.materialTapa.value', category: 'pozo', isRepeatable: false, defaultWidth: 70, defaultHeight: 10 },
-    { id: 'pozo_diametroTapa', label: 'Ø Tapa', fieldPath: 'componentes.diametroTapa.value', category: 'pozo', isRepeatable: false, defaultWidth: 50, defaultHeight: 10 },
-    { id: 'pozo_estadoTapa', label: 'Estado Tapa', fieldPath: 'componentes.estadoTapa.value', category: 'pozo', isRepeatable: false, defaultWidth: 70, defaultHeight: 10 },
-    { id: 'pozo_materialCilindro', label: 'Material Cilindro', fieldPath: 'componentes.materialCilindro.value', category: 'pozo', isRepeatable: false, defaultWidth: 70, defaultHeight: 10 },
-    { id: 'pozo_diametroCilindro', label: 'Ø Cilindro', fieldPath: 'componentes.diametroCilindro.value', category: 'pozo', isRepeatable: false, defaultWidth: 50, defaultHeight: 10 },
-    { id: 'pozo_estadoCilindro', label: 'Estado Cilindro', fieldPath: 'componentes.estadoCilindro.value', category: 'pozo', isRepeatable: false, defaultWidth: 70, defaultHeight: 10 },
-    { id: 'pozo_profundidadTotal', label: 'Profundidad Total', fieldPath: 'dimensiones.profundidadTotal.value', category: 'pozo', isRepeatable: false, defaultWidth: 70, defaultHeight: 10 },
-    { id: 'pozo_profundidadUtil', label: 'Profundidad Útil', fieldPath: 'dimensiones.profundidadUtil.value', category: 'pozo', isRepeatable: false, defaultWidth: 70, defaultHeight: 10 },
-    { id: 'pozo_nivelAgua', label: 'Nivel Agua', fieldPath: 'dimensiones.nivelAgua.value', category: 'pozo', isRepeatable: false, defaultWidth: 60, defaultHeight: 10 },
-    { id: 'pozo_materialEscalera', label: 'Material Escalera', fieldPath: 'acceso.materialEscalera.value', category: 'pozo', isRepeatable: false, defaultWidth: 70, defaultHeight: 10 },
-    { id: 'pozo_estadoEscalera', label: 'Estado Escalera', fieldPath: 'acceso.estadoEscalera.value', category: 'pozo', isRepeatable: false, defaultWidth: 70, defaultHeight: 10 },
-    { id: 'pozo_numPeldanos', label: 'Nº Peldaños', fieldPath: 'acceso.numeroPeldanos.value', category: 'pozo', isRepeatable: false, defaultWidth: 50, defaultHeight: 10 },
-    { id: 'pozo_tipoSuelo', label: 'Tipo Suelo', fieldPath: 'entorno.tipoSuelo.value', category: 'pozo', isRepeatable: false, defaultWidth: 70, defaultHeight: 10 },
-    { id: 'pozo_vegetacion', label: 'Vegetación', fieldPath: 'entorno.vegetacion.value', category: 'pozo', isRepeatable: false, defaultWidth: 70, defaultHeight: 10 },
-    { id: 'pozo_proximidadEdificios', label: 'Proximidad Edificios', fieldPath: 'entorno.proximidadEdificios.value', category: 'pozo', isRepeatable: false, defaultWidth: 80, defaultHeight: 10 },
-    { id: 'pozo_nivelTrafico', label: 'Nivel Tráfico', fieldPath: 'entorno.nivelTrafico.value', category: 'pozo', isRepeatable: false, defaultWidth: 70, defaultHeight: 10 },
-    { id: 'pozo_olores', label: 'Olores', fieldPath: 'condiciones.olores.value', category: 'pozo', isRepeatable: false, defaultWidth: 60, defaultHeight: 10 },
-    { id: 'pozo_gases', label: 'Gases', fieldPath: 'condiciones.gases.value', category: 'pozo', isRepeatable: false, defaultWidth: 60, defaultHeight: 10 },
-    { id: 'pozo_temperatura', label: 'Temperatura', fieldPath: 'condiciones.temperatura.value', category: 'pozo', isRepeatable: false, defaultWidth: 60, defaultHeight: 10 },
-    { id: 'pozo_humedad', label: 'Humedad', fieldPath: 'condiciones.humedad.value', category: 'pozo', isRepeatable: false, defaultWidth: 60, defaultHeight: 10 },
-    { id: 'pozo_iluminacion', label: 'Iluminación', fieldPath: 'condiciones.iluminacion.value', category: 'pozo', isRepeatable: false, defaultWidth: 70, defaultHeight: 10 },
-    { id: 'pozo_ventilacion', label: 'Ventilación', fieldPath: 'condiciones.ventilacion.value', category: 'pozo', isRepeatable: false, defaultWidth: 70, defaultHeight: 10 },
-    { id: 'pozo_riesgos', label: 'Riesgos', fieldPath: 'seguridad.riesgos.value', category: 'pozo', isRepeatable: false, defaultWidth: 100, defaultHeight: 15 },
-    { id: 'pozo_senalizacion', label: 'Señalización', fieldPath: 'seguridad.senalizacion.value', category: 'pozo', isRepeatable: false, defaultWidth: 70, defaultHeight: 10 },
-    { id: 'pozo_observaciones', label: 'Observaciones', fieldPath: 'observaciones.general.value', category: 'pozo', isRepeatable: false, defaultWidth: 180, defaultHeight: 30 },
+    { id: 'pozo_fecha', label: 'Fecha', fieldPath: 'identificacion.fecha.value', category: 'pozo', isRepeatable: false, defaultWidth: 40, defaultHeight: 10 },
+    { id: 'pozo_coordX', label: 'Coordenada X', fieldPath: 'identificacion.coordenadaX.value', category: 'pozo', isRepeatable: false, defaultWidth: 40, defaultHeight: 10 },
+    { id: 'pozo_coordY', label: 'Coordenada Y', fieldPath: 'identificacion.coordenadaY.value', category: 'pozo', isRepeatable: false, defaultWidth: 40, defaultHeight: 10 },
+    { id: 'pozo_levanto', label: 'Levantó', fieldPath: 'identificacion.levanto.value', category: 'pozo', isRepeatable: false, defaultWidth: 50, defaultHeight: 10 },
+    { id: 'pozo_estado', label: 'Estado Gral', fieldPath: 'identificacion.estado.value', category: 'pozo', isRepeatable: false, defaultWidth: 40, defaultHeight: 10 },
 
-    // TUBERIAS (9 campos)
-    { id: 'tub_entrada_diametro', label: 'Ø Entrada', fieldPath: 'tuberias.entrada.diametro.value', category: 'tuberias', isRepeatable: false, defaultWidth: 50, defaultHeight: 10 },
-    { id: 'tub_entrada_material', label: 'Material Entrada', fieldPath: 'tuberias.entrada.material.value', category: 'tuberias', isRepeatable: false, defaultWidth: 70, defaultHeight: 10 },
-    { id: 'tub_entrada_estado', label: 'Estado Entrada', fieldPath: 'tuberias.entrada.estado.value', category: 'tuberias', isRepeatable: false, defaultWidth: 70, defaultHeight: 10 },
-    { id: 'tub_salida_diametro', label: 'Ø Salida', fieldPath: 'tuberias.salida.diametro.value', category: 'tuberias', isRepeatable: false, defaultWidth: 50, defaultHeight: 10 },
-    { id: 'tub_salida_material', label: 'Material Salida', fieldPath: 'tuberias.salida.material.value', category: 'tuberias', isRepeatable: false, defaultWidth: 70, defaultHeight: 10 },
-    { id: 'tub_salida_estado', label: 'Estado Salida', fieldPath: 'tuberias.salida.estado.value', category: 'tuberias', isRepeatable: false, defaultWidth: 70, defaultHeight: 10 },
-    { id: 'tub_conexiones', label: 'Conexiones', fieldPath: 'tuberias.conexiones.value', category: 'tuberias', isRepeatable: false, defaultWidth: 80, defaultHeight: 10 },
-    { id: 'tub_sedimentos', label: 'Sedimentos', fieldPath: 'tuberias.sedimentos.value', category: 'tuberias', isRepeatable: false, defaultWidth: 70, defaultHeight: 10 },
-    { id: 'tub_obstrucciones', label: 'Obstrucciones', fieldPath: 'tuberias.obstrucciones.value', category: 'tuberias', isRepeatable: false, defaultWidth: 80, defaultHeight: 10 },
+    { id: 'pozo_direccion', label: 'Dirección', fieldPath: 'ubicacion.direccion.value', category: 'pozo', isRepeatable: false, defaultWidth: 80, defaultHeight: 10 },
+    { id: 'pozo_barrio', label: 'Barrio', fieldPath: 'ubicacion.barrio.value', category: 'pozo', isRepeatable: false, defaultWidth: 60, defaultHeight: 10 },
+    { id: 'pozo_localidad', label: 'Localidad', fieldPath: 'ubicacion.localidad.value', category: 'pozo', isRepeatable: false, defaultWidth: 60, defaultHeight: 10 },
+    { id: 'pozo_upz', label: 'UPZ', fieldPath: 'ubicacion.upz.value', category: 'pozo', isRepeatable: false, defaultWidth: 50, defaultHeight: 10 },
+    { id: 'pozo_elevacion', label: 'Elevación (m)', fieldPath: 'ubicacion.elevacion.value', category: 'pozo', isRepeatable: false, defaultWidth: 40, defaultHeight: 10 },
+    { id: 'pozo_profundidad', label: 'Profundidad (m)', fieldPath: 'ubicacion.profundidad.value', category: 'pozo', isRepeatable: false, defaultWidth: 40, defaultHeight: 10 },
 
-    // SUMIDEROS (8 campos)
-    { id: 'sum_tipo', label: 'Tipo Sumidero', fieldPath: 'sumideros.tipo.value', category: 'sumideros', isRepeatable: false, defaultWidth: 70, defaultHeight: 10 },
-    { id: 'sum_material', label: 'Material Sumidero', fieldPath: 'sumideros.material.value', category: 'sumideros', isRepeatable: false, defaultWidth: 70, defaultHeight: 10 },
-    { id: 'sum_estado', label: 'Estado Sumidero', fieldPath: 'sumideros.estado.value', category: 'sumideros', isRepeatable: false, defaultWidth: 70, defaultHeight: 10 },
-    { id: 'sum_rejilla', label: 'Rejilla', fieldPath: 'sumideros.rejilla.value', category: 'sumideros', isRepeatable: false, defaultWidth: 60, defaultHeight: 10 },
-    { id: 'sum_profundidad', label: 'Profundidad Sum.', fieldPath: 'sumideros.profundidad.value', category: 'sumideros', isRepeatable: false, defaultWidth: 70, defaultHeight: 10 },
-    { id: 'sum_limpieza', label: 'Limpieza', fieldPath: 'sumideros.limpieza.value', category: 'sumideros', isRepeatable: false, defaultWidth: 60, defaultHeight: 10 },
-    { id: 'sum_conexion', label: 'Conexión', fieldPath: 'sumideros.conexion.value', category: 'sumideros', isRepeatable: false, defaultWidth: 70, defaultHeight: 10 },
-    { id: 'sum_observaciones', label: 'Obs. Sumidero', fieldPath: 'sumideros.observaciones.value', category: 'sumideros', isRepeatable: false, defaultWidth: 100, defaultHeight: 15 },
+    { id: 'pozo_materialTapa', label: 'Mat. Tapa', fieldPath: 'componentes.materialTapa.value', category: 'pozo', isRepeatable: false, defaultWidth: 50, defaultHeight: 10 },
+    { id: 'pozo_estadoTapa', label: 'Estado Tapa', fieldPath: 'componentes.estadoTapa.value', category: 'pozo', isRepeatable: false, defaultWidth: 50, defaultHeight: 10 },
+    { id: 'pozo_diametroCilindro', label: 'Ø Cilindro (m)', fieldPath: 'componentes.diametroCilindro.value', category: 'pozo', isRepeatable: false, defaultWidth: 40, defaultHeight: 10 },
+    { id: 'pozo_materialCilindro', label: 'Mat. Cilindro', fieldPath: 'componentes.materialCilindro.value', category: 'pozo', isRepeatable: false, defaultWidth: 50, defaultHeight: 10 },
+    { id: 'pozo_estadoCilindro', label: 'Estado Cilindro', fieldPath: 'componentes.estadoCilindro.value', category: 'pozo', isRepeatable: false, defaultWidth: 50, defaultHeight: 10 },
+    { id: 'pozo_numPeldanos', label: 'Nº Peldaños', fieldPath: 'componentes.numeroPeldanos.value', category: 'pozo', isRepeatable: false, defaultWidth: 40, defaultHeight: 10 },
+    { id: 'pozo_materialPeldanos', label: 'Mat. Peldaños', fieldPath: 'componentes.materialPeldanos.value', category: 'pozo', isRepeatable: false, defaultWidth: 50, defaultHeight: 10 },
+    { id: 'pozo_estadoPeldanos', label: 'Estado Peldaños', fieldPath: 'componentes.estadoPeldanos.value', category: 'pozo', isRepeatable: false, defaultWidth: 50, defaultHeight: 10 },
 
-    // FOTOS (6 campos repetibles)
-    { id: 'foto_1', label: 'Foto 1', fieldPath: 'fotos[0].blobId', category: 'fotos', isRepeatable: true, defaultWidth: 60, defaultHeight: 45 },
-    { id: 'foto_2', label: 'Foto 2', fieldPath: 'fotos[1].blobId', category: 'fotos', isRepeatable: true, defaultWidth: 60, defaultHeight: 45 },
-    { id: 'foto_3', label: 'Foto 3', fieldPath: 'fotos[2].blobId', category: 'fotos', isRepeatable: true, defaultWidth: 60, defaultHeight: 45 },
-    { id: 'foto_4', label: 'Foto 4', fieldPath: 'fotos[3].blobId', category: 'fotos', isRepeatable: true, defaultWidth: 60, defaultHeight: 45 },
-    { id: 'foto_5', label: 'Foto 5', fieldPath: 'fotos[4].blobId', category: 'fotos', isRepeatable: true, defaultWidth: 60, defaultHeight: 45 },
-    { id: 'foto_6', label: 'Foto 6', fieldPath: 'fotos[5].blobId', category: 'fotos', isRepeatable: true, defaultWidth: 60, defaultHeight: 45 },
+    { id: 'pozo_observaciones', label: 'Observaciones', fieldPath: 'observaciones.observaciones.value', category: 'pozo', isRepeatable: false, defaultWidth: 150, defaultHeight: 20 },
+
+    // TUBERIAS (Hasta 8 slots)
+    { id: 'tub_1_diametro', label: 'Tub 1 Ø', fieldPath: 'tuberias.tuberias[0].diametro.value', category: 'tuberias', isRepeatable: true, defaultWidth: 35, defaultHeight: 10 },
+    { id: 'tub_1_material', label: 'Tub 1 Mat', fieldPath: 'tuberias.tuberias[0].material.value', category: 'tuberias', isRepeatable: true, defaultWidth: 45, defaultHeight: 10 },
+    { id: 'tub_1_estado', label: 'Tub 1 Est', fieldPath: 'tuberias.tuberias[0].estado.value', category: 'tuberias', isRepeatable: true, defaultWidth: 45, defaultHeight: 10 },
+
+    { id: 'tub_2_diametro', label: 'Tub 2 Ø', fieldPath: 'tuberias.tuberias[1].diametro.value', category: 'tuberias', isRepeatable: true, defaultWidth: 35, defaultHeight: 10 },
+    { id: 'tub_2_material', label: 'Tub 2 Mat', fieldPath: 'tuberias.tuberias[1].material.value', category: 'tuberias', isRepeatable: true, defaultWidth: 45, defaultHeight: 10 },
+    { id: 'tub_2_estado', label: 'Tub 2 Est', fieldPath: 'tuberias.tuberias[1].estado.value', category: 'tuberias', isRepeatable: true, defaultWidth: 45, defaultHeight: 10 },
+
+    { id: 'tub_3_diametro', label: 'Tub 3 Ø', fieldPath: 'tuberias.tuberias[2].diametro.value', category: 'tuberias', isRepeatable: true, defaultWidth: 35, defaultHeight: 10 },
+    { id: 'tub_3_material', label: 'Tub 3 Mat', fieldPath: 'tuberias.tuberias[2].material.value', category: 'tuberias', isRepeatable: true, defaultWidth: 45, defaultHeight: 10 },
+
+    { id: 'tub_4_diametro', label: 'Tub 4 Ø', fieldPath: 'tuberias.tuberias[3].diametro.value', category: 'tuberias', isRepeatable: true, defaultWidth: 35, defaultHeight: 10 },
+    { id: 'tub_4_material', label: 'Tub 4 Mat', fieldPath: 'tuberias.tuberias[3].material.value', category: 'tuberias', isRepeatable: true, defaultWidth: 45, defaultHeight: 10 },
+
+    // SUMIDEROS (Hasta 4 slots)
+    { id: 'sum_1_tipo', label: 'Sum 1 Tipo', fieldPath: 'sumideros.sumideros[0].tipoSumidero.value', category: 'sumideros', isRepeatable: true, defaultWidth: 50, defaultHeight: 10 },
+    { id: 'sum_1_material', label: 'Sum 1 Mat', fieldPath: 'sumideros.sumideros[0].materialTuberia.value', category: 'sumideros', isRepeatable: true, defaultWidth: 50, defaultHeight: 10 },
+
+    { id: 'sum_2_tipo', label: 'Sum 2 Tipo', fieldPath: 'sumideros.sumideros[1].tipoSumidero.value', category: 'sumideros', isRepeatable: true, defaultWidth: 50, defaultHeight: 10 },
+    { id: 'sum_2_material', label: 'Sum 2 Mat', fieldPath: 'sumideros.sumideros[1].materialTuberia.value', category: 'sumideros', isRepeatable: true, defaultWidth: 50, defaultHeight: 10 },
+
+    // FOTOS (Hasta 12 slots)
+    { id: 'foto_1', label: 'Foto 1', fieldPath: 'fotos.fotos[0].blobId', category: 'fotos', isRepeatable: true, defaultWidth: 60, defaultHeight: 45 },
+    { id: 'foto_2', label: 'Foto 2', fieldPath: 'fotos.fotos[1].blobId', category: 'fotos', isRepeatable: true, defaultWidth: 60, defaultHeight: 45 },
+    { id: 'foto_3', label: 'Foto 3', fieldPath: 'fotos.fotos[2].blobId', category: 'fotos', isRepeatable: true, defaultWidth: 60, defaultHeight: 45 },
+    { id: 'foto_4', label: 'Foto 4', fieldPath: 'fotos.fotos[3].blobId', category: 'fotos', isRepeatable: true, defaultWidth: 60, defaultHeight: 45 },
+    { id: 'foto_5', label: 'Foto 5', fieldPath: 'fotos.fotos[4].blobId', category: 'fotos', isRepeatable: true, defaultWidth: 60, defaultHeight: 45 },
+    { id: 'foto_6', label: 'Foto 6', fieldPath: 'fotos.fotos[5].blobId', category: 'fotos', isRepeatable: true, defaultWidth: 60, defaultHeight: 45 },
+    { id: 'foto_7', label: 'Foto 7', fieldPath: 'fotos.fotos[6].blobId', category: 'fotos', isRepeatable: true, defaultWidth: 60, defaultHeight: 45 },
+    { id: 'foto_8', label: 'Foto 8', fieldPath: 'fotos.fotos[7].blobId', category: 'fotos', isRepeatable: true, defaultWidth: 60, defaultHeight: 45 },
+    { id: 'foto_9', label: 'Foto 9', fieldPath: 'fotos.fotos[8].blobId', category: 'fotos', isRepeatable: true, defaultWidth: 60, defaultHeight: 45 },
+    { id: 'foto_10', label: 'Foto 10', fieldPath: 'fotos.fotos[9].blobId', category: 'fotos', isRepeatable: true, defaultWidth: 60, defaultHeight: 45 },
+    { id: 'foto_11', label: 'Foto 11', fieldPath: 'fotos.fotos[10].blobId', category: 'fotos', isRepeatable: true, defaultWidth: 60, defaultHeight: 45 },
+    { id: 'foto_12', label: 'Foto 12', fieldPath: 'fotos.fotos[11].blobId', category: 'fotos', isRepeatable: true, defaultWidth: 60, defaultHeight: 45 },
 ];

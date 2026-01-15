@@ -15,51 +15,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useUIStore, useGlobalStore, WorkflowStep } from '@/stores';
 
-interface NavItem {
-  href: string;
-  label: string;
-  icon: string;
-  step: WorkflowStep | null;
-  description: string;
-}
+import { navItems } from '@/constants/navigation';
 
-const navItems: NavItem[] = [
-  {
-    href: '/',
-    label: 'Inicio',
-    icon: '🏠',
-    step: null,
-    description: 'Dashboard principal'
-  },
-  {
-    href: '/upload',
-    label: 'Cargar Archivos',
-    icon: '📁',
-    step: 'upload',
-    description: 'Cargar Excel y fotos'
-  },
-  {
-    href: '/pozos',
-    label: 'Pozos',
-    icon: '🔍',
-    step: 'review',
-    description: 'Revisar datos cargados'
-  },
-  {
-    href: '/editor',
-    label: 'Editor',
-    icon: '✏️',
-    step: 'edit',
-    description: 'Editar fichas técnicas'
-  },
-  {
-    href: '/designer',
-    label: 'Diseñador',
-    icon: '🎨',
-    step: null,
-    description: 'Diseño visual de formatos'
-  },
-];
 
 // Orden del workflow para determinar el siguiente paso
 const workflowOrder: WorkflowStep[] = ['upload', 'review', 'edit', 'preview', 'export'];
@@ -87,6 +44,8 @@ export function Sidebar() {
   const pathname = usePathname();
   const sidebarCollapsed = useUIStore((state) => state.sidebarCollapsed);
   const toggleSidebar = useUIStore((state) => state.toggleSidebar);
+  const mobileMenuOpen = useUIStore((state) => state.mobileMenuOpen);
+  const setMobileMenuOpen = useUIStore((state) => state.setMobileMenuOpen);
   const currentStep = useGlobalStore((state) => state.currentStep);
   const guidedMode = useGlobalStore((state) => state.config.guidedMode);
 
@@ -94,17 +53,24 @@ export function Sidebar() {
 
   return (
     <aside
-      className={`fixed left-0 top-0 h-full bg-primary text-white transition-all duration-300 z-50 flex flex-col ${sidebarCollapsed ? 'w-16' : 'w-64'
-        }`}
+      className={`fixed left-0 top-0 h-full bg-primary text-white transition-all duration-300 z-50 flex flex-col 
+        ${sidebarCollapsed ? 'lg:w-16' : 'desktop:w-[280px] tablet:w-[240px]'} 
+        ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} 
+        tablet:translate-x-0`}
     >
       {/* Logo y toggle */}
       <div className="h-16 flex items-center justify-between px-4 border-b border-primary-400 flex-shrink-0">
-        {!sidebarCollapsed && (
-          <span className="font-bold text-lg truncate">Fichas Técnicas</span>
+        {(!sidebarCollapsed || mobileMenuOpen) && (
+          <span className="font-bold text-lg truncate desktop:block hidden">Fichas Técnicas</span>
         )}
+        {(!sidebarCollapsed || mobileMenuOpen) && (
+          <span className="font-bold text-lg truncate desktop:hidden block">Fichas</span>
+        )}
+
+        {/* Toggle Desktop */}
         <button
           onClick={toggleSidebar}
-          className="p-2 hover:bg-primary-600 rounded-lg transition-colors flex-shrink-0"
+          className="hidden lg:flex p-2 hover:bg-primary-600 rounded-lg transition-colors flex-shrink-0"
           aria-label={sidebarCollapsed ? 'Expandir sidebar' : 'Colapsar sidebar'}
         >
           <svg
@@ -114,6 +80,17 @@ export function Sidebar() {
             viewBox="0 0 24 24"
           >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+
+        {/* Close Mobile */}
+        <button
+          onClick={() => setMobileMenuOpen(false)}
+          className="lg:hidden p-2 hover:bg-primary-600 rounded-lg transition-colors flex-shrink-0"
+          aria-label="Cerrar menú"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
       </div>
@@ -131,15 +108,15 @@ export function Sidebar() {
                 <Link
                   href={item.href}
                   className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all relative group ${isActive
-                      ? 'bg-white/20 text-white font-medium'
-                      : isNextStep
-                        ? 'bg-environmental/30 text-white ring-2 ring-environmental animate-pulse'
-                        : 'hover:bg-white/10'
+                    ? 'bg-white/20 text-white font-medium'
+                    : isNextStep
+                      ? 'bg-environmental/30 text-white ring-2 ring-environmental animate-pulse'
+                      : 'hover:bg-white/10'
                     }`}
                   title={sidebarCollapsed ? item.label : undefined}
                 >
                   <span className="text-xl flex-shrink-0">{item.icon}</span>
-                  {!sidebarCollapsed && (
+                  {(!sidebarCollapsed || mobileMenuOpen) && (
                     <div className="flex flex-col min-w-0">
                       <span className="truncate">{item.label}</span>
                       {isNextStep && (
@@ -163,7 +140,7 @@ export function Sidebar() {
 
       {/* Indicador de workflow */}
       <div className="p-4 border-t border-primary-400 flex-shrink-0">
-        {!sidebarCollapsed ? (
+        {(!sidebarCollapsed || mobileMenuOpen) ? (
           <div className="bg-primary-600 rounded-lg p-3">
             <p className="text-xs text-primary-200 mb-1">Paso actual</p>
             <p className="font-medium">{getStepLabel(currentStep)}</p>

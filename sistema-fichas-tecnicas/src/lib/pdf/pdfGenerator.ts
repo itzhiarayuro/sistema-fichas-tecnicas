@@ -408,6 +408,29 @@ export class PDFGenerator {
     doc.setFontSize(fonts.valueSize);
 
     for (const tub of tuberias) {
+      // Control de salto de página por fila
+      this.checkPageBreak(ctx, PDF_CONFIG.lineHeight + 5);
+
+      // Si saltamos de página, reimprimir encabezados
+      if (ctx.currentY === PDF_CONFIG.margin) {
+        doc.setFillColor(colors.sectionBg);
+        doc.rect(PDF_CONFIG.margin, ctx.currentY - 4, tableWidth, 6, 'F');
+        doc.setTextColor(colors.sectionText);
+        doc.setFontSize(fonts.labelSize);
+        doc.setFont(fonts.fontFamily, 'bold');
+
+        let hX = PDF_CONFIG.margin;
+        headers.forEach((header, i) => {
+          doc.text(header, hX + 2, ctx.currentY);
+          hX += colWidths[i];
+        });
+        ctx.currentY += PDF_CONFIG.lineHeight;
+
+        doc.setFont(fonts.fontFamily, 'normal');
+        doc.setTextColor(colors.valueText);
+        doc.setFontSize(fonts.valueSize);
+      }
+
       x = PDF_CONFIG.margin;
       doc.text(tub.diametro?.value || '-', x + 2, ctx.currentY); x += colWidths[0];
       doc.text(tub.material?.value || '-', x + 2, ctx.currentY); x += colWidths[1];
@@ -469,6 +492,29 @@ export class PDFGenerator {
     doc.setFontSize(fonts.valueSize);
 
     for (const sum of sumideros) {
+      // Control de salto de página por fila
+      this.checkPageBreak(ctx, PDF_CONFIG.lineHeight + 5);
+
+      // Si saltamos de página, reimprimir encabezados
+      if (ctx.currentY === PDF_CONFIG.margin) {
+        doc.setFillColor(colors.sectionBg);
+        doc.rect(PDF_CONFIG.margin, ctx.currentY - 4, tableWidth, 6, 'F');
+        doc.setTextColor(colors.sectionText);
+        doc.setFontSize(fonts.labelSize);
+        doc.setFont(fonts.fontFamily, 'bold');
+
+        let hX = PDF_CONFIG.margin;
+        headers.forEach((header, i) => {
+          doc.text(header, hX + 2, ctx.currentY);
+          hX += colWidths[i];
+        });
+        ctx.currentY += PDF_CONFIG.lineHeight;
+
+        doc.setFont(fonts.fontFamily, 'normal');
+        doc.setTextColor(colors.valueText);
+        doc.setFontSize(fonts.valueSize);
+      }
+
       x = PDF_CONFIG.margin;
       doc.text(sum.idSumidero?.value || '-', x + 2, ctx.currentY); x += colWidths[0];
       doc.text(sum.numeroEsquema?.value || '-', x + 2, ctx.currentY); x += colWidths[1];

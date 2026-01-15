@@ -675,7 +675,18 @@ const PREDEFINED_VALUES = {
   estado: ['Bueno', 'Regular', 'Malo', 'Muy Malo', 'No Aplica'],
   materialTuberia: ['PVC', 'GRES', 'Concreto', 'Hierro Fundido', 'Polietileno'],
   materialComponente: ['Concreto', 'Hierro', 'Hierro Fundido', 'Ladrillo', 'Mixto'],
-  tipoCamara: ['Circular', 'Rectangular', 'Cuadrada'],
+  tipoCamara: [
+    'TÍPICA DE FONDO',
+    'DE CAÍDA',
+    'CON COLCHÓN',
+    'CON ALIVIADERO VERTEDERO SIMPLE',
+    'CON ALIVIADERO VERTEDERO DOBLE',
+    'CON ALIVIADERO DE SALTO',
+    'CON ALIVIADERO DE BARRERA',
+    'CON ALIVIADERO LATERAL DOBLE',
+    'CON ALIVIADERO LATERAL SENCILLO',
+    'CON ALIVIADERO ORIFICIO'
+  ],
   tipoTuberia: ['entrada', 'salida'],
   tipoSumidero: ['Rejilla', 'Buzón', 'Combinado', 'Lateral'],
   booleano: ['Sí', 'No', 'Si', 'No', 'Yes', 'No', 'true', 'false', '1', '0'],
@@ -754,7 +765,10 @@ function getMappedValue(
   // Estrategia: Iterar las keys del row. Si columnMap[key] == field, return value.
   for (const [colName, mappedField] of Object.entries(columnMap)) {
     if (mappedField === field) {
-      return safeStringValue(row[colName]);
+      const val = safeStringValue(row[colName]);
+      if (val && val !== '') {
+        return val;
+      }
     }
   }
   return '';

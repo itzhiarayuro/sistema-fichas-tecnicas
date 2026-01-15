@@ -39,8 +39,8 @@ export interface NomenclaturaResult {
  * Cada patrón captura: [1] pozoId, [2] tipo, [3] subtipo (opcional)
  */
 const PATTERNS = {
-  // Fotos principales: M680-P (Panorámica), M680-I (Interna), M680-T (Tubería)
-  PRINCIPAL: /^([A-Z]\d+)-([PIT])$/i,
+  // Fotos principales: M680-P (Panorámica), M680-I (Interna), M680-T (Tapa), M680-A (Acceso), M680-F (Fondo), M680-M (Medición)
+  PRINCIPAL: /^([A-Z]\d+)-([PITAFM])$/i,
   // Entradas con número: M680-E1-T, M680-E2-T, etc. (solo T, sin Z)
   ENTRADA: /^([A-Z]\d+)-(E\d+)-T$/i,
   // Salidas con número opcional: M680-S-T, M680-S1-T, M680-S2-T, etc. (solo T, sin Z)
@@ -54,7 +54,10 @@ const PATTERNS = {
 const TIPO_DESCRIPCION: Record<string, string> = {
   P: 'Panorámica',
   I: 'Interna',
-  T: 'Tubería',
+  T: 'Tapa',
+  A: 'Acceso',
+  F: 'Fondo',
+  M: 'Medición',
 };
 
 /** Descripciones para subtipos de entradas/salidas */
@@ -70,11 +73,11 @@ const SUBTIPO_DESCRIPCION: Record<string, string> = {
 export function parseNomenclatura(filename: string): NomenclaturaResult {
   // Remover extensión si existe
   const nameWithoutExt = filename.replace(/\.[^/.]+$/, '').trim();
-  
+
   if (!nameWithoutExt) {
     return createInvalidResult(filename, 'Nombre de archivo vacío');
   }
-  
+
   // Intentar patrón PRINCIPAL
   let match = nameWithoutExt.match(PATTERNS.PRINCIPAL);
   if (match) {
@@ -87,7 +90,7 @@ export function parseNomenclatura(filename: string): NomenclaturaResult {
       isValid: true,
     };
   }
-  
+
   // Intentar patrón ENTRADA
   match = nameWithoutExt.match(PATTERNS.ENTRADA);
   if (match) {
@@ -100,7 +103,7 @@ export function parseNomenclatura(filename: string): NomenclaturaResult {
       isValid: true,
     };
   }
-  
+
   // Intentar patrón SALIDA con número
   match = nameWithoutExt.match(PATTERNS.SALIDA_CON_NUMERO);
   if (match) {
@@ -113,7 +116,7 @@ export function parseNomenclatura(filename: string): NomenclaturaResult {
       isValid: true,
     };
   }
-  
+
   // Intentar patrón SALIDA sin número
   match = nameWithoutExt.match(PATTERNS.SALIDA_SIN_NUMERO);
   if (match) {
@@ -125,7 +128,7 @@ export function parseNomenclatura(filename: string): NomenclaturaResult {
       isValid: true,
     };
   }
-  
+
   // Intentar patrón SUMIDERO
   match = nameWithoutExt.match(PATTERNS.SUMIDERO);
   if (match) {
@@ -139,7 +142,7 @@ export function parseNomenclatura(filename: string): NomenclaturaResult {
       isValid: true,
     };
   }
-  
+
   // No coincide con ningún patrón
   return createInvalidResult(filename, `Nomenclatura no reconocida: ${filename}`);
 }
@@ -168,7 +171,7 @@ export function buildNomenclatura(result: NomenclaturaResult): string {
   if (!result.isValid || !result.pozoId) {
     return '';
   }
-  
+
   switch (result.categoria) {
     case 'PRINCIPAL':
       return `${result.pozoId}-${result.subcategoria}`;

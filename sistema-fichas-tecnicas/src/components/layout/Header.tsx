@@ -19,28 +19,38 @@ export function Header() {
   const guidedMode = useGlobalStore((state) => state.config.guidedMode);
   const setConfig = useGlobalStore((state) => state.setConfig);
   const currentStep = useGlobalStore((state) => state.currentStep);
-  
+
   return (
     <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 sticky top-0 z-40">
       {/* Breadcrumbs y contexto */}
       <div className="flex items-center gap-6">
+        {/* Toggle Mobile */}
+        <button
+          onClick={() => useUIStore.getState().toggleMobileMenu()}
+          className="tablet:hidden -ml-2 p-2 text-gray-500 hover:bg-gray-100 rounded-lg"
+        >
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+
         {/* Breadcrumbs - visible en pantallas grandes */}
         <div className="hidden lg:block">
           <WorkflowBreadcrumbs compact showLabels={false} />
         </div>
-        
+
         {/* Dots indicator - visible en pantallas medianas */}
         <div className="hidden md:block lg:hidden">
           <StepIndicatorDots />
         </div>
-        
+
         {/* Separador */}
         <div className="hidden md:block w-px h-8 bg-gray-200" />
-        
+
         {/* Contexto actual */}
         <ContextIndicator />
       </div>
-      
+
       {/* Acciones y configuración */}
       <div className="flex items-center gap-6">
         {/* Indicador de paso actual (visible en móvil) */}
@@ -48,7 +58,7 @@ export function Header() {
           <span className="w-2 h-2 rounded-full bg-environmental animate-pulse" />
           <span className="capitalize">{currentStep}</span>
         </div>
-        
+
         {/* Toggle de modo guiado */}
         <label className="flex items-center gap-3 cursor-pointer select-none">
           <span className="text-sm text-gray-600 hidden sm:inline">Modo Guiado</span>
@@ -61,14 +71,12 @@ export function Header() {
               aria-label="Activar modo guiado"
             />
             <div
-              className={`w-11 h-6 rounded-full transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-2 ${
-                guidedMode ? 'bg-environmental' : 'bg-gray-300'
-              }`}
+              className={`w-11 h-6 rounded-full transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-2 ${guidedMode ? 'bg-environmental' : 'bg-gray-300'
+                }`}
             />
             <div
-              className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
-                guidedMode ? 'translate-x-5' : 'translate-x-0'
-              }`}
+              className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${guidedMode ? 'translate-x-5' : 'translate-x-0'
+                }`}
             />
           </div>
           {guidedMode && (
@@ -77,7 +85,7 @@ export function Header() {
             </span>
           )}
         </label>
-        
+
         {/* Botón de ayuda */}
         <button
           className="p-2 text-gray-500 hover:text-primary hover:bg-gray-100 rounded-lg transition-colors"

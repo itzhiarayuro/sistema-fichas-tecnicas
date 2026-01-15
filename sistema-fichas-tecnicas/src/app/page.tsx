@@ -91,7 +91,7 @@ export default function DashboardPage() {
         )}
 
         {/* Estadísticas */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 tablet:grid-cols-3 desktop:grid-cols-4 gap-4 mb-8">
           <StatCard
             title="Pozos Cargados"
             value={stats.totalPozos}
@@ -142,7 +142,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Acciones principales */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 tablet:grid-cols-3 gap-6 mb-8">
           {/* Cargar archivos */}
           <ActionCard
             title="Cargar Archivos"
@@ -205,7 +205,7 @@ export default function DashboardPage() {
           <h2 className="text-lg font-semibold text-gray-900 mb-4">
             Flujo de Trabajo
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 tablet:grid-cols-5 gap-4">
             <WorkflowStepCard
               step={1}
               title="Cargar"
@@ -358,17 +358,17 @@ interface WorkflowStepCardProps {
 function WorkflowStepCard({ step, title, description, isActive, isComplete }: WorkflowStepCardProps) {
   return (
     <div className={`relative p-4 rounded-lg border-2 transition-all ${isComplete
-        ? 'border-environmental bg-environmental-50'
-        : isActive
-          ? 'border-primary bg-primary-50'
-          : 'border-gray-200 bg-gray-50'
+      ? 'border-environmental bg-environmental-50'
+      : isActive
+        ? 'border-primary bg-primary-50'
+        : 'border-gray-200 bg-gray-50'
       }`}>
       {/* Número del paso */}
       <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold mb-2 ${isComplete
-          ? 'bg-environmental text-white'
-          : isActive
-            ? 'bg-primary text-white'
-            : 'bg-gray-200 text-gray-500'
+        ? 'bg-environmental text-white'
+        : isActive
+          ? 'bg-primary text-white'
+          : 'bg-gray-200 text-gray-500'
         }`}>
         {isComplete ? (
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

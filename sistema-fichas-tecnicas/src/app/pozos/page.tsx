@@ -291,9 +291,9 @@ export default function PozosPage() {
         </div>
 
         {/* Content */}
-        <div className="flex-1 flex overflow-hidden -mx-6">
+        <div className="flex-1 flex flex-col tablet:flex-row overflow-hidden -mx-6">
           {/* Table panel */}
-          <div className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ${selectedPozo ? 'w-2/3' : 'w-full'}`}>
+          <div className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ${selectedPozo ? 'tablet:w-1/2 desktop:w-2/3' : 'w-full'}`}>
             {pozosArray.length > 0 ? (
               <PozosTable
                 pozos={pozosArray}
@@ -308,7 +308,7 @@ export default function PozosPage() {
 
           {/* Preview panel */}
           {selectedPozo && (
-            <div className="w-1/3 border-l border-gray-200 bg-white overflow-auto">
+            <div className="tablet:w-1/2 desktop:w-1/3 border-t tablet:border-t-0 tablet:border-l border-gray-200 bg-white overflow-auto">
               <PozoPreviewPanel
                 pozo={selectedPozo}
                 onEdit={handleEditPozo}
