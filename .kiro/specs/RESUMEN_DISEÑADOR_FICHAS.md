@@ -382,4 +382,4 @@ Pasos:
 2. ✅ Confirmar arquitectura
 3. ✅ Comenzar implementación (Tarea 3.3.1)
 
-¿Algún ajuste o pregunta sobre el Diseñador de Fichas?
+

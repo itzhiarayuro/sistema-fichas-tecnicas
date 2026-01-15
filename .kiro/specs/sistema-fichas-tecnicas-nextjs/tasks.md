@@ -222,11 +222,10 @@ Plan de implementación incremental para el Sistema de Fichas Técnicas. La mayo
     - Códigos de error
     - _Requirements: Documentación_
 
-  - [ ] 31.3 Crear guía de contribución
-    - Cómo agregar nuevos campos
-    - Cómo crear nuevas plantillas
-    - Cómo extender validaciones
-    - _Requirements: Documentación_
+  - [ ] 32. Reglas de Desarrollo y Persistencia
+  - [x] 32.1 Sistema de guardado local persistente (LocalStorage/IndexedDB)
+  - [ ] 32.2 Commits frecuentes obligatorios de cada cambio realizado
+  - [ ] 32.3 Mantenimiento de plantillas en almacenamiento local del PC
 
 ## Notes
 
@@ -235,6 +234,8 @@ Plan de implementación incremental para el Sistema de Fichas Técnicas. La mayo
 - Property-based tests (Task 26) validate universal correctness properties
 - Architectural formalization (Task 27) prepares for future multiuser support
 - Designer module (Task 28) enables advanced customization
+- **Regla de Desarrollo**: Realizar commits de Git por cada cambio funcional significativo.
+- **Persistencia**: Las plantillas y diseños se guardan exclusivamente en el almacenamiento local del PC (navegador).
 - El sistema debe cumplir los criterios de finalización del Requirement 15 antes de considerarse completo
 
 ## Current Status Summary

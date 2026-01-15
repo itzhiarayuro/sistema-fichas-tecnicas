@@ -292,4 +292,3 @@ R: Sí, con el Importador de HTML.
 
 ---
 
-¿Alguna pregunta o ajuste?

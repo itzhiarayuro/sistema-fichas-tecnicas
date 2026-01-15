@@ -12,6 +12,44 @@ Bienvenido al sistema de gestión de fichas técnicas de pozos. Esta guía expli
 
 ---
 
+## 🛡️ Integridad y Estabilidad del Sistema
+
+### Fuente de verdad del sistema
+El modelo interno del sistema es la fuente de verdad para todos los datos.
+El archivo Excel es tratado como un input externo, que puede contener inconsistencias, variaciones de nombres o datos incompletos.
+
+Para garantizar estabilidad y evitar regresiones, los datos provenientes del Excel no se usan directamente, sino que se procesan mediante una capa de adaptación explícita que los convierte al modelo interno del sistema.
+
+Esto permite que el sistema se mantenga estable incluso si el formato del Excel cambia ligeramente en el futuro.
+
+### Adaptador de datos desde Excel
+El sistema utiliza una capa de adaptación entre el Excel y el modelo interno.
+Esta capa es responsable de:
+- Mapear columnas del Excel a claves internas del sistema
+- Corregir variaciones nominales (por ejemplo, errores tipográficos)
+- Asignar valores seguros cuando faltan columnas
+- Ignorar columnas desconocidas sin generar errores fatales
+
+Esta estrategia evita acoplar el dominio del sistema directamente al formato del Excel y reduce el riesgo de errores silenciosos.
+
+### Recuperación ante errores
+El sistema está diseñado para no quedar en un estado inutilizable ante errores inesperados (cierres del navegador, datos corruptos, fallos de carga).
+
+Al iniciar, el sistema intenta recuperar el estado en el siguiente orden:
+1. Último estado válido guardado
+2. Snapshot anterior
+3. Estado base seguro
+
+Si ocurre un error durante la ejecución, este se contiene y el sistema intenta continuar desde el último estado válido disponible, mostrando mensajes claros al usuario.
+
+### Alineación con el archivo Excel
+La alineación entre el sistema y el Excel se realiza de forma controlada e incremental.
+El sistema no depende estructuralmente del Excel, sino que mantiene su propio modelo interno estable.
+
+Cualquier ajuste futuro en la estructura del Excel se gestiona mediante el adaptador de entrada, sin necesidad de modificar la lógica central del sistema ni los componentes de visualización.
+
+---
+
 ## 📊 1. Carga de Datos (Excel)
 
 El sistema acepta archivos Excel (.xlsx) con la siguiente estructura:

@@ -358,4 +358,4 @@ interface SystemBoundaries {
 
 ---
 
-¿Comenzamos con la Tarea 3.2?
+
