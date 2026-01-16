@@ -40,11 +40,7 @@ const PRESET_COLORS = [
 
 // Fuentes disponibles
 const FONT_FAMILIES = [
-  { name: 'Inter', value: 'Inter' },
   { name: 'Arial', value: 'Arial' },
-  { name: 'Helvetica', value: 'Helvetica' },
-  { name: 'Times New Roman', value: 'Times New Roman' },
-  { name: 'Georgia', value: 'Georgia' },
 ];
 
 // Tamaños de fuente predefinidos
@@ -143,7 +139,7 @@ export function CustomizationPanel({
       <div className="px-4 py-2 bg-blue-50 border-b border-blue-100">
         <div className="flex items-center justify-between">
           <span className="text-xs text-blue-700">
-            {customizations.isGlobal 
+            {customizations.isGlobal
               ? '🌐 Cambios se aplicarán a futuras fichas'
               : '📄 Cambios solo afectan esta ficha'
             }
@@ -151,11 +147,10 @@ export function CustomizationPanel({
           <button
             onClick={() => handleScopeChange(!customizations.isGlobal)}
             disabled={readOnly}
-            className={`text-xs px-2 py-1 rounded transition-colors ${
-              readOnly 
+            className={`text-xs px-2 py-1 rounded transition-colors ${readOnly
                 ? 'text-gray-400 cursor-not-allowed'
                 : 'text-blue-600 hover:bg-blue-100'
-            }`}
+              }`}
           >
             {customizations.isGlobal ? 'Hacer local' : 'Aplicar como plantilla'}
           </button>
@@ -237,11 +232,10 @@ function TabButton({ active, onClick, icon, label }: TabButtonProps) {
   return (
     <button
       onClick={onClick}
-      className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium transition-colors ${
-        active
+      className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium transition-colors ${active
           ? 'text-primary border-b-2 border-primary bg-primary/5'
           : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-      }`}
+        }`}
     >
       {icon}
       {label}
@@ -270,9 +264,8 @@ function ColorsTab({ colors, onChange, readOnly }: ColorsTabProps) {
               key={preset.value}
               onClick={() => onChange('headerBg', preset.value)}
               disabled={readOnly}
-              className={`w-8 h-8 rounded-full border-2 transition-transform hover:scale-110 ${
-                colors.headerBg === preset.value ? 'border-gray-800 ring-2 ring-offset-2 ring-primary' : 'border-gray-200'
-              } ${readOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className={`w-8 h-8 rounded-full border-2 transition-transform hover:scale-110 ${colors.headerBg === preset.value ? 'border-gray-800 ring-2 ring-offset-2 ring-primary' : 'border-gray-200'
+                } ${readOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
               style={{ backgroundColor: preset.value }}
               title={preset.name}
             />
@@ -345,18 +338,16 @@ function ColorPicker({ label, value, onChange, readOnly }: ColorPickerProps) {
           value={value}
           onChange={(e) => onChange(e.target.value)}
           disabled={readOnly}
-          className={`w-8 h-8 rounded border border-gray-200 cursor-pointer ${
-            readOnly ? 'opacity-50 cursor-not-allowed' : ''
-          }`}
+          className={`w-8 h-8 rounded border border-gray-200 cursor-pointer ${readOnly ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
         />
         <input
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
           disabled={readOnly}
-          className={`w-20 px-2 py-1 text-xs font-mono border border-gray-200 rounded ${
-            readOnly ? 'bg-gray-100 cursor-not-allowed' : ''
-          }`}
+          className={`w-20 px-2 py-1 text-xs font-mono border border-gray-200 rounded ${readOnly ? 'bg-gray-100 cursor-not-allowed' : ''
+            }`}
         />
       </div>
     </div>
@@ -382,9 +373,8 @@ function FontsTab({ fonts, onChange, readOnly }: FontsTabProps) {
           value={fonts.fontFamily}
           onChange={(e) => onChange('fontFamily', e.target.value)}
           disabled={readOnly}
-          className={`w-full px-3 py-2 border border-gray-200 rounded-lg text-sm ${
-            readOnly ? 'bg-gray-100 cursor-not-allowed' : ''
-          }`}
+          className={`w-full px-3 py-2 border border-gray-200 rounded-lg text-sm ${readOnly ? 'bg-gray-100 cursor-not-allowed' : ''
+            }`}
         >
           {FONT_FAMILIES.map((font) => (
             <option key={font.value} value={font.value}>
@@ -448,9 +438,8 @@ function FontSizeSelector({ label, value, onChange, readOnly }: FontSizeSelector
           value={value}
           onChange={(e) => onChange(Number(e.target.value))}
           disabled={readOnly}
-          className={`px-2 py-1 border border-gray-200 rounded text-sm ${
-            readOnly ? 'bg-gray-100 cursor-not-allowed' : ''
-          }`}
+          className={`px-2 py-1 border border-gray-200 rounded text-sm ${readOnly ? 'bg-gray-100 cursor-not-allowed' : ''
+            }`}
         >
           {FONT_SIZES.map((size) => (
             <option key={size} value={size}>
@@ -501,18 +490,18 @@ function SpacingTab({ spacing, onChange, readOnly }: SpacingTabProps) {
       {/* Visual preview */}
       <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
         <p className="text-xs text-gray-500 mb-2">Vista previa de espaciado:</p>
-        <div 
+        <div
           className="bg-white border border-gray-300 rounded"
           style={{ margin: `${spacing.margin / 4}px`, padding: `${spacing.padding / 2}px` }}
         >
-          <div 
+          <div
             className="bg-primary/10 rounded p-2 mb-1"
             style={{ marginBottom: `${spacing.sectionGap / 2}px` }}
           >
             <div className="text-xs text-gray-600">Sección 1</div>
           </div>
           <div className="bg-primary/10 rounded p-2">
-            <div 
+            <div
               className="text-xs text-gray-600"
               style={{ marginBottom: `${spacing.fieldGap / 2}px` }}
             >
@@ -550,17 +539,15 @@ function SpacingSlider({ label, value, onChange, readOnly }: SpacingSliderProps)
           value={value}
           onChange={(e) => onChange(Number(e.target.value))}
           disabled={readOnly}
-          className={`flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer ${
-            readOnly ? 'opacity-50 cursor-not-allowed' : ''
-          }`}
+          className={`flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer ${readOnly ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
         />
         <select
           value={value}
           onChange={(e) => onChange(Number(e.target.value))}
           disabled={readOnly}
-          className={`w-16 px-1 py-1 border border-gray-200 rounded text-xs ${
-            readOnly ? 'bg-gray-100 cursor-not-allowed' : ''
-          }`}
+          className={`w-16 px-1 py-1 border border-gray-200 rounded text-xs ${readOnly ? 'bg-gray-100 cursor-not-allowed' : ''
+            }`}
         >
           {SPACING_VALUES.map((v) => (
             <option key={v} value={v}>

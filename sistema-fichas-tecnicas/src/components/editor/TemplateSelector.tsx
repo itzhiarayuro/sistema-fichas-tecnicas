@@ -43,7 +43,7 @@ const BUILT_IN_TEMPLATES: Template[] = [
         titleSize: 16,
         labelSize: 12,
         valueSize: 12,
-        fontFamily: 'Inter',
+        fontFamily: 'Arial',
       },
     },
   },
@@ -83,7 +83,7 @@ const BUILT_IN_TEMPLATES: Template[] = [
         titleSize: 16,
         labelSize: 12,
         valueSize: 12,
-        fontFamily: 'Inter',
+        fontFamily: 'Arial',
       },
     },
   },
@@ -103,7 +103,7 @@ const BUILT_IN_TEMPLATES: Template[] = [
         titleSize: 16,
         labelSize: 11,
         valueSize: 12,
-        fontFamily: 'Georgia',
+        fontFamily: 'Arial',
       },
     },
   },
@@ -137,7 +137,7 @@ export function TemplateSelector({
 }: TemplateSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const storeTemplates = useGlobalStore((state) => state.templates);
-  
+
   // Combinar plantillas del store con las built-in
   const allTemplates = [...BUILT_IN_TEMPLATES];
   storeTemplates.forEach((t) => {
@@ -160,9 +160,8 @@ export function TemplateSelector({
         <button
           onClick={() => !readOnly && setIsOpen(!isOpen)}
           disabled={readOnly}
-          className={`w-full flex items-center justify-between px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm ${
-            readOnly ? 'opacity-50 cursor-not-allowed' : 'hover:border-gray-300'
-          }`}
+          className={`w-full flex items-center justify-between px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm ${readOnly ? 'opacity-50 cursor-not-allowed' : 'hover:border-gray-300'
+            }`}
         >
           <div className="flex items-center gap-2">
             <TemplatePreviewMini template={selectedTemplate} />
@@ -179,9 +178,8 @@ export function TemplateSelector({
               <button
                 key={template.id}
                 onClick={() => handleSelect(template)}
-                className={`w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-gray-50 transition-colors ${
-                  template.id === currentTemplate ? 'bg-primary/5' : ''
-                }`}
+                className={`w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-gray-50 transition-colors ${template.id === currentTemplate ? 'bg-primary/5' : ''
+                  }`}
               >
                 <TemplatePreviewMini template={template} />
                 <div className="flex-1 min-w-0">
@@ -238,15 +236,15 @@ function TemplatePreviewMini({ template }: TemplatePreviewMiniProps) {
   const { colors } = template.customizations;
   return (
     <div className="w-8 h-8 rounded border border-gray-200 overflow-hidden flex-shrink-0">
-      <div 
+      <div
         className="h-2"
         style={{ backgroundColor: colors.headerBg }}
       />
-      <div 
+      <div
         className="h-6 flex items-center justify-center"
         style={{ backgroundColor: colors.sectionBg }}
       >
-        <div 
+        <div
           className="w-4 h-1 rounded"
           style={{ backgroundColor: colors.sectionText }}
         />
@@ -265,16 +263,15 @@ interface TemplateCardProps {
 
 function TemplateCard({ template, isSelected, onSelect, readOnly }: TemplateCardProps) {
   const { colors, fonts } = template.customizations;
-  
+
   return (
     <button
       onClick={onSelect}
       disabled={readOnly}
-      className={`relative p-3 rounded-lg border-2 transition-all text-left ${
-        isSelected
+      className={`relative p-3 rounded-lg border-2 transition-all text-left ${isSelected
           ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
           : 'border-gray-200 hover:border-gray-300'
-      } ${readOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
+        } ${readOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
     >
       {/* Selection indicator */}
       {isSelected && (
@@ -288,13 +285,13 @@ function TemplateCard({ template, isSelected, onSelect, readOnly }: TemplateCard
       {/* Template preview */}
       <div className="mb-2 rounded border border-gray-200 overflow-hidden">
         {/* Header preview */}
-        <div 
+        <div
           className="px-2 py-1"
           style={{ backgroundColor: colors.headerBg }}
         >
-          <div 
+          <div
             className="text-xs font-medium truncate"
-            style={{ 
+            style={{
               color: colors.headerText,
               fontSize: `${Math.max(8, fonts.titleSize - 6)}px`,
               fontFamily: fonts.fontFamily,
@@ -304,14 +301,14 @@ function TemplateCard({ template, isSelected, onSelect, readOnly }: TemplateCard
           </div>
         </div>
         {/* Content preview */}
-        <div 
+        <div
           className="px-2 py-2 space-y-1"
           style={{ backgroundColor: colors.sectionBg }}
         >
           <div className="flex items-center gap-1">
-            <span 
+            <span
               className="text-xs"
-              style={{ 
+              style={{
                 color: colors.sectionText,
                 fontSize: `${Math.max(7, fonts.labelSize - 4)}px`,
                 fontFamily: fonts.fontFamily,
@@ -319,9 +316,9 @@ function TemplateCard({ template, isSelected, onSelect, readOnly }: TemplateCard
             >
               Etiqueta:
             </span>
-            <span 
+            <span
               className="text-xs"
-              style={{ 
+              style={{
                 color: colors.sectionText,
                 fontSize: `${Math.max(7, fonts.valueSize - 4)}px`,
                 fontFamily: fonts.fontFamily,
@@ -330,7 +327,7 @@ function TemplateCard({ template, isSelected, onSelect, readOnly }: TemplateCard
               Valor
             </span>
           </div>
-          <div 
+          <div
             className="h-1 w-3/4 rounded"
             style={{ backgroundColor: colors.sectionText, opacity: 0.2 }}
           />

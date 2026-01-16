@@ -82,7 +82,7 @@ const defaultCustomizations: FichaState['customizations'] = {
     titleSize: 16,
     labelSize: 12,
     valueSize: 12,
-    fontFamily: 'Inter',
+    fontFamily: 'Arial',
   },
   spacing: {
     sectionGap: 16,

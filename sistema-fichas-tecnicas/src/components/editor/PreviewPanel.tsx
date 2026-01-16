@@ -126,7 +126,7 @@ export function PreviewPanel({
       titleSize: 16,
       labelSize: 12,
       valueSize: 12,
-      fontFamily: 'Inter',
+      fontFamily: 'Arial',
     };
 
     const spacing = custom?.spacing ?? {
