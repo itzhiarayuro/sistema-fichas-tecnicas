@@ -17,6 +17,7 @@ import { Header } from './Header';
 import { BottomNav } from './BottomNav';
 import { ToastContainer } from '@/components/ui/Toast';
 import { useUIStore } from '@/stores';
+import { logger } from '@/lib/logger';
 
 interface AppShellProps {
   children: ReactNode;
@@ -56,8 +57,22 @@ export function AppShell({ children, noPadding = false }: AppShellProps) {
         </main>
 
         {/* Footer info (opcional, como pidió el usuario hacerlo sticky/fijo) */}
-        <footer className="mt-auto p-4 text-center text-xs text-gray-400 border-t border-gray-100 hidden md:block">
-          &copy; {new Date().getFullYear()} Sistema de Fichas Técnicas - Gestión de Alcantarillado
+        <footer className="mt-auto p-4 flex items-center justify-between text-xs text-gray-400 border-t border-gray-100 hidden md:flex">
+          <div>
+            &copy; {new Date().getFullYear()} Sistema de Fichas Técnicas - Gestión de Alcantarillado
+          </div>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => logger.downloadLogs()}
+              className="text-primary hover:underline flex items-center gap-1"
+              title="Descargar logs detallados para depuración"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Descargar Logs de Errores
+            </button>
+          </div>
         </footer>
       </div>
 

@@ -370,15 +370,11 @@ export function PropertiesPanel({ version, selectedPlacementId, selectedShapeId 
                     <div>
                         <label className="text-[10px] text-gray-600 mb-1 block font-medium">Fuente</label>
                         <select
-                            value={placement.fontFamily || 'Inter'}
+                            value={placement.fontFamily || 'Arial'}
                             onChange={(e) => handleUpdate({ fontFamily: e.target.value })}
                             className="w-full bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 text-xs focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
                         >
-                            <option value="Inter">Inter</option>
                             <option value="Arial">Arial</option>
-                            <option value="Helvetica">Helvetica</option>
-                            <option value="Times New Roman">Times New Roman</option>
-                            <option value="Courier New">Courier New</option>
                         </select>
                     </div>
 

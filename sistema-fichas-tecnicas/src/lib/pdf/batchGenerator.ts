@@ -5,7 +5,8 @@
  * Permite generar múltiples PDFs con progreso, cancelación y empaquetado ZIP.
  */
 
-import { PDFGenerator, PDFGeneratorOptions } from './pdfGenerator';
+import { PDFGenerator } from './pdfGenerator';
+import { PDFGeneratorOptions } from '@/types/pdf';
 import type { FichaState } from '@/types/ficha';
 import type { Pozo } from '@/types/pozo';
 

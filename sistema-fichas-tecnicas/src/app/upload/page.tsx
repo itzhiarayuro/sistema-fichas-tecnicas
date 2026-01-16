@@ -61,7 +61,10 @@ export default function UploadPage() {
    * Genera un ID único para archivos
    */
   const generateFileId = useCallback(() => {
-    return `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substring(2, 9);
+    const cryptoId = typeof crypto !== 'undefined' ? crypto.randomUUID().split('-')[0] : '';
+    return `file-${timestamp}-${random}${cryptoId ? `-${cryptoId}` : ''}`;
   }, []);
 
   /**
@@ -175,7 +178,7 @@ export default function UploadPage() {
       status: 'pending' as const,
     }));
 
-    setFiles(fileItems);
+    setFiles(prev => [...prev, ...fileItems]);
 
     const allPozos: Pozo[] = [];
     const allPhotos: FotoInfo[] = [];
@@ -272,7 +275,9 @@ export default function UploadPage() {
     // Guardar en estado local (acumulativo)
     setProcessedPozos(prev => [...prev, ...allPozos]);
     setProcessedPhotos(prev => [...prev, ...allPhotos]);
-    setFiles(prev => [...prev, ...fileItems]);
+    // Nota: Los fileItems ya se agregaron al inicio del procesamiento (linea 178 aprox)
+    // y se actualizaron individualmente durante el bucle. No agregarlos de nuevo aquí.
+    // setFiles(prev => [...prev, ...fileItems]);
 
     // Finalizar
     setIsProcessing(false);

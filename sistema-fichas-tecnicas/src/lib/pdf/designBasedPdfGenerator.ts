@@ -2,6 +2,7 @@ import { jsPDF } from 'jspdf';
 import { FichaDesignVersion, FieldPlacement, ShapeElement } from '@/types/fichaDesign';
 import { Pozo } from '@/types/pozo';
 import { FIELD_PATHS } from '@/constants/fieldMapping';
+import { configurePDFFont, sanitizeTextForPDF, getSafeFont } from './pdfFontUtils';
 
 // Helper para obtener valor de ruta (ej: "identificacion.idPozo.value")
 const getValueByPath = (obj: any, path: string) => {
@@ -32,6 +33,9 @@ export async function generatePdfFromDesign(
             unit: 'mm',
             format: design.pageSize.toLowerCase() as any,
         });
+
+        // Configurar fuente para soporte UTF-8
+        configurePDFFont(doc);
 
         // 1. Combinar y ordenar todos los elementos por zIndex
         const allElements = [
@@ -164,11 +168,10 @@ async function renderShape(doc: jsPDF, shape: ShapeElement) {
         const fontSize = shape.fontSize || 10;
         doc.setFontSize(fontSize);
         doc.setTextColor(shape.color || '#000000');
-        const font = shape.fontFamily?.toLowerCase().includes('times') ? 'times' :
-            shape.fontFamily?.toLowerCase().includes('courier') ? 'courier' : 'helvetica';
+        const font = getSafeFont(shape.fontFamily);
         const fontStyle = shape.fontWeight === 'bold' ? 'bold' : 'normal';
         doc.setFont(font, fontStyle);
-        doc.text(shape.content, shape.x, shape.y + (fontSize * 0.35), {
+        doc.text(sanitizeTextForPDF(shape.content), shape.x, shape.y + (fontSize * 0.35), {
             maxWidth: shape.width,
             align: shape.textAlign || 'left'
         });
@@ -210,7 +213,7 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, pa
             doc.setFontSize(fontSize * 0.65);
             doc.setTextColor('#999999');
             doc.setFont('helvetica', 'bold');
-            doc.text(placement.customLabel || placement.fieldId, placement.x + 1, currentY + (fontSize * 0.4));
+            doc.text(sanitizeTextForPDF(placement.customLabel || placement.fieldId), placement.x + 1, currentY + (fontSize * 0.4));
             currentY += (fontSize * 0.5);
         } else {
             currentY += (fontSize * 0.4);
@@ -218,12 +221,11 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, pa
 
         doc.setFontSize(fontSize);
         doc.setTextColor(color);
-        const font = placement.fontFamily?.toLowerCase().includes('times') ? 'times' :
-            placement.fontFamily?.toLowerCase().includes('courier') ? 'courier' : 'helvetica';
+        const font = getSafeFont(placement.fontFamily);
         const style = placement.fontWeight === 'bold' ? 'bold' : 'normal';
         doc.setFont(font, style);
 
-        doc.text(content, placement.x + 1, currentY + (fontSize * 0.35), {
+        doc.text(sanitizeTextForPDF(content), placement.x + 1, currentY + (fontSize * 0.35), {
             maxWidth: placement.width - 2,
             align: placement.textAlign || 'left'
         });

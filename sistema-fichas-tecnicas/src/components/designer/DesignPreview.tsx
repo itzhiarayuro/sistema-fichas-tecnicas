@@ -316,6 +316,26 @@ export function DesignPreview({ version, isOpen, onClose }: DesignPreviewProps) 
                             Cerrar
                         </button>
                         <button
+                            onClick={async () => {
+                                if (!version || !selectedPozo) return;
+                                try {
+                                    const { generatePdfFromDesign } = await import('@/lib/pdf/designBasedPdfGenerator');
+                                    const result = await generatePdfFromDesign(version, selectedPozo);
+                                    if (result.success && result.blob) {
+                                        const url = URL.createObjectURL(result.blob);
+                                        const link = document.createElement('a');
+                                        link.href = url;
+                                        link.download = `ficha_${selectedPozo.idPozo?.value || selectedPozo.identificacion.idPozo.value}_${version.name}.pdf`;
+                                        link.click();
+                                        URL.revokeObjectURL(url);
+                                    } else {
+                                        alert('Error al generar PDF: ' + result.error);
+                                    }
+                                } catch (e) {
+                                    console.error(e);
+                                    alert('Error inesperado al generar PDF');
+                                }
+                            }}
                             className="px-4 py-2 bg-primary text-white rounded-lg font-medium hover:bg-primary-600 transition-colors flex items-center gap-2"
                             title="Generar PDF"
                         >

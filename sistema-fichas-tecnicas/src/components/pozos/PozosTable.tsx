@@ -13,6 +13,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import { Pozo } from '@/types';
 import { PozoStatusBadge, getPozoStatus } from './PozoStatusBadge';
+import { useGlobalStore } from '@/stores/globalStore';
 
 type SortField = 'codigo' | 'direccion' | 'barrio' | 'sistema' | 'estado' | 'fecha';
 type SortDirection = 'asc' | 'desc';
@@ -203,6 +204,9 @@ export function PozosTable({
     );
   };
 
+  // Get photos from global store for association
+  const getPhotosByPozoId = useGlobalStore((state) => state.getPhotosByPozoId);
+
   return (
     <div className="flex flex-col h-full">
       {/* Filters */}
@@ -363,7 +367,15 @@ export function PozosTable({
               </tr>
             ) : (
               sortedPozos.map((pozo) => {
-                const fotosCount = countFotos(pozo);
+                // Conteo consolidado: incrustadas + asociadas globalmente
+                const fotosIncrustadasCount = pozo.fotos?.fotos?.length || 0;
+                const fotosGlobales = getPhotosByPozoId(pozo.id);
+
+                // Unificar para evitar doble conteo
+                const fotosIncrustadasIds = new Set(pozo.fotos?.fotos?.map(f => f.id) || []);
+                const fotosGlobalesNuevasCount = fotosGlobales.filter(f => !fotosIncrustadasIds.has(f.id)).length;
+
+                const totalFotosCount = fotosIncrustadasCount + fotosGlobalesNuevasCount;
                 const isSelected = selectedPozoId === pozo.id;
 
                 return (
@@ -402,12 +414,12 @@ export function PozosTable({
                     <td className="px-4 py-3">
                       <span className={`
                         inline-flex items-center gap-1 text-sm
-                        ${fotosCount > 0 ? 'text-gray-700' : 'text-gray-400'}
+                        ${totalFotosCount > 0 ? 'text-gray-700' : 'text-gray-400'}
                       `}>
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                         </svg>
-                        {fotosCount}
+                        {totalFotosCount}
                       </span>
                     </td>
                   </tr>
@@ -421,8 +433,8 @@ export function PozosTable({
   );
 }
 
-// Helper function to count photos
+// Helper function to count photos (deprecated but kept for minimal compatibility if needed elsewhere)
 function countFotos(pozo: Pozo): number {
   const { fotos } = pozo;
-  return fotos.fotos?.length || 0;
+  return fotos?.fotos?.length || 0;
 }

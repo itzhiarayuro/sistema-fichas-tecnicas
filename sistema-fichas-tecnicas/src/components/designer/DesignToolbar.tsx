@@ -73,7 +73,7 @@ export function DesignToolbar({
                 s.type === 'rectangle' || s.type === 'circle' ? `background-color: ${s.fillColor || 'transparent'}` : '',
                 (s.type === 'rectangle' || s.type === 'circle') && s.strokeColor ? `border: ${s.strokeWidth}px solid ${s.strokeColor}` : '',
                 s.borderRadius ? `border-radius: ${s.borderRadius}px` : (s.type === 'circle' ? 'border-radius: 50%' : ''),
-                s.type === 'text' ? `font-family: ${s.fontFamily || 'Inter'}; font-size: ${s.fontSize}pt; color: ${s.color || '#000'}; text-align: ${s.textAlign || 'left'}; display: flex; align-items: center;` : ''
+                s.type === 'text' ? `font-family: ${s.fontFamily || 'Arial'}; font-size: ${s.fontSize}pt; color: ${s.color || '#000'}; text-align: ${s.textAlign || 'left'}; display: flex; align-items: center;` : ''
             ].join(';');
 
             let content = '';
@@ -89,7 +89,7 @@ export function DesignToolbar({
             const style = [
                 `left: ${p.x}mm`, `top: ${p.y}mm`, `width: ${p.width}mm`, `height: ${p.height}mm`,
                 `z-index: ${p.zIndex}`,
-                `font-family: ${p.fontFamily || 'Inter'}`, `font-size: ${p.fontSize}pt`,
+                `font-family: ${p.fontFamily || 'Arial'}`, `font-size: ${p.fontSize}pt`,
                 `color: ${p.color || '#000'}`, `text-align: ${p.textAlign || 'left'}`,
                 p.backgroundColor ? `background-color: ${p.backgroundColor}` : '',
                 p.borderRadius ? `border-radius: ${p.borderRadius}px` : '',
@@ -289,6 +289,48 @@ export function DesignToolbar({
                     Preview
                 </button>
 
+                {/* Export PDF */}
+                <button
+                    onClick={async () => {
+                        if (!version) return;
+                        try {
+                            // En el toolbar, necesitamos un pozo para exportar. 
+                            // Si no hay pozo seleccionado en el global store, usamos el primero disponible.
+                            const { useGlobalStore } = await import('@/stores');
+                            const pozos = useGlobalStore.getState().pozos;
+                            const pozo = Array.from(pozos.values())[0];
+
+                            if (!pozo) {
+                                alert('No hay pozos cargados para generar la exportación.');
+                                return;
+                            }
+
+                            const { generatePdfFromDesign } = await import('@/lib/pdf/designBasedPdfGenerator');
+                            const result = await generatePdfFromDesign(version, pozo);
+                            if (result.success && result.blob) {
+                                const url = URL.createObjectURL(result.blob);
+                                const link = document.createElement('a');
+                                link.href = url;
+                                link.download = `${version.name.replace(/\s+/g, '_')}.pdf`;
+                                link.click();
+                                URL.revokeObjectURL(url);
+                            } else {
+                                alert('Error al generar PDF: ' + result.error);
+                            }
+                        } catch (e) {
+                            console.error(e);
+                            alert('Error inesperado al generar PDF');
+                        }
+                    }}
+                    className="flex items-center gap-2 bg-gradient-to-r from-red-600 to-red-700 text-white px-3 py-2 rounded-lg font-medium hover:shadow-lg transition-all active:scale-95 text-xs"
+                    title="Exportar PDF"
+                >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    PDF
+                </button>
+
                 {/* Export HTML */}
                 <button
                     onClick={handleExportHTML}
@@ -298,7 +340,7 @@ export function DesignToolbar({
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                     </svg>
-                    Exportar
+                    HTML
                 </button>
             </div>
         </div>

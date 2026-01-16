@@ -8,7 +8,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { PDFGenerator, type PDFGeneratorOptions } from '@/lib/pdf';
+import { PDFMakeGenerator, type PDFGeneratorOptions } from '@/lib/pdf';
 import type { FichaState } from '@/types/ficha';
 import type { Pozo } from '@/types/pozo';
 
@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Generar PDF
-    const generator = new PDFGenerator();
+    const generator = new PDFMakeGenerator();
     const result = await generator.generatePDF(ficha, pozo, options);
 
     if (!result.success || !result.blob) {

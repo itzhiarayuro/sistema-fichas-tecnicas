@@ -311,17 +311,31 @@ export const useGlobalStore = create<GlobalState>()(
 
         const safePozoId = String(pozoId);
 
-        // El pozoId ahora es único por sesión (pozo-M680-timestamp-index)
-        // Extraemos solo la parte del código (ej: M680) para asociar fotos
-        const codigoMatch = safePozoId.match(/^pozo-([A-Z0-9]+)-/i);
-        const targetCode = (codigoMatch ? codigoMatch[1] : safePozoId).toUpperCase();
+        // El pozoId ahora es único por sesión (pozo-CODIGO-timestamp-index)
+        // Extraemos solo la parte del código (ej: M680 o MH-61) para asociar fotos
+        // Buscamos lo que hay entre el primer guion y el penúltimo guion (el timestamp)
+        let targetCode = safePozoId.toUpperCase();
+        if (safePozoId.startsWith('pozo-')) {
+          const parts = safePozoId.split('-');
+          if (parts.length >= 4) {
+            // Caso: pozo-MH-61-123456789-0 -> parts: ["pozo", "MH", "61", "123456789", "0"]
+            // El código es todo lo que hay entre "pozo" y el timestamp (penúltimo)
+            targetCode = parts.slice(1, -2).join('-').toUpperCase();
+          } else if (parts.length >= 3) {
+            // Caso básico: pozo-M680-timestamp-index
+            targetCode = parts[1].toUpperCase();
+          }
+        }
 
         get().photos.forEach((photo) => {
           if (!photo?.filename) return;
 
-          // El filename suele empezar con el código (ej: M680-P.jpg)
-          const match = String(photo.filename).match(/^([A-Z0-9]+)/i);
-          if (match && match[1] && match[1].toUpperCase() === targetCode) {
+          // Normalizar filename (remover extensión y a mayúsculas)
+          const nameWithoutExt = String(photo.filename).replace(/\.[^/.]+$/, '').toUpperCase();
+
+          // El filename debe empezar con el código seguido de un guion (ej: M680-P)
+          // O ser exactamente el código si no tiene sufijo
+          if (nameWithoutExt === targetCode || nameWithoutExt.startsWith(`${targetCode}-`)) {
             photos.push(photo);
           }
         });

@@ -16,6 +16,7 @@
 import { useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useGlobalStore, useUIStore } from '@/stores';
+import { logger } from '@/lib/logger';
 import { PozosTable, PozoStatusDetail } from '@/components/pozos';
 import { RecommendationsPanel } from '@/components/guided';
 import { AppShell, NextStepIndicator, ProgressBar } from '@/components/layout';
@@ -31,6 +32,7 @@ export default function PozosPage() {
   // UI store
   const selectedPozoId = useUIStore((state) => state.selectedPozoId);
   const setSelectedPozoId = useUIStore((state) => state.setSelectedPozoId);
+  const addToast = useUIStore((state) => state.addToast);
 
   // Set current workflow step
   useEffect(() => {
@@ -91,7 +93,34 @@ export default function PozosPage() {
     const pozo = pozos.get(selectedPozoId);
     if (!pozo) return;
 
+    logger.info('Solicitud de generación de PDF (Lista)', { pozoId: selectedPozoId }, 'PozosPage');
+
     try {
+      // CRÍTICO: Obtener fotos globales asociadas por nomenclatura
+      const getPhotosByPozoId = useGlobalStore.getState().getPhotosByPozoId;
+      const fotosGlobales = getPhotosByPozoId(selectedPozoId);
+      const fotosIncrustadas = pozo.fotos?.fotos || [];
+
+      // Unificar fotos eliminando duplicados por ID
+      const fotosIds = new Set(fotosIncrustadas.map(f => f.id));
+      const todasLasFotos = [...fotosIncrustadas];
+      fotosGlobales.forEach(f => {
+        if (!fotosIds.has(f.id)) {
+          todasLasFotos.push(f);
+        }
+      });
+
+      // Crear objeto pozo enriquecido con todas las fotos
+      const enrichedPozo = {
+        ...pozo,
+        fotos: {
+          ...pozo.fotos,
+          fotos: todasLasFotos
+        }
+      };
+
+      logger.debug('Pozo enriquecido con fotos', { totalFotos: todasLasFotos.length }, 'PozosPage');
+
       // Crear una ficha con la estructura correcta
       const ficha = {
         id: `ficha-${selectedPozoId}`,
@@ -105,13 +134,13 @@ export default function PozosPage() {
             visible: true,
             locked: false,
             content: {
-              codigo: { value: pozo.idPozo?.value || pozo.identificacion.idPozo.value, source: 'excel' as const },
-              direccion: { value: pozo.direccion?.value || pozo.ubicacion.direccion.value, source: 'excel' as const },
-              barrio: { value: pozo.barrio?.value || pozo.ubicacion.barrio.value, source: 'excel' as const },
-              sistema: { value: pozo.sistema?.value || pozo.componentes.sistema.value, source: 'excel' as const },
-              estado: { value: pozo.estado?.value || pozo.identificacion.estado.value, source: 'excel' as const },
-              fecha: { value: pozo.fecha?.value || pozo.identificacion.fecha.value, source: 'excel' as const },
-              observaciones: { value: pozo.observacionesPozo?.value || pozo.observaciones.observaciones.value, source: 'excel' as const },
+              codigo: { value: pozo.idPozo?.value || pozo.identificacion?.idPozo?.value || 'S/N', source: 'excel' as const },
+              direccion: { value: pozo.direccion?.value || pozo.ubicacion?.direccion?.value || 'S/D', source: 'excel' as const },
+              barrio: { value: pozo.barrio?.value || pozo.ubicacion?.barrio?.value || '-', source: 'excel' as const },
+              sistema: { value: pozo.sistema?.value || pozo.componentes?.sistema?.value || '-', source: 'excel' as const },
+              estado: { value: pozo.estado?.value || pozo.identificacion?.estado?.value || '-', source: 'excel' as const },
+              fecha: { value: pozo.fecha?.value || pozo.identificacion?.fecha?.value || '-', source: 'excel' as const },
+              observaciones: { value: pozo.observacionesPozo?.value || pozo.observaciones?.observaciones?.value || '-', source: 'excel' as const },
             },
           },
           {
@@ -121,16 +150,16 @@ export default function PozosPage() {
             visible: true,
             locked: false,
             content: {
-              alturaTotal: { value: pozo.profundidad?.value || pozo.ubicacion.profundidad.value, source: 'excel' as const },
-              rasante: { value: pozo.elevacion?.value || pozo.ubicacion.elevacion.value, source: 'excel' as const },
-              tapaMaterial: { value: pozo.materialTapa?.value || pozo.componentes.materialTapa.value, source: 'excel' as const },
-              tapaEstado: { value: pozo.estadoTapa?.value || pozo.componentes.estadoTapa.value, source: 'excel' as const },
-              conoTipo: { value: pozo.tipoCono?.value || pozo.componentes.tipoCono.value, source: 'excel' as const },
-              conoMaterial: { value: pozo.materialCono?.value || pozo.componentes.materialCono.value, source: 'excel' as const },
-              cuerpoDiametro: { value: pozo.diametroCilindro?.value || pozo.componentes.diametroCilindro.value, source: 'excel' as const },
-              canuelaMaterial: { value: pozo.materialCanuela?.value || pozo.componentes.materialCanuela.value, source: 'excel' as const },
-              peldanosCantidad: { value: pozo.numeroPeldanos?.value || pozo.componentes.numeroPeldanos.value, source: 'excel' as const },
-              peldanosMaterial: { value: pozo.materialPeldanos?.value || pozo.componentes.materialPeldanos.value, source: 'excel' as const },
+              alturaTotal: { value: pozo.profundidad?.value || pozo.ubicacion?.profundidad?.value || '-', source: 'excel' as const },
+              rasante: { value: pozo.elevacion?.value || pozo.ubicacion?.elevacion?.value || '-', source: 'excel' as const },
+              tapaMaterial: { value: pozo.materialTapa?.value || pozo.componentes?.materialTapa?.value || '-', source: 'excel' as const },
+              tapaEstado: { value: pozo.estadoTapa?.value || pozo.componentes?.estadoTapa?.value || '-', source: 'excel' as const },
+              conoTipo: { value: pozo.tipoCono?.value || pozo.componentes?.tipoCono?.value || '-', source: 'excel' as const },
+              conoMaterial: { value: pozo.materialCono?.value || pozo.componentes?.materialCono?.value || '-', source: 'excel' as const },
+              cuerpoDiametro: { value: pozo.diametroCilindro?.value || pozo.componentes?.diametroCilindro?.value || '-', source: 'excel' as const },
+              canuelaMaterial: { value: pozo.materialCanuela?.value || pozo.componentes?.materialCanuela?.value || '-', source: 'excel' as const },
+              peldanosCantidad: { value: pozo.numeroPeldanos?.value || pozo.componentes?.numeroPeldanos?.value || '-', source: 'excel' as const },
+              peldanosMaterial: { value: pozo.materialPeldanos?.value || pozo.componentes?.materialPeldanos?.value || '-', source: 'excel' as const },
             },
           },
           {
@@ -141,7 +170,7 @@ export default function PozosPage() {
             locked: false,
             content: {},
           },
-        ],
+        ] as any,
         customizations: {
           colors: {
             headerBg: '#1F4E79',
@@ -173,41 +202,31 @@ export default function PozosPage() {
         version: 1,
       };
 
-      const response = await fetch('/api/pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ficha, pozo }),
-      });
+      // Generar PDF usando pdfMakeGenerator directamente en el cliente
+      // Esto es más eficiente y permite acceder a los blobs locales
+      logger.info('Importando y ejecutando pdfMakeGenerator', null, 'PozosPage');
+      const { pdfMakeGenerator } = await import('@/lib/pdf/pdfMakeGenerator');
+      const result = await pdfMakeGenerator.generatePDF(ficha, enrichedPozo);
 
-      if (!response.ok) {
-        // Intentar leer como JSON primero
-        const contentType = response.headers.get('content-type');
-        let errorMessage = 'Error al generar PDF';
-
-        if (contentType?.includes('application/json')) {
-          try {
-            const error = await response.json();
-            errorMessage = error.error || errorMessage;
-          } catch {
-            errorMessage = `Error ${response.status}: ${response.statusText}`;
-          }
-        } else {
-          errorMessage = `Error ${response.status}: ${response.statusText}`;
-        }
-
-        throw new Error(errorMessage);
+      if (!result.success || !result.blob) {
+        throw new Error(result.error || 'Error al generar el PDF con pdfMake');
       }
 
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
+      const url = window.URL.createObjectURL(result.blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${pozo.idPozo?.value || pozo.identificacion.idPozo.value}.pdf`;
+      a.download = result.filename || `${pozo.idPozo?.value || pozo.identificacion.idPozo.value}.pdf`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
+
+      addToast({
+        type: 'success',
+        message: 'PDF generado correctamente'
+      });
     } catch (error) {
+      logger.error('Error en el manejador de generación de PDF', error, 'PozosPage');
       console.error('Error:', error);
       alert(`Error al generar el PDF: ${error instanceof Error ? error.message : 'Error desconocido'}`);
     }
@@ -366,7 +385,16 @@ function PozoPreviewPanel({
   onEdit: () => void;
   onClose: () => void;
 }) {
-  const fotosCount = countFotos(pozo);
+  const getPhotosByPozoId = useGlobalStore((state) => state.getPhotosByPozoId);
+
+  // Conteo consolidado
+  const fotosIncrustadasCount = pozo.fotos?.fotos?.length || 0;
+  const fotosGlobales = getPhotosByPozoId(pozo.id);
+  const fotosIncrustadasIds = new Set(pozo.fotos?.fotos?.map(f => f.id) || []);
+  const fotosGlobalesNuevasCount = fotosGlobales.filter(f => !fotosIncrustadasIds.has(f.id)).length;
+  const totalFotosCount = fotosIncrustadasCount + fotosGlobalesNuevasCount;
+
+  const fotosCount = totalFotosCount;
 
   return (
     <div className="h-full flex flex-col">
@@ -494,10 +522,4 @@ function PozoPreviewPanel({
       </div>
     </div>
   );
-}
-
-// Helper function to count photos
-function countFotos(pozo: Pozo): number {
-  const { fotos } = pozo;
-  return fotos.fotos?.length || 0;
 }

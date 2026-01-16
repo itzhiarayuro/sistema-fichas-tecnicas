@@ -40,14 +40,14 @@ export interface NomenclaturaResult {
  */
 const PATTERNS = {
   // Fotos principales: M680-P (Panorámica), M680-I (Interna), M680-T (Tapa), M680-A (Acceso), M680-F (Fondo), M680-M (Medición)
-  PRINCIPAL: /^([A-Z]\d+)-([PITAFM])$/i,
+  PRINCIPAL: /^(.+)-([PITAFM])$/i,
   // Entradas con número: M680-E1-T, M680-E2-T, etc. (solo T, sin Z)
-  ENTRADA: /^([A-Z]\d+)-(E\d+)-T$/i,
+  ENTRADA: /^(.+)-(E\d+)-T$/i,
   // Salidas con número opcional: M680-S-T, M680-S1-T, M680-S2-T, etc. (solo T, sin Z)
-  SALIDA_CON_NUMERO: /^([A-Z]\d+)-(S\d+)-T$/i,
-  SALIDA_SIN_NUMERO: /^([A-Z]\d+)-(S)-T$/i,
+  SALIDA_CON_NUMERO: /^(.+)-(S\d+)-T$/i,
+  SALIDA_SIN_NUMERO: /^(.+)-(S)-T$/i,
   // Sumideros: M680-SUM1, M680-SUM2
-  SUMIDERO: /^([A-Z]\d+)-(SUM\d+)$/i,
+  SUMIDERO: /^(.+)-(SUM\d+)$/i,
 };
 
 /** Descripciones legibles para tipos de fotos principales */

@@ -5,6 +5,8 @@
  * Evita que blobs o base64 saturen el estado global de Zustand.
  */
 
+import { logger } from '@/lib/logger';
+
 export interface StoredBlob {
     id: string;
     blob: Blob | File;
@@ -42,6 +44,7 @@ class BlobStore {
         };
 
         this.memoryMap.set(id, stored);
+        logger.debug('Blob almacenado', { id, type: blob.type, size: blob.size }, 'BlobStore');
         return id;
     }
 
@@ -54,6 +57,7 @@ class BlobStore {
             stored.lastAccessed = Date.now();
             return stored.blob;
         }
+        logger.warn('Intento de obtener blob inexistente', { id }, 'BlobStore');
         return undefined;
     }
 
@@ -71,6 +75,7 @@ class BlobStore {
 
         const url = URL.createObjectURL(blob);
         this.urlMap.set(id, url);
+        logger.debug('ObjectURL creado', { id, url }, 'BlobStore');
         return url;
     }
 

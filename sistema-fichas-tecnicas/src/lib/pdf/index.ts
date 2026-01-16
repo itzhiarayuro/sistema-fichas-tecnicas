@@ -3,23 +3,8 @@
  * Requirements: 7.1-7.6
  */
 
-export {
-  PDFGenerator,
-  pdfGenerator,
-  generateFichaPDF,
-  downloadPDF,
-  type PDFGeneratorOptions,
-  type PDFGenerationResult,
-} from './pdfGenerator';
-
-export {
-  BatchGenerator,
-  batchGenerator,
-  generateBatchPDFs,
-  downloadZip,
-  type BatchItem,
-  type BatchProgress,
-  type BatchError,
-  type BatchResult,
-  type ProgressCallback,
-} from './batchGenerator';
+export * from './pdfGenerator';
+export * from './pdfMakeGenerator';
+export * from './batchGenerator';
+export * from './pdfFontUtils';
+export * from './designBasedPdfGenerator';

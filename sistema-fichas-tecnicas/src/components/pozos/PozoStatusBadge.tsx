@@ -41,10 +41,9 @@ export function getPozoStatus(pozo: Pozo, fotosGlobales?: Map<string, any>): Poz
   if (!pozo.diametroCilindro?.value) warnings.push('Diámetro de cilindro no especificado');
 
   // Check photos - buscar en fotos globales si se proporcionan
-  let fotosCount = countFotos(pozo);
-  if (fotosGlobales) {
-    fotosCount = countFotosGlobales(pozo.identificacion?.idPozo?.value || '', fotosGlobales);
-  }
+  const fotosCount = fotosGlobales
+    ? countConsolidatedFotos(pozo, fotosGlobales)
+    : countFotos(pozo);
 
   if (fotosCount === 0) {
     warnings.push('Sin fotos asociadas');
@@ -78,10 +77,9 @@ export function getPozoStatusDetails(pozo: Pozo, fotosGlobales?: Map<string, any
   if (!pozo.diametroCilindro?.value) warnings.push('Diámetro de cilindro no especificado');
 
   // Check photos - buscar en fotos globales si se proporcionan
-  let fotosCount = countFotos(pozo);
-  if (fotosGlobales) {
-    fotosCount = countFotosGlobales(pozo.identificacion?.idPozo?.value || '', fotosGlobales);
-  }
+  const fotosCount = fotosGlobales
+    ? countConsolidatedFotos(pozo, fotosGlobales)
+    : countFotos(pozo);
 
   if (fotosCount === 0) {
     warnings.push('Sin fotos asociadas');
@@ -98,26 +96,46 @@ function countFotos(pozo: Pozo): number {
   return fotos.fotos?.length || 0;
 }
 
-// Helper function to count photos in global store
-function countFotosGlobales(pozoId: string, fotosGlobales: Map<string, any>): number {
-  if (!pozoId) return 0;
+// Helper function to count consolidated photos (embedded + global)
+function countConsolidatedFotos(pozo: Pozo, fotosGlobales: Map<string, any>): number {
+  if (!pozo) return 0;
 
-  // Ensure pozoId is a string and normalized
-  const targetId = String(pozoId).trim().toUpperCase();
-  if (!targetId) return 0;
+  // 1. Fotos incrustadas en el objeto pozo
+  const fotosIncrustadas = pozo.fotos?.fotos || [];
+  const fotosIds = new Set(fotosIncrustadas.map(f => f.id));
+  let totalCount = fotosIncrustadas.length;
 
-  let count = 0;
-  fotosGlobales.forEach((foto) => {
-    if (!foto?.filename) return;
+  // 2. Buscar fotos globales asociadas por nomenclatura
+  if (!pozo.id) return totalCount;
 
-    // Extract codigo from filename (e.g., M680-P.jpg -> M680)
-    // Defensive check for match result
-    const match = String(foto.filename).match(/^([A-Z]\d+)/);
-    if (match && match[1] && match[1].toUpperCase() === targetId) {
-      count++;
+  const safeId = String(pozo.id);
+  let targetCode = safeId.toUpperCase();
+
+  if (safeId.startsWith('pozo-')) {
+    const parts = safeId.split('-');
+    if (parts.length >= 4) {
+      targetCode = parts.slice(1, -2).join('-').toUpperCase();
+    } else if (parts.length >= 3) {
+      targetCode = parts[1].toUpperCase();
     }
-  });
-  return count;
+  } else {
+    targetCode = String(pozo.idPozo?.value || '').trim().toUpperCase();
+  }
+
+  if (targetCode) {
+    fotosGlobales.forEach((foto) => {
+      if (!foto?.filename || !foto?.id) return;
+      if (fotosIds.has(foto.id)) return; // Ya contada
+
+      const nameWithoutExt = String(foto.filename).replace(/\.[^/.]+$/, '').toUpperCase();
+      if (nameWithoutExt === targetCode || nameWithoutExt.startsWith(`${targetCode}-`)) {
+        totalCount++;
+        fotosIds.add(foto.id);
+      }
+    });
+  }
+
+  return totalCount;
 }
 
 const STATUS_CONFIG: Record<PozoStatusType, {

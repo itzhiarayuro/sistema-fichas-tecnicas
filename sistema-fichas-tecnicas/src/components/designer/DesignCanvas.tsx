@@ -135,7 +135,7 @@ export function DesignCanvas({
                 zIndex: version.placements.length + (version.shapes?.length || 0) + 1,
                 showLabel: true,
                 fontSize: 10,
-                fontFamily: 'Inter',
+                fontFamily: 'Arial',
                 color: '#000000',
                 textAlign: 'left'
             };
@@ -170,7 +170,7 @@ export function DesignCanvas({
                 zIndex: version.placements.length + (version.shapes?.length || 0) + 1,
                 showLabel: true,
                 fontSize: 10,
-                fontFamily: 'Inter',
+                fontFamily: 'Arial',
                 color: '#000000',
                 textAlign: 'left'
             };
@@ -189,7 +189,7 @@ export function DesignCanvas({
                 strokeWidth: 1,
                 content: pendingShape === 'text' ? 'Texto' : undefined,
                 fontSize: pendingShape === 'text' ? 12 : undefined,
-                fontFamily: pendingShape === 'text' ? 'Inter' : undefined,
+                fontFamily: pendingShape === 'text' ? 'Arial' : undefined,
                 color: pendingShape === 'text' ? '#000000' : undefined,
                 imageUrl: pendingShape === 'image' ? (pendingImageData || undefined) : undefined,
                 opacity: 1
@@ -521,7 +521,7 @@ export function DesignCanvas({
                                 width: `${shape.width * MM_TO_PX * zoom}px`,
                                 height: `${shape.height * MM_TO_PX * zoom}px`,
                                 fontSize: `${(shape.fontSize || 12) * zoom}px`,
-                                fontFamily: shape.fontFamily || 'Inter',
+                                fontFamily: shape.fontFamily || 'Arial',
                                 fontWeight: shape.fontWeight || 'normal',
                                 color: shape.color || '#000000',
                                 textAlign: shape.textAlign || 'left',
@@ -619,7 +619,7 @@ export function DesignCanvas({
                             className="font-medium truncate"
                             style={{
                                 fontSize: `${(placement.fontSize || 10) * zoom}px`,
-                                fontFamily: placement.fontFamily || 'Inter',
+                                fontFamily: placement.fontFamily || 'Arial',
                                 fontWeight: placement.fontWeight || 'normal',
                                 color: placement.color || '#000000',
                                 textAlign: placement.textAlign || 'left'

@@ -44,6 +44,7 @@ import { AppShell, WorkflowBreadcrumbs, NextStepIndicator } from '@/components/l
 import { useGlobalStore, useUIStore, type Template } from '@/stores';
 import { createFichaStore, getFichaStore, type FichaStore } from '@/stores/fichaStore';
 import { useSyncEngine, type SyncConflict } from '@/lib/sync';
+import { logger } from '@/lib/logger';
 import { generateFichaPDF, downloadPDF } from '@/lib/pdf/pdfGenerator';
 import { lifecycleManager } from '@/lib/managers/lifecycleManager';
 import { resourceManager } from '@/lib/managers/resourceManager';
@@ -391,6 +392,7 @@ export default function EditorPage() {
   }, [pozo]);
 
   // Datos de fotos organizadas por categoría
+  const getPhotosByPozoId = useGlobalStore((state) => state.getPhotosByPozoId);
   const fotosData = useMemo(() => {
     if (!pozo) {
       return {
@@ -401,15 +403,30 @@ export default function EditorPage() {
         otras: [],
       };
     }
-    const fotos = pozo.fotos?.fotos || [];
+
+    // Obtener fotos incrustadas en el pozo + fotos asociadas globalmente por nomenclatura
+    const fotosIncrustadas = pozo.fotos?.fotos || [];
+    const fotosGlobales = getPhotosByPozoId(pozoId);
+
+    // Unificar eliminando duplicados por ID
+    const fotosIds = new Set(fotosIncrustadas.map(f => f.id));
+    const todasLasFotos = [...fotosIncrustadas];
+
+    fotosGlobales.forEach(f => {
+      if (!fotosIds.has(f.id)) {
+        todasLasFotos.push(f);
+        fotosIds.add(f.id);
+      }
+    });
+
     return {
-      principal: fotos.filter(f => ['general', 'tapa', 'principal'].includes(String(f.tipo || '').toLowerCase())),
-      entradas: fotos.filter(f => String(f.tipo || '').toLowerCase() === 'entrada'),
-      salidas: fotos.filter(f => String(f.tipo || '').toLowerCase() === 'salida'),
-      sumideros: fotos.filter(f => String(f.tipo || '').toLowerCase() === 'sumidero'),
-      otras: fotos.filter(f => !['general', 'tapa', 'principal', 'entrada', 'salida', 'sumidero'].includes(String(f.tipo || '').toLowerCase())),
+      principal: todasLasFotos.filter(f => f.categoria === 'PRINCIPAL'),
+      entradas: todasLasFotos.filter(f => f.categoria === 'ENTRADA'),
+      salidas: todasLasFotos.filter(f => f.categoria === 'SALIDA'),
+      sumideros: todasLasFotos.filter(f => f.categoria === 'SUMIDERO'),
+      otras: todasLasFotos.filter(f => f.categoria === 'OTRO' || !f.categoria),
     };
-  }, [pozo]);
+  }, [pozo, pozoId, getPhotosByPozoId]);
 
   // Observaciones
   const observacionesData = useMemo(() => {
@@ -686,15 +703,27 @@ export default function EditorPage() {
       onGeneratePDF={async () => {
         if (!syncedState || !pozo) return;
 
-        // Validación de fotos antes de generar
-        const fotosCount = pozo.fotos?.fotos?.length || 0;
-        if (fotosCount === 0) {
+        logger.info('Solicitud de generación de PDF (Editor)', { pozoId: pozoId }, 'EditorPage');
+
+        // Obtener fotos asociadas globalmente + incrustadas
+        const fotosGlobales = getPhotosByPozoId(pozoId);
+        const fotosIncrustadas = pozo.fotos?.fotos || [];
+
+        // Unificar eliminando duplicados por ID
+        const fotosIds = new Set(fotosIncrustadas.map(f => f.id));
+        const todasLasFotos = [...fotosIncrustadas];
+        fotosGlobales.forEach(f => {
+          if (!fotosIds.has(f.id)) todasLasFotos.push(f);
+        });
+
+        // Validación de fotos - Mostrar advertencia pero permitir generar (Requirement 7.2)
+        if (todasLasFotos.length === 0) {
+          logger.warn('Generando PDF sin fotos', { pozoId: pozoId }, 'EditorPage');
           addToast({
-            type: 'error',
-            message: 'No se puede generar PDF: la ficha no tiene fotos asociadas.',
-            duration: 5000,
+            type: 'warning',
+            message: 'Se generará el PDF sin registro fotográfico.',
+            duration: 3000,
           });
-          return;
         }
 
         addToast({
@@ -702,27 +731,32 @@ export default function EditorPage() {
           message: 'Generando PDF...',
         });
 
-        // Intentar generar vía API para mayor consistencia con el servidor
-        try {
-          const response = await fetch('/api/pdf', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              ficha: syncedState,
-              pozo,
-            }),
-          });
+        // Crear objeto pozo enriquecido con todas las fotos para la API
+        const enrichedPozo = {
+          ...pozo,
+          fotos: {
+            ...pozo.fotos,
+            fotos: todasLasFotos
+          }
+        };
 
-          if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error.error || 'Error al generar PDF');
+        logger.debug('Pozo enriquecido con fotos para PDF', { totalFotos: todasLasFotos.length }, 'EditorPage');
+
+        // Generar PDF usando pdfMakeGenerator directamente en el cliente
+        // Esto es mucho más robusto para manejar las imágenes locales (blobs)
+        try {
+          logger.info('Importando y ejecutando pdfMakeGenerator', null, 'EditorPage');
+          const { pdfMakeGenerator } = await import('@/lib/pdf/pdfMakeGenerator');
+          const result = await pdfMakeGenerator.generatePDF(syncedState, enrichedPozo);
+
+          if (!result.success || !result.blob) {
+            throw new Error(result.error || 'Error al generar el PDF con pdfMake');
           }
 
-          const blob = await response.blob();
           const filename = `ficha_${pozo.idPozo?.value || pozo.identificacion.idPozo.value}_${Date.now()}.pdf`;
 
           // Usar helper de descarga
-          const url = URL.createObjectURL(blob);
+          const url = URL.createObjectURL(result.blob);
           const link = document.createElement('a');
           link.href = url;
           link.download = filename;
@@ -736,6 +770,7 @@ export default function EditorPage() {
             message: 'PDF generado correctamente',
           });
         } catch (error) {
+          logger.error('Error en el manejador de generación de PDF', error, 'EditorPage');
           console.error('Error:', error);
           addToast({
             type: 'error',

@@ -68,6 +68,8 @@ const COLUMN_MAPPING: Record<string, string> = {
   'nro': 'idPozo',
   'n°': 'idPozo',
   'no.': 'idPozo',
+  'idpozo': 'idPozo',
+  'identificador': 'idPozo',
 
   // Coordenada X (Longitud)
   'coordenada_x': 'coordenadaX',
@@ -113,6 +115,8 @@ const COLUMN_MAPPING: Record<string, string> = {
   'status': 'estado',
   'estado_general': 'estado',
   'estado general': 'estado',
+  'estado_levantamiento': 'estado',
+  'estado levantamiento': 'estado',
 
   // ============================================================================
   // UBICACIÓN (4 campos importantes)
@@ -750,6 +754,37 @@ function detectColumns(data: Record<string, unknown>[], result: ExcelParseResult
 }
 
 /**
+ * Busca la fila de cabeceras si la primera no parece serlo
+ * Algunas hojas tienen títulos o filas vacías al inicio.
+ */
+function findHeaderRow(data: any[]): number {
+  if (!data || data.length === 0) return 0;
+
+  for (let i = 0; i < Math.min(data.length, 10); i++) {
+    const row = data[i];
+    if (!row || typeof row !== 'object') continue;
+
+    // Buscamos en los VALORES de la fila, ya que si la cabecera no se detectó,
+    // estará como una fila de datos.
+    const values = Object.values(row);
+    let matches = 0;
+
+    for (const val of values) {
+      const normalized = normalizeColumnName(safeStringValue(val));
+      if (COLUMN_MAPPING[normalized]) {
+        matches++;
+      }
+    }
+
+    // Si encontramos al menos 2 columnas conocidas, esta fila es la cabecera real
+    // Retornamos i + 1 porque pozosData[0] es la fila 1 de la hoja (siendo fila 0 la cabecera detectada)
+    if (matches >= 2) return i + 1;
+  }
+
+  return 0;
+}
+
+/**
  * Helper genérico para obtener valor mapped
  */
 function getMappedValue(
@@ -1275,8 +1310,15 @@ export async function parseExcelFileContent(workbook: any): Promise<ExcelParseRe
       return result;
     }
 
-    const pozosData = XLSX.utils.sheet_to_json(pozosWorksheet, { defval: '', raw: false });
-    // Usamos parseExcelData existente para pozos (renombrado conceptualmente, pero mantenemos nombre por compatibilidad)
+    let pozosData = XLSX.utils.sheet_to_json(pozosWorksheet, { defval: '', raw: false }) as any[];
+
+    // Robustez: Si la primera fila no parece tener las columnas correctas,
+    // buscamos en las primeras 10 filas cuál contiene las cabeceras.
+    const headerRowOffset = findHeaderRow(pozosData);
+    if (headerRowOffset > 0) {
+      pozosData = XLSX.utils.sheet_to_json(pozosWorksheet, { range: headerRowOffset, defval: '', raw: false });
+    }
+
     const partialResult = parseExcelData(pozosData);
 
     // Merge results

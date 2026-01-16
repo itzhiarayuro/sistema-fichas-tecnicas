@@ -27,7 +27,7 @@ const createField = (
     color,
     backgroundColor: bgColor,
     fontSize,
-    fontFamily: 'Inter',
+    fontFamily: 'Arial',
     textAlign: 'left',
     fontWeight: 'normal'
 });

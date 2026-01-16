@@ -17,7 +17,7 @@
 import { useMemo, useState } from 'react';
 import type { FichaState, FichaSection, FieldValue, FichaCustomization } from '@/types/ficha';
 import type { Pozo, FotoInfo } from '@/types/pozo';
-import { useDesignStore, useUIStore } from '@/stores';
+import { useGlobalStore, useDesignStore, useUIStore } from '@/stores';
 import { DesignRenderer } from '@/components/designer';
 import { blobStore } from '@/lib/storage/blobStore';
 
@@ -167,18 +167,31 @@ export function PreviewPanel({
     [fichaState, pozo]);
 
   // Obtener fotos (pueden venir del estado de la ficha o del pozo)
-  // Obtener fotos (pueden venir del estado de la ficha o del pozo)
+  const getPhotosByPozoId = useGlobalStore((state) => state.getPhotosByPozoId);
   const fotos = useMemo(() => {
-    // Por ahora usamos las fotos del pozo directamente
-    const fotosList = (pozo?.fotos?.fotos || []) as any[];
+    // Obtener fotos incrustadas + fotos globales asociadas por nomenclatura
+    const fotosIncrustadas = (pozo?.fotos?.fotos || []) as FotoInfo[];
+    const fotosGlobales = getPhotosByPozoId(pozo?.id || '');
+
+    // Unificar eliminando duplicados por ID
+    const fotosIds = new Set(fotosIncrustadas.map((f: FotoInfo) => f.id));
+    const todosResultados = [...fotosIncrustadas];
+
+    fotosGlobales.forEach((f: FotoInfo) => {
+      if (!fotosIds.has(f.id)) {
+        todosResultados.push(f);
+        fotosIds.add(f.id);
+      }
+    });
+
     return {
-      principal: fotosList.filter(f => ['general', 'tapa', 'principal'].includes(String(f?.tipo || f?.tipoFoto?.value || '').toLowerCase())),
-      entradas: fotosList.filter(f => String(f?.tipo || f?.tipoFoto?.value || '').toLowerCase() === 'entrada'),
-      salidas: fotosList.filter(f => String(f?.tipo || f?.tipoFoto?.value || '').toLowerCase() === 'salida'),
-      sumideros: fotosList.filter(f => String(f?.tipo || f?.tipoFoto?.value || '').toLowerCase() === 'sumidero'),
-      otras: fotosList.filter(f => !['general', 'tapa', 'principal', 'entrada', 'salida', 'sumidero'].includes(String(f?.tipo || f?.tipoFoto?.value || '').toLowerCase())),
+      principal: todosResultados.filter((f: FotoInfo) => f.categoria === 'PRINCIPAL' || ['general', 'tapa', 'principal'].includes(String(f.tipo || '').toLowerCase())),
+      entradas: todosResultados.filter((f: FotoInfo) => f.categoria === 'ENTRADA' || String(f.tipo || '').toLowerCase().includes('entrada')),
+      salidas: todosResultados.filter((f: FotoInfo) => f.categoria === 'SALIDA' || String(f.tipo || '').toLowerCase().includes('salida')),
+      sumideros: todosResultados.filter((f: FotoInfo) => f.categoria === 'SUMIDERO' || String(f.tipo || '').toLowerCase().includes('sumidero')),
+      otras: todosResultados.filter((f: FotoInfo) => f.categoria === 'OTRO' || (!f.categoria && !['general', 'tapa', 'principal', 'entrada', 'salida', 'sumidero'].some(k => String(f.tipo || '').toLowerCase().includes(k)))),
     };
-  }, [pozo?.fotos]);
+  }, [pozo, getPhotosByPozoId]);
 
   // Todas las fotos para el grid
   const allPhotos = useMemo(() => [

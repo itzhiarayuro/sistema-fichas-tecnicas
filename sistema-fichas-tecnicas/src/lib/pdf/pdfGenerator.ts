@@ -16,6 +16,7 @@ import { jsPDF } from 'jspdf';
 import type { FichaState, FichaCustomization, FichaSection } from '@/types/ficha';
 import type { Pozo, FotoInfo, TuberiaInfo, SumideroInfo } from '@/types/pozo';
 import { blobStore } from '@/lib/storage/blobStore';
+import { configurePDFFont, sanitizeTextForPDF, getSafeFont } from './pdfFontUtils';
 
 const PDF_CONFIG = {
   pageWidth: 210,
@@ -31,20 +32,8 @@ const PDF_CONFIG = {
   fieldIndicatorWidth: 3,
 };
 
-export interface PDFGeneratorOptions {
-  watermark?: string;
-  pageNumbers?: boolean;
-  includeDate?: boolean;
-  imageQuality?: number;
-}
+import { PDFGeneratorOptions, PDFGenerationResult } from '@/types/pdf';
 
-export interface PDFGenerationResult {
-  success: boolean;
-  blob?: Blob;
-  filename?: string;
-  error?: string;
-  pageCount?: number;
-}
 
 interface RenderContext {
   doc: jsPDF;
@@ -89,6 +78,10 @@ export class PDFGenerator {
   ): Promise<PDFGenerationResult> {
     try {
       const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+      // Configurar fuente para soporte UTF-8
+      configurePDFFont(doc);
+
       const customization = this.mergeCustomization(ficha.customizations);
       const ctx: RenderContext = {
         doc,
@@ -140,10 +133,10 @@ export class PDFGenerator {
     doc.rect(0, 0, PDF_CONFIG.pageWidth, PDF_CONFIG.headerHeight, 'F');
     doc.setTextColor(colors.headerText);
     doc.setFontSize(fonts.titleSize);
-    doc.setFont(fonts.fontFamily, 'bold');
-    doc.text('FICHA TECNICA DE POZO DE INSPECCION', PDF_CONFIG.pageWidth / 2, 10, { align: 'center' });
+    doc.setFont(getSafeFont(fonts.fontFamily), 'bold');
+    doc.text(sanitizeTextForPDF('FICHA TÉCNICA DE POZO DE INSPECCIÓN'), PDF_CONFIG.pageWidth / 2, 10, { align: 'center' });
     doc.setFontSize(fonts.titleSize - 2);
-    doc.text(`Pozo: ${pozo.idPozo?.value || pozo.identificacion.idPozo.value}`, PDF_CONFIG.pageWidth / 2, 18, { align: 'center' });
+    doc.text(sanitizeTextForPDF(`Pozo: ${pozo.idPozo?.value || pozo.identificacion.idPozo.value}`), PDF_CONFIG.pageWidth / 2, 18, { align: 'center' });
     ctx.currentY = PDF_CONFIG.headerHeight + 5;
   }
 
@@ -167,8 +160,8 @@ export class PDFGenerator {
     doc.rect(PDF_CONFIG.margin, ctx.currentY, PDF_CONFIG.pageWidth - PDF_CONFIG.margin * 2, PDF_CONFIG.sectionTitleHeight, 'F');
     doc.setTextColor(colors.sectionText);
     doc.setFontSize(fonts.labelSize + 1);
-    doc.setFont(fonts.fontFamily, 'bold');
-    doc.text(title, PDF_CONFIG.margin + spacing.padding, ctx.currentY + 5.5);
+    doc.setFont(getSafeFont(fonts.fontFamily), 'bold');
+    doc.text(sanitizeTextForPDF(title), PDF_CONFIG.margin + spacing.padding, ctx.currentY + 5.5);
     ctx.currentY += PDF_CONFIG.sectionTitleHeight + 2;
   }
 
@@ -186,17 +179,17 @@ export class PDFGenerator {
 
     doc.setTextColor(colors.labelText);
     doc.setFontSize(fonts.labelSize);
-    doc.setFont(fonts.fontFamily, 'normal');
+    doc.setFont(getSafeFont(fonts.fontFamily), 'normal');
 
     const indicatorText = indicator ? `${indicator} ` : '';
-    doc.text(`${indicatorText}${label}:`, x, ctx.currentY);
+    doc.text(sanitizeTextForPDF(`${indicatorText}${label}:`), x, ctx.currentY);
 
     doc.setTextColor(colors.valueText);
     doc.setFontSize(fonts.valueSize);
     const labelWidth = doc.getTextWidth(`${indicatorText}${label}: `);
     const valueX = x + labelWidth + 1;
     const maxWidth = width - labelWidth - 2;
-    let displayValue = value || '-';
+    let displayValue = sanitizeTextForPDF(value || '-');
 
     while (doc.getTextWidth(displayValue) > maxWidth && displayValue.length > 3) {
       displayValue = displayValue.slice(0, -4) + '...';
@@ -259,8 +252,8 @@ export class PDFGenerator {
     // Sección 1: Tapa y Cilindro (Importantes)
     doc.setTextColor(customization.colors.sectionText);
     doc.setFontSize(customization.fonts.labelSize);
-    doc.setFont(customization.fonts.fontFamily, 'bold');
-    doc.text('Tapa y Cilindro:', leftX, ctx.currentY);
+    doc.setFont(getSafeFont(customization.fonts.fontFamily), 'bold');
+    doc.text(sanitizeTextForPDF('Tapa y Cilindro:'), leftX, ctx.currentY);
     ctx.currentY += PDF_CONFIG.lineHeight;
 
     this.renderField(ctx, 'Existe Tapa', this.getFieldValue(section, 'existeTapa', pozo.existeTapa?.value || comp.existeTapa.value), leftX, colWidth, true);
@@ -281,8 +274,8 @@ export class PDFGenerator {
     // Sección 2: Cono (Opcional)
     doc.setTextColor(customization.colors.sectionText);
     doc.setFontSize(customization.fonts.labelSize);
-    doc.setFont(customization.fonts.fontFamily, 'bold');
-    doc.text('Cono:', leftX, ctx.currentY);
+    doc.setFont(getSafeFont(customization.fonts.fontFamily), 'bold');
+    doc.text(sanitizeTextForPDF('Cono:'), leftX, ctx.currentY);
     ctx.currentY += PDF_CONFIG.lineHeight;
 
     this.renderField(ctx, 'Existe Cono', this.getFieldValue(section, 'existeCono', pozo.existeCono?.value || comp.existeCono.value), leftX, colWidth);
@@ -296,8 +289,8 @@ export class PDFGenerator {
     // Sección 3: Cañuela (Opcional)
     doc.setTextColor(customization.colors.sectionText);
     doc.setFontSize(customization.fonts.labelSize);
-    doc.setFont(customization.fonts.fontFamily, 'bold');
-    doc.text('Cañuela:', leftX, ctx.currentY);
+    doc.setFont(getSafeFont(customization.fonts.fontFamily), 'bold');
+    doc.text(sanitizeTextForPDF('Cañuela:'), leftX, ctx.currentY);
     ctx.currentY += PDF_CONFIG.lineHeight;
 
     this.renderField(ctx, 'Existe Cañuela', this.getFieldValue(section, 'existeCanuela', pozo.existeCanuela?.value || comp.existeCanuela.value), leftX, colWidth);
@@ -310,8 +303,8 @@ export class PDFGenerator {
     // Sección 4: Peldaños (Opcional)
     doc.setTextColor(customization.colors.sectionText);
     doc.setFontSize(customization.fonts.labelSize);
-    doc.setFont(customization.fonts.fontFamily, 'bold');
-    doc.text('Peldaños:', leftX, ctx.currentY);
+    doc.setFont(getSafeFont(customization.fonts.fontFamily), 'bold');
+    doc.text(sanitizeTextForPDF('Peldaños:'), leftX, ctx.currentY);
     ctx.currentY += PDF_CONFIG.lineHeight;
 
     this.renderField(ctx, 'Existe Peldaños', this.getFieldValue(section, 'existePeldanos', pozo.existePeldanos?.value || comp.existePeldanos.value), leftX, colWidth);
@@ -325,8 +318,8 @@ export class PDFGenerator {
     // Sección 5: Información General (Opcional)
     doc.setTextColor(customization.colors.sectionText);
     doc.setFontSize(customization.fonts.labelSize);
-    doc.setFont(customization.fonts.fontFamily, 'bold');
-    doc.text('Información General:', leftX, ctx.currentY);
+    doc.setFont(getSafeFont(customization.fonts.fontFamily), 'bold');
+    doc.text(sanitizeTextForPDF('Información General:'), leftX, ctx.currentY);
     ctx.currentY += PDF_CONFIG.lineHeight;
 
     this.renderField(ctx, 'Sistema', this.getFieldValue(section, 'sistema', pozo.sistema?.value || comp.sistema.value), leftX, colWidth);
@@ -347,7 +340,7 @@ export class PDFGenerator {
     if (!pozo.tuberias.tuberias || pozo.tuberias.tuberias.length === 0) {
       doc.setTextColor(colors.labelText);
       doc.setFontSize(fonts.valueSize);
-      doc.text('Sin tuberías registradas', PDF_CONFIG.margin, ctx.currentY);
+      doc.text(sanitizeTextForPDF('Sin tuberías registradas'), PDF_CONFIG.margin, ctx.currentY);
       ctx.currentY += PDF_CONFIG.lineHeight;
       return;
     }
@@ -359,8 +352,8 @@ export class PDFGenerator {
     if (entradas.length > 0) {
       doc.setTextColor(colors.sectionText);
       doc.setFontSize(fonts.labelSize);
-      doc.setFont(fonts.fontFamily, 'bold');
-      doc.text('Entradas:', PDF_CONFIG.margin, ctx.currentY);
+      doc.setFont(getSafeFont(fonts.fontFamily), 'bold');
+      doc.text(sanitizeTextForPDF('Entradas:'), PDF_CONFIG.margin, ctx.currentY);
       ctx.currentY += PDF_CONFIG.lineHeight;
       this.renderTuberiaTable(ctx, entradas);
     }
@@ -368,8 +361,8 @@ export class PDFGenerator {
     if (salidas.length > 0) {
       doc.setTextColor(colors.sectionText);
       doc.setFontSize(fonts.labelSize);
-      doc.setFont(fonts.fontFamily, 'bold');
-      doc.text('Salidas:', PDF_CONFIG.margin, ctx.currentY);
+      doc.setFont(getSafeFont(fonts.fontFamily), 'bold');
+      doc.text(sanitizeTextForPDF('Salidas:'), PDF_CONFIG.margin, ctx.currentY);
       ctx.currentY += PDF_CONFIG.lineHeight;
       this.renderTuberiaTable(ctx, salidas);
     }
@@ -394,16 +387,16 @@ export class PDFGenerator {
     doc.rect(PDF_CONFIG.margin, ctx.currentY - 4, tableWidth, 6, 'F');
     doc.setTextColor(colors.sectionText);
     doc.setFontSize(fonts.labelSize);
-    doc.setFont(fonts.fontFamily, 'bold');
+    doc.setFont(getSafeFont(fonts.fontFamily), 'bold');
 
     let x = PDF_CONFIG.margin;
     headers.forEach((header, i) => {
-      doc.text(header, x + 2, ctx.currentY);
+      doc.text(sanitizeTextForPDF(header), x + 2, ctx.currentY);
       x += colWidths[i];
     });
     ctx.currentY += PDF_CONFIG.lineHeight;
 
-    doc.setFont(fonts.fontFamily, 'normal');
+    doc.setFont(getSafeFont(fonts.fontFamily), 'normal');
     doc.setTextColor(colors.valueText);
     doc.setFontSize(fonts.valueSize);
 
@@ -417,27 +410,27 @@ export class PDFGenerator {
         doc.rect(PDF_CONFIG.margin, ctx.currentY - 4, tableWidth, 6, 'F');
         doc.setTextColor(colors.sectionText);
         doc.setFontSize(fonts.labelSize);
-        doc.setFont(fonts.fontFamily, 'bold');
+        doc.setFont(getSafeFont(fonts.fontFamily), 'bold');
 
         let hX = PDF_CONFIG.margin;
         headers.forEach((header, i) => {
-          doc.text(header, hX + 2, ctx.currentY);
+          doc.text(sanitizeTextForPDF(header), hX + 2, ctx.currentY);
           hX += colWidths[i];
         });
         ctx.currentY += PDF_CONFIG.lineHeight;
 
-        doc.setFont(fonts.fontFamily, 'normal');
+        doc.setFont(getSafeFont(fonts.fontFamily), 'normal');
         doc.setTextColor(colors.valueText);
         doc.setFontSize(fonts.valueSize);
       }
 
       x = PDF_CONFIG.margin;
-      doc.text(tub.diametro?.value || '-', x + 2, ctx.currentY); x += colWidths[0];
-      doc.text(tub.material?.value || '-', x + 2, ctx.currentY); x += colWidths[1];
-      doc.text(tub.cota?.value || '-', x + 2, ctx.currentY); x += colWidths[2];
-      doc.text(tub.estado?.value || '-', x + 2, ctx.currentY); x += colWidths[3];
-      doc.text(tub.emboquillado?.value || '-', x + 2, ctx.currentY); x += colWidths[4];
-      doc.text(tub.longitud?.value || '-', x + 2, ctx.currentY);
+      doc.text(sanitizeTextForPDF(tub.diametro?.value || '-'), x + 2, ctx.currentY); x += colWidths[0];
+      doc.text(sanitizeTextForPDF(tub.material?.value || '-'), x + 2, ctx.currentY); x += colWidths[1];
+      doc.text(sanitizeTextForPDF(tub.cota?.value || '-'), x + 2, ctx.currentY); x += colWidths[2];
+      doc.text(sanitizeTextForPDF(tub.estado?.value || '-'), x + 2, ctx.currentY); x += colWidths[3];
+      doc.text(sanitizeTextForPDF(tub.emboquillado?.value || '-'), x + 2, ctx.currentY); x += colWidths[4];
+      doc.text(sanitizeTextForPDF(tub.longitud?.value || '-'), x + 2, ctx.currentY);
       ctx.currentY += PDF_CONFIG.lineHeight;
     }
   }
@@ -450,7 +443,7 @@ export class PDFGenerator {
     if (!pozo.sumideros.sumideros || pozo.sumideros.sumideros.length === 0) {
       doc.setTextColor(colors.labelText);
       doc.setFontSize(fonts.valueSize);
-      doc.text('Sin sumideros registrados', PDF_CONFIG.margin, ctx.currentY);
+      doc.text(sanitizeTextForPDF('Sin sumideros registrados'), PDF_CONFIG.margin, ctx.currentY);
       ctx.currentY += PDF_CONFIG.lineHeight;
       return;
     }
@@ -478,16 +471,16 @@ export class PDFGenerator {
     doc.rect(PDF_CONFIG.margin, ctx.currentY - 4, tableWidth, 6, 'F');
     doc.setTextColor(colors.sectionText);
     doc.setFontSize(fonts.labelSize);
-    doc.setFont(fonts.fontFamily, 'bold');
+    doc.setFont(getSafeFont(fonts.fontFamily), 'bold');
 
     let x = PDF_CONFIG.margin;
     headers.forEach((header, i) => {
-      doc.text(header, x + 2, ctx.currentY);
+      doc.text(sanitizeTextForPDF(header), x + 2, ctx.currentY);
       x += colWidths[i];
     });
     ctx.currentY += PDF_CONFIG.lineHeight;
 
-    doc.setFont(fonts.fontFamily, 'normal');
+    doc.setFont(getSafeFont(fonts.fontFamily), 'normal');
     doc.setTextColor(colors.valueText);
     doc.setFontSize(fonts.valueSize);
 
@@ -501,28 +494,28 @@ export class PDFGenerator {
         doc.rect(PDF_CONFIG.margin, ctx.currentY - 4, tableWidth, 6, 'F');
         doc.setTextColor(colors.sectionText);
         doc.setFontSize(fonts.labelSize);
-        doc.setFont(fonts.fontFamily, 'bold');
+        doc.setFont(getSafeFont(fonts.fontFamily), 'bold');
 
         let hX = PDF_CONFIG.margin;
         headers.forEach((header, i) => {
-          doc.text(header, hX + 2, ctx.currentY);
+          doc.text(sanitizeTextForPDF(header), hX + 2, ctx.currentY);
           hX += colWidths[i];
         });
         ctx.currentY += PDF_CONFIG.lineHeight;
 
-        doc.setFont(fonts.fontFamily, 'normal');
+        doc.setFont(getSafeFont(fonts.fontFamily), 'normal');
         doc.setTextColor(colors.valueText);
         doc.setFontSize(fonts.valueSize);
       }
 
       x = PDF_CONFIG.margin;
-      doc.text(sum.idSumidero?.value || '-', x + 2, ctx.currentY); x += colWidths[0];
-      doc.text(sum.numeroEsquema?.value || '-', x + 2, ctx.currentY); x += colWidths[1];
-      doc.text(sum.tipoSumidero?.value || '-', x + 2, ctx.currentY); x += colWidths[2];
-      doc.text(sum.materialTuberia?.value || '-', x + 2, ctx.currentY); x += colWidths[3];
-      doc.text(sum.diametro?.value || '-', x + 2, ctx.currentY); x += colWidths[4];
-      doc.text(sum.alturaSalida?.value || '-', x + 2, ctx.currentY); x += colWidths[5];
-      doc.text(sum.alturaLlegada?.value || '-', x + 2, ctx.currentY);
+      doc.text(sanitizeTextForPDF(sum.idSumidero?.value || '-'), x + 2, ctx.currentY); x += colWidths[0];
+      doc.text(sanitizeTextForPDF(sum.numeroEsquema?.value || '-'), x + 2, ctx.currentY); x += colWidths[1];
+      doc.text(sanitizeTextForPDF(sum.tipoSumidero?.value || '-'), x + 2, ctx.currentY); x += colWidths[2];
+      doc.text(sanitizeTextForPDF(sum.materialTuberia?.value || '-'), x + 2, ctx.currentY); x += colWidths[3];
+      doc.text(sanitizeTextForPDF(sum.diametro?.value || '-'), x + 2, ctx.currentY); x += colWidths[4];
+      doc.text(sanitizeTextForPDF(sum.alturaSalida?.value || '-'), x + 2, ctx.currentY); x += colWidths[5];
+      doc.text(sanitizeTextForPDF(sum.alturaLlegada?.value || '-'), x + 2, ctx.currentY);
       ctx.currentY += PDF_CONFIG.lineHeight;
     }
   }
@@ -536,7 +529,7 @@ export class PDFGenerator {
       const { doc, customization } = ctx;
       doc.setTextColor(customization.colors.labelText);
       doc.setFontSize(customization.fonts.valueSize);
-      doc.text('Sin fotografías registradas', PDF_CONFIG.margin, ctx.currentY);
+      doc.text(sanitizeTextForPDF('Sin fotografías registradas'), PDF_CONFIG.margin, ctx.currentY);
       ctx.currentY += PDF_CONFIG.lineHeight;
       return;
     }
@@ -577,27 +570,27 @@ export class PDFGenerator {
         doc.setFontSize(customization.fonts.labelSize - 1);
 
         const description = foto.descripcion || (foto as any).tipoFoto?.value || foto.filename || 'Foto';
-        doc.text(description, x, y + height + 2, { maxWidth: maxWidth });
+        doc.text(sanitizeTextForPDF(description), x, y + height + 2, { maxWidth: maxWidth });
       } else {
         doc.setDrawColor(customization.colors.borderColor);
         doc.setFillColor('#F9F9F9');
         doc.rect(x, y, maxWidth, maxHeight, 'FD');
         doc.setTextColor(customization.colors.labelText);
         doc.setFontSize(customization.fonts.labelSize);
-        doc.text('Imagen no disponible', x + maxWidth / 2, y + maxHeight / 2, { align: 'center' });
+        doc.text(sanitizeTextForPDF('Imagen no disponible'), x + maxWidth / 2, y + maxHeight / 2, { align: 'center' });
 
         const description = foto.descripcion || (foto as any).tipoFoto?.value || foto.filename || 'Foto';
-        doc.text(description, x, y + maxHeight + 2, { maxWidth: maxWidth });
+        doc.text(sanitizeTextForPDF(description), x, y + maxHeight + 2, { maxWidth: maxWidth });
       }
     } catch {
       doc.setDrawColor(customization.colors.borderColor);
       doc.rect(x, y, maxWidth, maxHeight);
       doc.setTextColor(customization.colors.labelText);
       doc.setFontSize(customization.fonts.labelSize);
-      doc.text('Error al cargar', x + 2, y + maxHeight / 2);
+      doc.text(sanitizeTextForPDF('Error al cargar'), x + 2, y + maxHeight / 2);
 
       const description = foto.descripcion || (foto as any).tipoFoto?.value || foto.filename || 'Foto';
-      doc.text(description, x, y + maxHeight + 2, { maxWidth: maxWidth });
+      doc.text(sanitizeTextForPDF(description), x, y + maxHeight + 2, { maxWidth: maxWidth });
     }
   }
 
@@ -623,10 +616,10 @@ export class PDFGenerator {
     doc.setTextColor(customization.colors.valueText);
     doc.setFontSize(customization.fonts.valueSize);
     const maxWidth = PDF_CONFIG.pageWidth - PDF_CONFIG.margin * 2;
-    const lines = doc.splitTextToSize(observaciones || 'Sin observaciones', maxWidth);
+    const lines = doc.splitTextToSize(sanitizeTextForPDF(observaciones || 'Sin observaciones'), maxWidth);
     for (const line of lines) {
       this.checkPageBreak(ctx, PDF_CONFIG.lineHeight);
-      doc.text(line, PDF_CONFIG.margin, ctx.currentY);
+      doc.text(sanitizeTextForPDF(line), PDF_CONFIG.margin, ctx.currentY);
       ctx.currentY += PDF_CONFIG.lineHeight;
     }
   }
@@ -649,11 +642,11 @@ export class PDFGenerator {
       doc.setTextColor('#999999');
       const footerY = PDF_CONFIG.pageHeight - 8;
       if (options.pageNumbers) {
-        doc.text(`Pagina ${i} de ${totalPages}`, PDF_CONFIG.pageWidth / 2, footerY, { align: 'center' });
+        doc.text(sanitizeTextForPDF(`P\u00e1gina ${i} de ${totalPages}`), PDF_CONFIG.pageWidth / 2, footerY, { align: 'center' });
       }
       if (options.includeDate) {
         const date = new Date().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
-        doc.text(date, PDF_CONFIG.pageWidth - PDF_CONFIG.margin, footerY, { align: 'right' });
+        doc.text(sanitizeTextForPDF(date), PDF_CONFIG.pageWidth - PDF_CONFIG.margin, footerY, { align: 'right' });
       }
     }
   }

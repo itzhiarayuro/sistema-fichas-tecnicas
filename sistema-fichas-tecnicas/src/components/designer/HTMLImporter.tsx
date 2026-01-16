@@ -37,7 +37,7 @@ export function HTMLImporter({ versionId }: { versionId: string }) {
                     zIndex: 1,
                     showLabel: true,
                     fontSize: 10,
-                    fontFamily: 'Inter',
+                    fontFamily: 'Arial',
                     color: '#000000',
                     textAlign: 'left'
                 });
