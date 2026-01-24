@@ -12,6 +12,7 @@
 
 import { useState, useCallback } from 'react';
 import { useGlobalStore, type Template } from '@/stores/globalStore';
+import { useDesignStore } from '@/stores/designStore';
 import type { FichaCustomization } from '@/types/ficha';
 
 interface TemplateSelectorProps {
@@ -137,12 +138,42 @@ export function TemplateSelector({
 }: TemplateSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const storeTemplates = useGlobalStore((state) => state.templates);
+  const designVersions = useDesignStore((state) => state.versions || []);
 
   // Combinar plantillas del store con las built-in
   const allTemplates = [...BUILT_IN_TEMPLATES];
+
+  // Agregar plantillas del store global
   storeTemplates.forEach((t) => {
     if (!allTemplates.find((bt) => bt.id === t.id)) {
       allTemplates.push(t);
+    }
+  });
+
+  // Convertir versiones del Diseñador Visual a Plantillas
+  designVersions.forEach((v) => {
+    if (!allTemplates.find(t => t.id === v.id)) {
+      allTemplates.push({
+        id: v.id,
+        name: v.name,
+        description: v.description || 'Diseño personalizado del diseñador visual',
+        isDefault: v.isDefault,
+        customizations: {
+          colors: {
+            headerBg: '#1E40AF',
+            headerText: '#FFFFFF',
+            sectionBg: '#FFFFFF',
+            sectionText: '#374151',
+          },
+          fonts: {
+            titleSize: 16,
+            labelSize: 12,
+            valueSize: 12,
+            fontFamily: 'Arial',
+          },
+        },
+        designId: v.id,
+      } as any);
     }
   });
 
@@ -269,8 +300,8 @@ function TemplateCard({ template, isSelected, onSelect, readOnly }: TemplateCard
       onClick={onSelect}
       disabled={readOnly}
       className={`relative p-3 rounded-lg border-2 transition-all text-left ${isSelected
-          ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
-          : 'border-gray-200 hover:border-gray-300'
+        ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+        : 'border-gray-200 hover:border-gray-300'
         } ${readOnly ? 'opacity-50 cursor-not-allowed' : ''}`}
     >
       {/* Selection indicator */}
@@ -356,7 +387,7 @@ export function templateToCustomization(template: Template): Partial<FichaCustom
       headerText: template.customizations.colors.headerText,
       sectionBg: template.customizations.colors.sectionBg,
       sectionText: template.customizations.colors.sectionText,
-      labelText: template.customizations.colors.sectionText, // Use section text as default
+      labelText: template.customizations.colors.sectionText,
       valueText: template.customizations.colors.sectionText,
       borderColor: '#E5E7EB',
     },
@@ -367,6 +398,7 @@ export function templateToCustomization(template: Template): Partial<FichaCustom
       fontFamily: template.customizations.fonts.fontFamily,
     },
     template: template.id,
+    designId: (template as any).designId || undefined,
   };
 }
 

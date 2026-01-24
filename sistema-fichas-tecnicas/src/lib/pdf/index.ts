@@ -3,8 +3,8 @@
  * Requirements: 7.1-7.6
  */
 
-export * from './pdfGenerator';
+// export * from './pdfGenerator'; // Deleted manually based on expert diagnosis
 export * from './pdfMakeGenerator';
 export * from './batchGenerator';
-export * from './pdfFontUtils';
 export * from './designBasedPdfGenerator';
+export * from '@/types/pdf';

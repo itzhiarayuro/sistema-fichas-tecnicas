@@ -2,7 +2,41 @@ import { jsPDF } from 'jspdf';
 import { FichaDesignVersion, FieldPlacement, ShapeElement } from '@/types/fichaDesign';
 import { Pozo } from '@/types/pozo';
 import { FIELD_PATHS } from '@/constants/fieldMapping';
-import { configurePDFFont, sanitizeTextForPDF, getSafeFont } from './pdfFontUtils';
+// Eliminadas dependencias externas de pdfFontUtils para evitar errores de compilación
+// Se incluyeron versiones simplificadas locales para mantener robustez
+
+const TRANSLIT_MAP: Record<string, string> = {
+    '\u00E1': 'a', '\u00E9': 'e', '\u00ED': 'i', '\u00F3': 'o', '\u00FA': 'u',
+    '\u00C1': 'A', '\u00C9': 'E', '\u00CD': 'I', '\u00D3': 'O', '\u00DA': 'U',
+    '\u00F1': 'n', '\u00D1': 'N', '\u00FC': 'u', '\u00DC': 'U'
+};
+
+function sanitizeTextForPDF(text: string): string {
+    if (!text) return '';
+    try {
+        let result = String(text).normalize('NFC');
+        return result.replace(/[\u00E1\u00E9\u00ED\u00F3\u00FA\u00C1\u00C9\u00CD\u00D3\u00DA\u00F1\u00D1\u00FC\u00DC]/g, (char) => {
+            return TRANSLIT_MAP[char] || char;
+        });
+    } catch (e) {
+        return String(text);
+    }
+}
+
+function configurePDFFont(doc: jsPDF): void {
+    try {
+        doc.setLanguage('es-ES');
+        if (typeof (doc as any).setCharSpace === 'function') {
+            (doc as any).setCharSpace(0);
+        }
+    } catch (e) {
+        console.warn('Error configurando fuente jsPDF:', e);
+    }
+}
+
+function getSafeFont(fontFamily?: string): string {
+    return 'helvetica';
+}
 
 // Helper para obtener valor de ruta (ej: "identificacion.idPozo.value")
 const getValueByPath = (obj: any, path: string) => {

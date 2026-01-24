@@ -56,6 +56,8 @@ interface FotosSectionProps {
   isDragging?: boolean;
 }
 
+const EMPTY_MAP = new Map<string, ImageSize>();
+
 export function FotosSection({
   id,
   principal,
@@ -63,7 +65,7 @@ export function FotosSection({
   salidas,
   sumideros,
   otras,
-  imageSizes = new Map(),
+  imageSizes = EMPTY_MAP,
   locked = false,
   visible = true,
   onAddFoto,

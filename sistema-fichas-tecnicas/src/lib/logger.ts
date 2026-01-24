@@ -9,6 +9,7 @@ export interface LogEntry {
   context?: string;
 }
 
+
 class Logger {
   private logs: LogEntry[] = [];
   private maxLogs = 1000;
@@ -22,6 +23,16 @@ class Logger {
         if (saved) {
           this.logs = JSON.parse(saved);
         }
+
+        // Intercept global errors
+        window.addEventListener('error', (event) => {
+          this.error(`Global Error: ${event.message}`, event.error, 'Browser');
+        });
+
+        window.addEventListener('unhandledrejection', (event) => {
+          this.error(`Unhandled Promise Rejection: ${event.reason?.message || event.reason}`, event.reason, 'Browser');
+        });
+
       } catch (e) {
         console.warn('Failed to load logs from localStorage', e);
       }
@@ -45,7 +56,7 @@ class Logger {
     // Console output with colors
     const contextPrefix = context ? `[%c${context}%c] ` : '';
     const contextStyles = context ? ['color: #3b82f6; font-weight: bold;', ''] : [];
-    
+
     const levelStyles = {
       debug: 'color: #6b7280;',
       info: 'color: #3b82f6;',
@@ -66,7 +77,7 @@ class Logger {
     if (typeof window !== 'undefined') {
       try {
         // We only persist a subset of logs to localStorage to avoid filling it up
-        const sessionLogs = this.logs.slice(-200); 
+        const sessionLogs = this.logs.slice(-200);
         localStorage.setItem(this.storageKey, JSON.stringify(sessionLogs));
       } catch (e) {
         // If localStorage is full, clear old logs
@@ -106,7 +117,7 @@ class Logger {
   error(message: string, data?: any, context?: string) { this.addLog('error', message, data, context); }
 
   getLogs() { return this.logs; }
-  
+
   clearLogs() {
     this.logs = [];
     if (typeof window !== 'undefined') {

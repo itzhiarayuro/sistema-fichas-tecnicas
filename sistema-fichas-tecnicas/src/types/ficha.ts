@@ -77,6 +77,7 @@ export interface FichaCustomization {
   fonts: FontScheme;
   spacing: SpacingScheme;
   template: string;
+  designId?: string;
   isGlobal: boolean;
 }
 

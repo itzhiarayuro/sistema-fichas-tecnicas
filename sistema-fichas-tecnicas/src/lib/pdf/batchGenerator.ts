@@ -5,7 +5,7 @@
  * Permite generar múltiples PDFs con progreso, cancelación y empaquetado ZIP.
  */
 
-import { PDFGenerator } from './pdfGenerator';
+import { pdfMakeGenerator } from './pdfMakeGenerator';
 import { PDFGeneratorOptions } from '@/types/pdf';
 import type { FichaState } from '@/types/ficha';
 import type { Pozo } from '@/types/pozo';
@@ -45,11 +45,10 @@ export type ProgressCallback = (progress: BatchProgress) => void;
  * Clase para generación de PDFs en lote
  */
 export class BatchGenerator {
-  private pdfGenerator: PDFGenerator;
   private cancelled: boolean = false;
 
   constructor() {
-    this.pdfGenerator = new PDFGenerator();
+    // pdfMakeGenerator is a singleton, no need to instantiate
   }
 
   /**
@@ -88,7 +87,7 @@ export class BatchGenerator {
       onProgress?.(progress);
 
       try {
-        const result = await this.pdfGenerator.generatePDF(ficha, pozo, options);
+        const result = await pdfMakeGenerator.generatePDF(ficha, pozo, options);
 
         if (result.success && result.blob && result.filename) {
           // Agregar al ZIP

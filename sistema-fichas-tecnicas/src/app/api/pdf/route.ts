@@ -49,6 +49,16 @@ export async function POST(request: NextRequest) {
 
     // Generar PDF
     const generator = new PDFMakeGenerator();
+
+    // Check for blob URLs in photos (server-side warning)
+    const hasBlobUrls = pozo.fotos?.fotos?.some((f: any) =>
+      f.dataUrl?.startsWith('blob:') || (f.blobId && !f.dataUrl?.startsWith('data:'))
+    );
+
+    if (hasBlobUrls) {
+      console.warn('ADVERTENCIA: Se detectaron URLs de tipo blob: en la petición al servidor. Estas imágenes NO se renderizarán en el PDF generado por servidor (limitación técnica conocida).');
+    }
+
     const result = await generator.generatePDF(ficha, pozo, options);
 
     if (!result.success || !result.blob) {

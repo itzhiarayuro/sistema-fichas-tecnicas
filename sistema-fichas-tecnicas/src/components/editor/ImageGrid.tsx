@@ -108,9 +108,11 @@ function SortableImage({
   );
 }
 
+const EMPTY_MAP = new Map<string, ImageSize>();
+
 export function ImageGrid({
   images,
-  imageSizes = new Map(),
+  imageSizes = EMPTY_MAP,
   editable = true,
   onReorder,
   onRemove,

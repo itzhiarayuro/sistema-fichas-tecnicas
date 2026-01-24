@@ -121,86 +121,92 @@ export default function PozosPage() {
 
       logger.debug('Pozo enriquecido con fotos', { totalFotos: todasLasFotos.length }, 'PozosPage');
 
-      // Crear una ficha con la estructura correcta
-      const ficha = {
-        id: `ficha-${selectedPozoId}`,
-        pozoId: selectedPozoId,
-        status: 'complete' as const,
-        sections: [
-          {
-            id: 'identificacion',
-            type: 'identificacion' as const,
-            order: 1,
-            visible: true,
-            locked: false,
-            content: {
-              codigo: { value: pozo.idPozo?.value || pozo.identificacion?.idPozo?.value || 'S/N', source: 'excel' as const },
-              direccion: { value: pozo.direccion?.value || pozo.ubicacion?.direccion?.value || 'S/D', source: 'excel' as const },
-              barrio: { value: pozo.barrio?.value || pozo.ubicacion?.barrio?.value || '-', source: 'excel' as const },
-              sistema: { value: pozo.sistema?.value || pozo.componentes?.sistema?.value || '-', source: 'excel' as const },
-              estado: { value: pozo.estado?.value || pozo.identificacion?.estado?.value || '-', source: 'excel' as const },
-              fecha: { value: pozo.fecha?.value || pozo.identificacion?.fecha?.value || '-', source: 'excel' as const },
-              observaciones: { value: pozo.observacionesPozo?.value || pozo.observaciones?.observaciones?.value || '-', source: 'excel' as const },
+      // Intentar recuperar el estado guardado de la ficha para este pozo (Requirement Integrity)
+      const { recoverState } = await import('@/lib/state/integrity');
+      const savedFicha = recoverState(`ficha-${selectedPozoId}`, selectedPozoId);
+
+      let ficha: any;
+
+      if (savedFicha && savedFicha.stateStatus !== 'reset') {
+        // Usar la ficha guardada con sus personalizaciones
+        logger.info('Usando ficha guardada para generación de PDF', { version: savedFicha.version }, 'PozosPage');
+        ficha = savedFicha;
+      } else {
+        // Crear una ficha por defecto si no existe una guardada
+        logger.info('No se encontró ficha guardada, usando configuración por defecto', null, 'PozosPage');
+        ficha = {
+          id: `ficha-${selectedPozoId}`,
+          pozoId: selectedPozoId,
+          status: 'complete' as const,
+          sections: [
+            {
+              id: 'identificacion',
+              type: 'identificacion' as const,
+              order: 1,
+              visible: true,
+              locked: false,
+              content: {
+                codigo: { value: pozo.idPozo?.value || pozo.identificacion?.idPozo?.value || 'S/N', source: 'excel' as const },
+                direccion: { value: pozo.direccion?.value || pozo.ubicacion?.direccion?.value || 'S/D', source: 'excel' as const },
+                barrio: { value: pozo.barrio?.value || pozo.ubicacion?.barrio?.value || '-', source: 'excel' as const },
+                sistema: { value: pozo.sistema?.value || pozo.componentes?.sistema?.value || '-', source: 'excel' as const },
+                estado: { value: pozo.estado?.value || pozo.identificacion?.estado?.value || '-', source: 'excel' as const },
+                fecha: { value: pozo.fecha?.value || pozo.identificacion?.fecha?.value || '-', source: 'excel' as const },
+              },
             },
-          },
-          {
-            id: 'estructura',
-            type: 'estructura' as const,
-            order: 2,
-            visible: true,
-            locked: false,
-            content: {
-              alturaTotal: { value: pozo.profundidad?.value || pozo.ubicacion?.profundidad?.value || '-', source: 'excel' as const },
-              rasante: { value: pozo.elevacion?.value || pozo.ubicacion?.elevacion?.value || '-', source: 'excel' as const },
-              tapaMaterial: { value: pozo.materialTapa?.value || pozo.componentes?.materialTapa?.value || '-', source: 'excel' as const },
-              tapaEstado: { value: pozo.estadoTapa?.value || pozo.componentes?.estadoTapa?.value || '-', source: 'excel' as const },
-              conoTipo: { value: pozo.tipoCono?.value || pozo.componentes?.tipoCono?.value || '-', source: 'excel' as const },
-              conoMaterial: { value: pozo.materialCono?.value || pozo.componentes?.materialCono?.value || '-', source: 'excel' as const },
-              cuerpoDiametro: { value: pozo.diametroCilindro?.value || pozo.componentes?.diametroCilindro?.value || '-', source: 'excel' as const },
-              canuelaMaterial: { value: pozo.materialCanuela?.value || pozo.componentes?.materialCanuela?.value || '-', source: 'excel' as const },
-              peldanosCantidad: { value: pozo.numeroPeldanos?.value || pozo.componentes?.numeroPeldanos?.value || '-', source: 'excel' as const },
-              peldanosMaterial: { value: pozo.materialPeldanos?.value || pozo.componentes?.materialPeldanos?.value || '-', source: 'excel' as const },
+            {
+              id: 'estructura',
+              type: 'estructura' as const,
+              order: 2,
+              visible: true,
+              locked: false,
+              content: {
+                alturaTotal: { value: pozo.profundidad?.value || pozo.ubicacion?.profundidad?.value || '-', source: 'excel' as const },
+                rasante: { value: pozo.elevacion?.value || pozo.ubicacion?.elevacion?.value || '-', source: 'excel' as const },
+                tapaMaterial: { value: pozo.materialTapa?.value || pozo.componentes?.materialTapa?.value || '-', source: 'excel' as const },
+                tapaEstado: { value: pozo.estadoTapa?.value || pozo.componentes?.estadoTapa?.value || '-', source: 'excel' as const },
+              },
             },
+            {
+              id: 'fotos',
+              type: 'fotos' as const,
+              order: 3,
+              visible: true,
+              locked: false,
+              content: {},
+            },
+          ] as any,
+          customizations: {
+            colors: {
+              headerBg: '#1F4E79',
+              headerText: '#FFFFFF',
+              sectionBg: '#F5F5F5',
+              sectionText: '#333333',
+              labelText: '#666666',
+              valueText: '#000000',
+              borderColor: '#CCCCCC',
+            },
+            fonts: {
+              titleSize: 14,
+              labelSize: 9,
+              valueSize: 10,
+              fontFamily: 'Roboto',
+            },
+            spacing: {
+              sectionGap: 8,
+              fieldGap: 4,
+              padding: 5,
+              margin: 15,
+            },
+            template: 'default',
+            isGlobal: false,
           },
-          {
-            id: 'fotos',
-            type: 'fotos' as const,
-            order: 3,
-            visible: true,
-            locked: false,
-            content: {},
-          },
-        ] as any,
-        customizations: {
-          colors: {
-            headerBg: '#1F4E79',
-            headerText: '#FFFFFF',
-            sectionBg: '#F5F5F5',
-            sectionText: '#333333',
-            labelText: '#666666',
-            valueText: '#000000',
-            borderColor: '#CCCCCC',
-          },
-          fonts: {
-            titleSize: 14,
-            labelSize: 9,
-            valueSize: 10,
-            fontFamily: 'helvetica',
-          },
-          spacing: {
-            sectionGap: 8,
-            fieldGap: 4,
-            padding: 5,
-            margin: 15,
-          },
-          template: 'default',
-          isGlobal: false,
-        },
-        history: [],
-        errors: [],
-        lastModified: Date.now(),
-        version: 1,
-      };
+          history: [],
+          errors: [],
+          lastModified: Date.now(),
+          version: 1,
+        };
+      }
 
       // Generar PDF usando pdfMakeGenerator directamente en el cliente
       // Esto es más eficiente y permite acceder a los blobs locales

@@ -31,6 +31,7 @@ interface FichaActions {
   redo: () => void;
   canUndo: () => boolean;
   canRedo: () => boolean;
+  createHistoryCheckpoint: (actionName?: string) => void;
 
   // Snapshots para recuperación
   createSnapshot: (trigger: 'auto' | 'manual' | 'pre-action') => Snapshot;
@@ -94,14 +95,11 @@ const defaultCustomizations: FichaState['customizations'] = {
   isGlobal: false,
 };
 
-// Helper to create a deep clone of state for history
-function cloneState(state: Partial<FichaState>): Partial<FichaState> {
-  return JSON.parse(JSON.stringify(state));
-}
-
 // Helper to generate unique IDs
 function generateId(): string {
-  return crypto.randomUUID();
+  return typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : Math.random().toString(36).substring(2, 11);
 }
 
 // Store registry to manage multiple ficha stores
@@ -150,10 +148,10 @@ export function createFichaStore(initialState: Partial<FichaState>): StoreApi<Fi
     initialState: savedInitialState,
     stateStatus: initialState.stateStatus || 'ok',
 
-    // Field editing with history
-    updateField: (sectionId, field, value) => set((state) => {
-      // Don't allow changes to finalized fichas
-      if (state.status === 'finalized') return state;
+    // Field editing - Optimized to avoid history on every keystroke
+    updateField: (sectionId, field, value) => {
+      const state = get();
+      if (state.status === 'finalized') return;
 
       const newSections = state.sections.map((section) => {
         if (section.id === sectionId) {
@@ -174,63 +172,51 @@ export function createFichaStore(initialState: Partial<FichaState>): StoreApi<Fi
         return section;
       });
 
-      const historyEntry: HistoryEntry = {
-        id: generateId(),
-        timestamp: Date.now(),
-        action: `updateField:${sectionId}:${field}`,
-        state: JSON.stringify(newSections), // Solo guardamos la estructura
-      };
-
-      // Trim history if too long
-      const newHistory = [...state.history.slice(0, state.historyIndex + 1), historyEntry]
-        .slice(-MAX_HISTORY_SIZE);
-
-      const newState = {
+      const update = {
         sections: newSections,
-        history: newHistory,
-        historyIndex: newHistory.length - 1,
         lastModified: Date.now(),
         version: state.version + 1,
-        status: state.status === 'draft' ? 'editing' : state.status,
+        status: (state.status === 'draft' ? 'editing' : state.status) as FichaState['status'],
       };
 
-      // Auto-persistencia segura
-      safePersist({ ...state, ...newState });
+      set(update);
+      safePersist({ ...state, ...update });
+    },
 
-      return newState;
-    }),
-
-    // Section reordering with protection for locked sections
-    reorderSections: (fromIndex, toIndex) => set((state) => {
-      if (state.status === 'finalized') return state;
-
-      // Check if source section is locked
-      if (state.sections[fromIndex]?.locked) return state;
-
-      const newSections = [...state.sections];
-      const [removed] = newSections.splice(fromIndex, 1);
-      newSections.splice(toIndex, 0, removed);
-
-      // Update order property
-      const reorderedSections = newSections.map((section, index) => ({
-        ...section,
-        order: index,
-      }));
-
+    // Separate action for history checkpoints
+    createHistoryCheckpoint: (actionName?: string) => set((state) => {
       const historyEntry: HistoryEntry = {
         id: generateId(),
         timestamp: Date.now(),
-        action: `reorderSections:${fromIndex}:${toIndex}`,
-        state: JSON.stringify(reorderedSections),
+        action: actionName || 'manualCheckpoint',
+        state: JSON.stringify(state.sections),
       };
 
       const newHistory = [...state.history.slice(0, state.historyIndex + 1), historyEntry]
         .slice(-MAX_HISTORY_SIZE);
 
       return {
-        sections: reorderedSections,
         history: newHistory,
         historyIndex: newHistory.length - 1,
+      };
+    }),
+
+    // Section reordering
+    reorderSections: (fromIndex, toIndex) => set((state) => {
+      if (state.status === 'finalized') return state;
+      if (state.sections[fromIndex]?.locked) return state;
+
+      const newSections = [...state.sections];
+      const [removed] = newSections.splice(fromIndex, 1);
+      newSections.splice(toIndex, 0, removed);
+
+      const reorderedSections = newSections.map((section, index) => ({
+        ...section,
+        order: index,
+      }));
+
+      return {
+        sections: reorderedSections,
         lastModified: Date.now(),
         version: state.version + 1,
       };
@@ -238,9 +224,7 @@ export function createFichaStore(initialState: Partial<FichaState>): StoreApi<Fi
 
     toggleSectionVisibility: (sectionId) => set((state) => {
       if (state.status === 'finalized') return state;
-
       const section = state.sections.find((s) => s.id === sectionId);
-      // Don't allow hiding locked sections
       if (section?.locked) return state;
 
       const newSections = state.sections.map((s) => {
@@ -282,20 +266,8 @@ export function createFichaStore(initialState: Partial<FichaState>): StoreApi<Fi
         return section;
       });
 
-      const historyEntry: HistoryEntry = {
-        id: generateId(),
-        timestamp: Date.now(),
-        action: `addImage:${sectionId}:${image.id}`,
-        state: JSON.stringify(newSections),
-      };
-
-      const newHistory = [...state.history.slice(0, state.historyIndex + 1), historyEntry]
-        .slice(-MAX_HISTORY_SIZE);
-
       return {
         sections: newSections,
-        history: newHistory,
-        historyIndex: newHistory.length - 1,
         lastModified: Date.now(),
         version: state.version + 1,
       };
@@ -309,7 +281,6 @@ export function createFichaStore(initialState: Partial<FichaState>): StoreApi<Fi
           const images = section.content.images?.value
             ? JSON.parse(section.content.images.value) as FotoInfo[]
             : [];
-
           const filteredImages = images.filter((img) => img.id !== imageId);
 
           return {
@@ -327,24 +298,11 @@ export function createFichaStore(initialState: Partial<FichaState>): StoreApi<Fi
         return section;
       });
 
-      const historyEntry: HistoryEntry = {
-        id: generateId(),
-        timestamp: Date.now(),
-        action: `removeImage:${sectionId}:${imageId}`,
-        state: JSON.stringify(newSections),
-      };
-
-      const newHistory = [...state.history.slice(0, state.historyIndex + 1), historyEntry]
-        .slice(-MAX_HISTORY_SIZE);
-
-      // Also remove from imageSizes
       const newImageSizes = new Map(state.imageSizes);
       newImageSizes.delete(imageId);
 
       return {
         sections: newSections,
-        history: newHistory,
-        historyIndex: newHistory.length - 1,
         lastModified: Date.now(),
         version: state.version + 1,
         imageSizes: newImageSizes,
@@ -353,10 +311,8 @@ export function createFichaStore(initialState: Partial<FichaState>): StoreApi<Fi
 
     resizeImage: (imageId, size) => set((state) => {
       if (state.status === 'finalized') return state;
-
       const newImageSizes = new Map(state.imageSizes);
       newImageSizes.set(imageId, size);
-
       return {
         imageSizes: newImageSizes,
         lastModified: Date.now(),
@@ -365,35 +321,35 @@ export function createFichaStore(initialState: Partial<FichaState>): StoreApi<Fi
     }),
 
     // Undo/Redo simplificado y eficiente
-    undo: () => set((state) => {
-      if (state.historyIndex <= 0 || state.status === 'finalized') return state;
+    undo: () => {
+      const state = get();
+      if (state.historyIndex < 0 || state.status === 'finalized') return;
 
-      const prevEntry = state.history[state.historyIndex - 1];
-      if (!prevEntry) return state;
+      const prevEntry = state.history[state.historyIndex];
+      if (!prevEntry) return;
 
-      return {
+      set({
         sections: JSON.parse(prevEntry.state),
         historyIndex: state.historyIndex - 1,
         lastModified: Date.now(),
         version: state.version + 1,
-      };
-    }),
+      });
+    },
 
-    redo: () => set((state) => {
-      if (state.historyIndex >= state.history.length - 1 || state.status === 'finalized') {
-        return state;
-      }
+    redo: () => {
+      const state = get();
+      if (state.historyIndex >= state.history.length - 1 || state.status === 'finalized') return;
 
       const nextEntry = state.history[state.historyIndex + 1];
-      if (!nextEntry) return state;
+      if (!nextEntry) return;
 
-      return {
+      set({
         sections: JSON.parse(nextEntry.state),
         historyIndex: state.historyIndex + 1,
         lastModified: Date.now(),
         version: state.version + 1,
-      };
-    }),
+      });
+    },
 
     canUndo: () => {
       const state = get();
@@ -408,12 +364,10 @@ export function createFichaStore(initialState: Partial<FichaState>): StoreApi<Fi
     // Snapshots estructurales (Baratos)
     createSnapshot: (trigger) => {
       const state = get();
-
-      // Mapear valores para Snapshot
       const values: Record<string, any> = {};
       state.sections.forEach(s => {
         Object.entries(s.content).forEach(([k, v]) => {
-          values[`${s.id}.${k}`] = v.value;
+          values[`${s.id}.${k}`] = (v as any).value;
         });
       });
 
@@ -423,7 +377,7 @@ export function createFichaStore(initialState: Partial<FichaState>): StoreApi<Fi
         schemaVersion: '1.0',
         structure: state.sections.map(s => ({ id: s.id, type: s.type, visible: s.visible })),
         values: values,
-        references: [], // IDs de fotos si fuera necesario
+        references: [],
         metadata: {
           status: state.status,
           version: state.version,
@@ -433,30 +387,23 @@ export function createFichaStore(initialState: Partial<FichaState>): StoreApi<Fi
         trigger,
       };
 
-      set((s) => ({
-        snapshots: [...s.snapshots, snapshot],
-      }));
-
+      set((s) => ({ snapshots: [...s.snapshots, snapshot] }));
       return snapshot;
     },
 
     restoreSnapshot: (snapshotId) => {
       const state = get();
       const snapshot = state.snapshots.find((s) => s.id === snapshotId);
-
       if (!snapshot || state.status === 'finalized') return false;
 
-      // Restauración lógica (RE-CONSTRUCIÓN)
-      // En un sistema real, aquí mapearíamos 'snapshot.values' de vuelta a 'sections'
-      // Por brevedad en este paso, asumimos que el estado actual mantiene compatibilidad operativa.
-
+      // Restoration logic would go here (mapping values back to sections)
+      // For now we just update metadata as a placeholder for full restoration
       set({
         lastModified: Date.now(),
         version: state.version + 1,
         history: [],
         historyIndex: -1,
       });
-
       return true;
     },
 
@@ -464,12 +411,9 @@ export function createFichaStore(initialState: Partial<FichaState>): StoreApi<Fi
 
     pruneSnapshots: (maxSnapshots = DEFAULT_MAX_SNAPSHOTS) => set((state) => {
       if (state.snapshots.length <= maxSnapshots) return state;
-
-      // Keep the most recent snapshots
       const sortedSnapshots = [...state.snapshots]
         .sort((a, b) => b.timestamp - a.timestamp)
         .slice(0, maxSnapshots);
-
       return { snapshots: sortedSnapshots };
     }),
 
@@ -501,21 +445,18 @@ export function createFichaStore(initialState: Partial<FichaState>): StoreApi<Fi
 
     // Status management
     setStatus: (status) => set((state) => {
-      // Can't change status of finalized ficha
       if (state.status === 'finalized' && status !== 'finalized') return state;
       return { status, lastModified: Date.now() };
     }),
 
     finalize: () => set((state) => {
-      // Registrar valores finales para el snapshot de cierre
       const values: Record<string, any> = {};
       state.sections.forEach(s => {
         Object.entries(s.content).forEach(([k, v]) => {
-          values[`${s.id}.${k}`] = v.value;
+          values[`${s.id}.${k}`] = (v as any).value;
         });
       });
 
-      // Crear un snapshot final antes de finalizar
       const snapshot: Snapshot = {
         id: generateId(),
         fichaId: state.id,
@@ -544,7 +485,6 @@ export function createFichaStore(initialState: Partial<FichaState>): StoreApi<Fi
       const state = get();
       if (state.status === 'finalized' || !state.initialState) return;
 
-      // Rule: "Botón de reset seguro: snapshot previo + volver a BASE_STATE"
       get().createSnapshot('manual');
 
       const resetState: Partial<FichaStoreState> = {

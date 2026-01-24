@@ -51,6 +51,8 @@ const DEFAULT_PRESET_SIZES: ImageSize[] = [
   { width: 300, height: 225 },  // Extra grande
 ];
 
+const DEFAULT_SIZE: ImageSize = { width: 150, height: 112 };
+
 const PRESET_LABELS = ['S', 'M', 'L', 'XL'];
 
 // Tamaño mínimo y máximo para resize manual
@@ -59,7 +61,7 @@ const MAX_SIZE = 500;
 
 export function ImageEditor({
   image,
-  size = { width: 150, height: 112 },
+  size = DEFAULT_SIZE,
   editable = true,
   selected = false,
   isDragging = false,
@@ -80,12 +82,12 @@ export function ImageEditor({
   // Hook para confirmación de eliminación
   const { confirmDeleteImage } = useConfirmDialog();
 
-  // Sync local size with prop
+  // Sync local size with prop - Avoid infinite loop by checking primitive values
   useEffect(() => {
-    if (!isResizing) {
+    if (!isResizing && (localSize.width !== size.width || localSize.height !== size.height)) {
       setLocalSize(size);
     }
-  }, [size, isResizing]);
+  }, [size, isResizing, localSize.width, localSize.height]);
 
   // Handle resize start
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
@@ -162,8 +164,8 @@ export function ImageEditor({
       {/* Image container */}
       <div
         className={`relative overflow-hidden rounded-lg border-2 transition-all ${selected
-            ? 'border-primary ring-2 ring-primary/30'
-            : 'border-transparent hover:border-gray-300'
+          ? 'border-primary ring-2 ring-primary/30'
+          : 'border-transparent hover:border-gray-300'
           } ${isDragging ? 'shadow-lg' : ''}`}
         style={{ width: localSize.width, height: localSize.height }}
       >
@@ -229,8 +231,8 @@ export function ImageEditor({
                   handlePresetSize(presetSize);
                 }}
                 className={`px-2 py-1 text-xs font-medium transition-colors ${getCurrentPresetIndex() === index
-                    ? 'bg-primary text-white'
-                    : 'bg-white text-gray-600 hover:bg-gray-100'
+                  ? 'bg-primary text-white'
+                  : 'bg-white text-gray-600 hover:bg-gray-100'
                   }`}
                 title={`${presetSize.width}x${presetSize.height}`}
               >

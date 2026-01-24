@@ -50,456 +50,111 @@ export interface ExcelParseResult {
  * Incluye todos los 33 campos del diccionario de datos
  */
 const COLUMN_MAPPING: Record<string, string> = {
-  // ============================================================================
-  // IDENTIFICACIÓN (6 campos obligatorios)
-  // ============================================================================
-
-  // Id_pozo
-  'codigo': 'idPozo',
-  'código': 'idPozo',
-  'cod': 'idPozo',
-  'id': 'idPozo',
-  'pozo': 'idPozo',
+  // IDENTIFICACIÓN
   'id_pozo': 'idPozo',
-  'id pozo': 'idPozo',
-  'numero': 'idPozo',
-  'número': 'idPozo',
-  'num': 'idPozo',
-  'nro': 'idPozo',
-  'n°': 'idPozo',
-  'no.': 'idPozo',
-  'idpozo': 'idPozo',
-  'identificador': 'idPozo',
-
-  // Coordenada X (Longitud)
+  'codigo': 'idPozo',
+  'pozo': 'idPozo',
   'coordenada_x': 'coordenadaX',
-  'coordenada x': 'coordenadaX',
-  'coordenadax': 'coordenadaX',
-  'longitud': 'coordenadaX',
-  'lon': 'coordenadaX',
-  'longitude': 'coordenadaX',
   'x': 'coordenadaX',
-
-  // Coordenada Y (Latitud)
+  'longitud': 'coordenadaX',
   'coordenada_y': 'coordenadaY',
-  'coordenada y': 'coordenadaY',
-  'coordenaday': 'coordenadaY',
-  'latitud': 'coordenadaY',
-  'lat': 'coordenadaY',
-  'latitude': 'coordenadaY',
   'y': 'coordenadaY',
-
-  // Fecha
+  'latitud': 'coordenadaY',
   'fecha': 'fecha',
   'fecha_inspeccion': 'fecha',
-  'fecha inspeccion': 'fecha',
-  'fecha_inspección': 'fecha',
-  'fecha inspección': 'fecha',
-  'date': 'fecha',
-  'fecha_levantamiento': 'fecha',
-  'fecha levantamiento': 'fecha',
-
-  // Levantó (Inspector)
   'levanto': 'levanto',
-  'levantó': 'levanto',
   'inspector': 'levanto',
-  'levantamiento': 'levanto',
-  'quien_levanto': 'levanto',
-  'quien levanto': 'levanto',
-  'responsable': 'levanto',
-
-  // Estado general
   'estado': 'estado',
   'condicion': 'estado',
-  'condición': 'estado',
-  'status': 'estado',
-  'estado_general': 'estado',
-  'estado general': 'estado',
-  'estado_levantamiento': 'estado',
-  'estado levantamiento': 'estado',
 
-  // ============================================================================
-  // UBICACIÓN (4 campos importantes)
-  // ============================================================================
-
-  // Dirección
+  // UBICACIÓN
   'direccion': 'direccion',
-  'dirección': 'direccion',
-  'dir': 'direccion',
-  'ubicacion': 'direccion',
-  'ubicación': 'direccion',
-  'domicilio': 'direccion',
-  'calle': 'direccion',
-  'address': 'direccion',
-
-  // Barrio
   'barrio': 'barrio',
   'sector': 'barrio',
-  'zona': 'barrio',
-  'localidad': 'barrio',
-  'colonia': 'barrio',
-  'neighborhood': 'barrio',
-
-  // Elevación
   'elevacion': 'elevacion',
-  'elevación': 'elevacion',
-  'elev': 'elevacion',
-  'altura_snm': 'elevacion',
-  'altura snm': 'elevacion',
   'msnm': 'elevacion',
-
-  // Profundidad
   'profundidad': 'profundidad',
   'prof': 'profundidad',
-  'profundidad_pozo': 'profundidad',
-  'profundidad pozo': 'profundidad',
-  'depth': 'profundidad',
-  'h': 'profundidad',
-  'altura': 'profundidad',
 
-  // ============================================================================
-  // COMPONENTES DEL POZO (23 campos)
-  // ============================================================================
-
-  // Sistema
+  // COMPONENTES
   'sistema': 'sistema',
-  'red': 'sistema',
-  'tipo_sistema': 'sistema',
-  'tipo sistema': 'sistema',
-  'sistema_alcantarillado': 'sistema',
-
-  // Año de instalación
   'ano_instalacion': 'anoInstalacion',
-  'año_instalacion': 'anoInstalacion',
-  'año instalacion': 'anoInstalacion',
-  'ano instalacion': 'anoInstalacion',
-  'year': 'anoInstalacion',
-  'instalacion': 'anoInstalacion',
-
-  // Tipo de cámara
   'tipo_camara': 'tipoCamara',
-  'tipo camara': 'tipoCamara',
-  'tipo_cámara': 'tipoCamara',
-  'tipo cámara': 'tipoCamara',
-  'camara': 'tipoCamara',
-  'cámara': 'tipoCamara',
-
-  // Estructura de pavimento
   'estructura_pavimento': 'estructuraPavimento',
-  'estructura pavimento': 'estructuraPavimento',
-  'pavimento': 'estructuraPavimento',
-  'tipo_pavimento': 'estructuraPavimento',
-  'tipo pavimento': 'estructuraPavimento',
-  'superficie': 'estructuraPavimento',
-
-  // Existe tapa
   'existe_tapa': 'existeTapa',
-  'existe tapa': 'existeTapa',
   'tapa': 'existeTapa',
-  'tiene_tapa': 'existeTapa',
-  'tiene tapa': 'existeTapa',
-  'has_cover': 'existeTapa',
-
-  // Material tapa
   'material_tapa': 'materialTapa',
-  'material tapa': 'materialTapa',
-  'tapa_material': 'materialTapa',
-  'tapa material': 'materialTapa',
-  'mat_tapa': 'materialTapa',
-
-  // Estado tapa
   'estado_tapa': 'estadoTapa',
-  'estado tapa': 'estadoTapa',
-  'tapa_estado': 'estadoTapa',
-  'tapa estado': 'estadoTapa',
-  'cond_tapa': 'estadoTapa',
-  'condicion_tapa': 'estadoTapa',
-
-  // Existe cono
   'existe_cono': 'existeCono',
-  'existe cono': 'existeCono',
   'cono': 'existeCono',
-  'tiene_cono': 'existeCono',
-  'tiene cono': 'existeCono',
-  'has_cone': 'existeCono',
-
-  // Tipo cono
   'tipo_cono': 'tipoCono',
-  'tipo cono': 'tipoCono',
-  'cono_tipo': 'tipoCono',
-  'cono tipo': 'tipoCono',
-
-  // Material cono
   'material_cono': 'materialCono',
-  'material cono': 'materialCono',
-  'cono_material': 'materialCono',
-  'cono material': 'materialCono',
-  'materia_cono': 'materialCono',
-  'materia cono': 'materialCono',
-
-  // Estado cono
   'estado_cono': 'estadoCono',
-  'estado cono': 'estadoCono',
-  'cono_estado': 'estadoCono',
-  'cono estado': 'estadoCono',
-  'condicion_cono': 'estadoCono',
-
-  // Existe cilindro
   'existe_cilindro': 'existeCilindro',
-  'existe cilindro': 'existeCilindro',
   'cilindro': 'existeCilindro',
-  'tiene_cilindro': 'existeCilindro',
-  'tiene cilindro': 'existeCilindro',
-  'has_cylinder': 'existeCilindro',
-
-  // Diámetro cilindro
   'diametro_cilindro': 'diametroCilindro',
-  'diametro cilindro': 'diametroCilindro',
-  'diámetro_cilindro': 'diametroCilindro',
-  'diámetro cilindro': 'diametroCilindro',
-  'cilindro_diametro': 'diametroCilindro',
-  'cilindro diametro': 'diametroCilindro',
-  'd_cilindro': 'diametroCilindro',
-
-  // Material cilindro
   'material_cilindro': 'materialCilindro',
-  'material cilindro': 'materialCilindro',
-  'cilindro_material': 'materialCilindro',
-  'cilindro material': 'materialCilindro',
-
-  // Estado cilindro
   'estado_cilindro': 'estadoCilindro',
-  'estado cilindro': 'estadoCilindro',
-  'cilindro_estado': 'estadoCilindro',
-  'cilindro estado': 'estadoCilindro',
-  'condicion_cilindro': 'estadoCilindro',
-
-  // Existe cañuela
   'existe_canuela': 'existeCanuela',
-  'existe canuela': 'existeCanuela',
-  'existe_cañuela': 'existeCanuela',
-  'existe cañuela': 'existeCanuela',
   'canuela': 'existeCanuela',
-  'cañuela': 'existeCanuela',
-  'tiene_canuela': 'existeCanuela',
-  'tiene canuela': 'existeCanuela',
-
-  // Material cañuela
   'material_canuela': 'materialCanuela',
-  'material canuela': 'materialCanuela',
-  'material_cañuela': 'materialCanuela',
-  'material cañuela': 'materialCanuela',
-  'canuela_material': 'materialCanuela',
-  'cañuela_material': 'materialCanuela',
-
-  // Estado cañuela
   'estado_canuela': 'estadoCanuela',
-  'estado canuela': 'estadoCanuela',
-  'estado_cañuela': 'estadoCanuela',
-  'estado cañuela': 'estadoCanuela',
-  'canuela_estado': 'estadoCanuela',
-  'cañuela_estado': 'estadoCanuela',
-  'condicion_canuela': 'estadoCanuela',
-
-  // Existe peldaños
   'existe_peldanos': 'existePeldanos',
-  'existe peldanos': 'existePeldanos',
-  'existe_peldaños': 'existePeldanos',
-  'existe peldaños': 'existePeldanos',
   'peldanos': 'existePeldanos',
-  'peldaños': 'existePeldanos',
-  'tiene_peldanos': 'existePeldanos',
-  'tiene peldanos': 'existePeldanos',
-  'tiene_peldaños': 'existePeldanos',
-  'tiene peldaños': 'existePeldanos',
-  'has_steps': 'existePeldanos',
-
-  // Material peldaños
   'material_peldanos': 'materialPeldanos',
-  'material peldanos': 'materialPeldanos',
-  'material_peldaños': 'materialPeldanos',
-  'material peldaños': 'materialPeldanos',
-  'peldanos_material': 'materialPeldanos',
-  'peldaños_material': 'materialPeldanos',
-
-  // Número de peldaños
   'numero_peldanos': 'numeroPeldanos',
-  'numero peldanos': 'numeroPeldanos',
-  'número_peldanos': 'numeroPeldanos',
-  'número peldanos': 'numeroPeldanos',
-  'numero_peldaños': 'numeroPeldanos',
-  'numero peldaños': 'numeroPeldanos',
-  'número_peldaños': 'numeroPeldanos',
-  'número peldaños': 'numeroPeldanos',
-  'peldanos_cantidad': 'numeroPeldanos',
-  'peldanos cantidad': 'numeroPeldanos',
-  'peldaños_cantidad': 'numeroPeldanos',
-  'peldaños cantidad': 'numeroPeldanos',
-  'cantidad_peldanos': 'numeroPeldanos',
-  'cantidad peldanos': 'numeroPeldanos',
-  'cantidad_peldaños': 'numeroPeldanos',
-  'cantidad peldaños': 'numeroPeldanos',
-  'num_peldanos': 'numeroPeldanos',
-  'num peldanos': 'numeroPeldanos',
-  'n_peldanos': 'numeroPeldanos',
-  'count_steps': 'numeroPeldanos',
-
-  // Estado peldaños
   'estado_peldanos': 'estadoPeldanos',
-  'estado peldanos': 'estadoPeldanos',
-  'estado_peldaños': 'estadoPeldanos',
-  'estado peldaños': 'estadoPeldanos',
-  'peldanos_estado': 'estadoPeldanos',
-  'peldaños_estado': 'estadoPeldanos',
-  'condicion_peldanos': 'estadoPeldanos',
-  'condicion_peldaños': 'estadoPeldanos',
 
-  // ============================================================================
-  // OBSERVACIONES (1 campo opcional)
-  // ============================================================================
-
+  // OBSERVACIONES
   'observaciones': 'observaciones',
-  'observacion': 'observaciones',
-  'observación': 'observaciones',
   'notas': 'observaciones',
   'comentarios': 'observaciones',
-  'descripcion': 'observaciones',
-  'descripción': 'observaciones',
-  'remarks': 'observaciones',
-  'notes': 'observaciones',
-  // Campos específicos detectados en modelo 3
-  'diametro_cilindro_m': 'diametroCilindro',
 };
 
 /**
  * Mapeo para Tuberías (Hoja TUBERIAS)
  */
 const TUBERIA_MAPPING: Record<string, string> = {
-  // ID Pozo (FK)
   'id_pozo': 'idPozo',
   'pozo': 'idPozo',
-  'pozo_id': 'idPozo',
-  'código_pozo': 'idPozo',
-
-  // ID Tubería
   'id_tuberia': 'idTuberia',
-  'id': 'idTuberia',
   'tuberia': 'idTuberia',
-  'codigo': 'idTuberia',
-
-  // Tipo
   'tipo': 'tipoTuberia',
   'tipo_tuberia': 'tipoTuberia',
-  'clasificacion': 'tipoTuberia', // Entrada/Salida
-
-  // Diámetro
   'diametro': 'diametro',
-  'diámetro': 'diametro',
-  'dn': 'diametro',
-  'diam': 'diametro',
-  'mm': 'diametro',
-  '_mm': 'diametro',
-
-  // Material
   'material': 'material',
-  'mat': 'material',
-
-  // Cota
   'cota': 'cota',
-  'cota_z': 'cota',
   'z': 'cota',
-  'nivel': 'cota',
-  'batea': 'cota',
-
-  // Estado
   'estado': 'estado',
-  'condicion': 'estado',
-
-  // Emboquillado
   'emboquillado': 'emboquillado',
-  'tiene_emboquillado': 'emboquillado',
-
-  // Longitud
   'longitud': 'longitud',
-  'largo': 'longitud',
-  'len': 'longitud',
-  'logitud': 'longitud',
 };
 
-/**
- * Mapeo para Sumideros (Hoja SUMIDEROS)
- */
 const SUMIDERO_MAPPING: Record<string, string> = {
-  // ID Pozo (FK)
   'id_pozo': 'idPozo',
   'pozo': 'idPozo',
-
-  // ID Sumidero
   'id_sumidero': 'idSumidero',
-  'id': 'idSumidero',
   'sumidero': 'idSumidero',
-
-  // Tipo
   'tipo': 'tipoSumidero',
   'tipo_sumidero': 'tipoSumidero',
-
-  // Número esquema
   'numero_esquema': 'numeroEsquema',
-  'num_esquema': 'numeroEsquema',
-  'esquema': 'numeroEsquema',
-
-  // Diámetro
   'diametro': 'diametro',
-  'diámetro': 'diametro',
-
-  // Material tubería
   'material_tuberia': 'materialTuberia',
-  'material': 'materialTuberia',
-  'materia_tuberia': 'materialTuberia',
-
-  // Alturas
   'altura_salida': 'alturaSalida',
-  'salida': 'alturaSalida',
-  'h_salida_m': 'alturaSalida',
   'altura_llegada': 'alturaLlegada',
-  'llegada': 'alturaLlegada',
-  'h_llegada_m': 'alturaLlegada',
 };
 
-/**
- * Mapeo para Fotos (Hoja FOTOS)
- */
 const FOTO_MAPPING: Record<string, string> = {
-  // ID Pozo (FK)
   'id_pozo': 'idPozo',
   'pozo': 'idPozo',
-
-  // ID Foto
   'id_foto': 'idFoto',
-  'id': 'idFoto',
   'foto': 'idFoto',
-
-  // Tipo
   'tipo': 'tipoFoto',
   'tipo_foto': 'tipoFoto',
-  'categoria': 'tipoFoto',
-
-  // Ruta/Nombre
-  'ruta': 'rutaArchivo',
   'ruta_archivo': 'rutaArchivo',
   'archivo': 'rutaArchivo',
-  'filename': 'rutaArchivo',
-  'nombre': 'rutaArchivo',
-
-  // Fecha
-  'fecha': 'fechaCaptura',
   'fecha_captura': 'fechaCaptura',
-  'captura': 'fechaCaptura',
-
-  // Descripción
   'descripcion': 'descripcion',
-  'descripción': 'descripcion',
-  'detalle': 'descripcion',
 };
 
 /**

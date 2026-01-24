@@ -14,7 +14,7 @@
 
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import type { FichaState, FichaSection, FieldValue, FichaCustomization } from '@/types/ficha';
 import type { Pozo, FotoInfo } from '@/types/pozo';
 import { useGlobalStore, useDesignStore, useUIStore } from '@/stores';
@@ -100,12 +100,29 @@ export function PreviewPanel({
   zoom = 1,
   className = '',
 }: PreviewPanelProps) {
-  const { getCurrentVersion } = useDesignStore();
+  const { getVersionById, getCurrentVersion } = useDesignStore();
   const degradedMode = useUIStore(s => s.degradedMode);
-  const [useCustomDesign, setUseCustomDesign] = useState(false);
+  const [useCustomDesign, setUseCustomDesign] = useState(!!fichaState?.customizations?.designId);
 
-  // Estándar o Visual
-  const activeDesign = useCustomDesign ? getCurrentVersion() : null;
+  // Determinar el diseño activo
+  const activeDesign = useMemo(() => {
+    if (!useCustomDesign) return null;
+
+    // 1. Prioridad: Diseño específico guardado en la ficha
+    if (fichaState?.customizations?.designId) {
+      return getVersionById(fichaState.customizations.designId);
+    }
+
+    // 2. Fallback: Diseño marcado como actual en el Diseñador
+    return getCurrentVersion();
+  }, [useCustomDesign, fichaState?.customizations?.designId, getVersionById, getCurrentVersion]);
+
+  // Sincronizar modo visual si cambia el diseño en la ficha
+  useEffect(() => {
+    if (fichaState?.customizations?.designId) {
+      setUseCustomDesign(true);
+    }
+  }, [fichaState?.customizations?.designId]);
 
   // Estilos personalizados para el modo estándar
   const styles = useMemo(() => {

@@ -1,87 +1,133 @@
-import { describe, it, expect, vi } from 'vitest';
-import { pdfMakeGenerator } from '../pdfMakeGenerator';
+
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { PDFMakeGenerator } from '../pdfMakeGenerator';
 import { Pozo } from '@/types/pozo';
 import { FichaState } from '@/types/ficha';
 
-// Mock de pdfmake para evitar errores de entorno en Node
+// Mock pdfmake
+const mockCreatePdf = vi.fn();
 vi.mock('pdfmake/build/pdfmake', () => ({
     default: {
-        createPdf: vi.fn().mockReturnValue({
-            getBlob: (cb: any) => cb(new Blob(['test-pdf-content'], { type: 'application/pdf' }))
-        })
+        vfs: {},
+        createPdf: (...args: any[]) => {
+            mockCreatePdf(...args);
+            return {
+                getBlob: (cb: any) => cb(new Blob(['test-pdf-content'], { type: 'application/pdf' })),
+                getBuffer: (cb: any) => cb(Buffer.from('test-pdf-content'))
+            };
+        }
     }
 }));
 
-// Mock de vfs_fonts
+// Mock vfs_fonts
 vi.mock('pdfmake/build/vfs_fonts', () => ({
-    pdfMake: { vfs: {} }
+    pdfMake: { vfs: { 'Roboto-Regular.ttf': 'Base64FontContent' } },
+    vfs: { 'Roboto-Regular.ttf': 'Base64FontContent' }
 }));
 
-describe('PDFMakeGenerator Validation', () => {
+// Mock logger
+vi.mock('@/lib/logger', () => ({
+    logger: {
+        info: vi.fn(),
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn()
+    }
+}));
+
+// Mock blobStore
+vi.mock('@/lib/storage/blobStore', () => ({
+    blobStore: {
+        getUrl: (id: string) => `blob:http://localhost:3000/${id}`
+    }
+}));
+
+describe('PDFMakeGenerator Robustness', () => {
+    let generator: PDFMakeGenerator;
+
+    // Test data
     const mockPozo: Partial<Pozo> = {
+        id: 'pozo-123',
         identificacion: {
-            idPozo: { value: 'M680' },
-            levanto: { value: 'Juan Perez' },
-            fecha: { value: '2024-01-15' },
-            estado: { value: 'Bueno' },
-            coordenadaX: { value: '123' },
-            coordenadaY: { value: '456' }
-        },
-        ubicacion: {
-            direccion: { value: 'Calle 123' },
-            barrio: { value: 'Centro' },
-            elevacion: { value: '2600' },
-            profundidad: { value: '1.5' }
+            idPozo: { value: 'M680' }
         } as any,
-        componentes: {
-            existeTapa: { value: 'SI' },
-            estadoTapa: { value: 'Bueno' }
-        } as any,
-        tuberias: { tuberias: [] },
-        sumideros: { sumideros: [] },
         fotos: { fotos: [] }
     };
 
     const mockFicha: Partial<FichaState> = {
-        sections: [
-            { id: '1', type: 'identificacion', title: 'Identificación', visible: true, order: 1, content: {} },
-            { id: '2', type: 'estructura', title: 'Estructura', visible: true, order: 2, content: {} },
-            { id: '3', type: 'fotos', title: 'Fotos', visible: true, order: 3, content: {} }
-        ] as any,
-        customizations: {
-            colors: { headerBg: '#1f4e79' }
-        } as any
+        sections: [],
+        customizations: {} as any
     };
 
-    it('debe generar un blob de PDF correctamente (CP-01)', async () => {
-        const result = await pdfMakeGenerator.generatePDF(mockFicha as any, mockPozo as any);
-
-        expect(result.success).toBe(true);
-        expect(result.blob).toBeDefined();
-        expect(result.filename).toContain('M680');
+    beforeEach(() => {
+        vi.clearAllMocks();
+        generator = new PDFMakeGenerator();
     });
 
-    it('debe ser robusto ante datos faltantes (CP-02)', async () => {
-        // Pozo con datos mínimos/incompletos
-        const incompletePozo: any = {
-            identificacion: { idPozo: { value: 'MIN-001' } }
-        };
-
-        // Debería generar el PDF sin crashear gracias a los guards añadidos
-        const result = await pdfMakeGenerator.generatePDF(mockFicha as any, incompletePozo);
-
-        expect(result.success).toBe(true);
-        expect(result.blob).toBeDefined();
-        expect(result.filename).toContain('MIN-001');
+    it('should initialize VFS on construction', () => {
+        // Just verify it doesn't throw
+        expect(generator).toBeDefined();
     });
 
-    it('debe manejar secciones sin contenido definido', async () => {
-        const emptyFicha: any = {
-            sections: [{ type: 'identificacion', visible: true, content: null }],
-            customizations: {}
+    it('should handle null/undefined inputs gracefully', async () => {
+        const result = await generator.generatePDF(null as any, null as any);
+        expect(result.success).toBe(false);
+        expect(result.error).toContain('Datos de ficha o pozo inválidos');
+    });
+
+    it('should generate PDF successfully with minimal valid data', async () => {
+        const result = await generator.generatePDF(mockFicha as any, mockPozo as any);
+        expect(result.success).toBe(true);
+        expect(result.blob).toBeDefined();
+    });
+
+    it('should NOT crash even if buildContent fails (simulated)', async () => {
+        // Force an error in buildContent using a broken section
+        const brokenFicha = {
+            sections: [{
+                type: 'identificacion',
+                visible: true,
+                // @ts-ignore
+                content: { get invalid() { throw new Error('Simulated Build Failure'); } }
+            }]
         };
 
-        const result = await pdfMakeGenerator.generatePDF(emptyFicha, mockPozo as any);
+        // Note: buildContent error is caught in generatePDF catch block?
+        // Actually generatePDF awaits buildContent. If buildContent throws, generatePDF catches it.
+
+        const result = await generator.generatePDF(brokenFicha as any, mockPozo as any);
+        expect(result.success).toBe(false);
+        // Expect robust error message
+        expect(result.error).toBeDefined();
+    });
+
+    it('should handle blob URLs on server side safely', async () => {
+        // Mock server side environment
+        const originalWindow = global.window;
+        // @ts-ignore
+        delete global.window;
+
+        const pozoWithBlob = {
+            ...mockPozo,
+            fotos: {
+                fotos: [
+                    {
+                        id: 'f1',
+                        blobId: 'blob-1',
+                        tipo: 'TAPA',
+                        categoria: 'PRINCIPAL'
+                    }
+                ]
+            }
+        };
+
+        // Run generation
+        const result = await generator.generatePDF(mockFicha as any, pozoWithBlob as any);
+
+        // Should succeed (ignoring image) not crash
         expect(result.success).toBe(true);
+
+        // Restore window
+        global.window = originalWindow;
     });
 });

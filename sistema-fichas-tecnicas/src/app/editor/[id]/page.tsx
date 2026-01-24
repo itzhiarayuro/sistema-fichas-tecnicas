@@ -45,7 +45,7 @@ import { useGlobalStore, useUIStore, type Template } from '@/stores';
 import { createFichaStore, getFichaStore, type FichaStore } from '@/stores/fichaStore';
 import { useSyncEngine, type SyncConflict } from '@/lib/sync';
 import { logger } from '@/lib/logger';
-import { generateFichaPDF, downloadPDF } from '@/lib/pdf/pdfGenerator';
+// import { generateFichaPDF, downloadPDF } from '@/lib/pdf/pdfGenerator'; // Removed as per cleanup request
 import { lifecycleManager } from '@/lib/managers/lifecycleManager';
 import { resourceManager } from '@/lib/managers/resourceManager';
 import { recoverState } from '@/lib/state/integrity';
@@ -235,6 +235,7 @@ export default function EditorPage() {
     toggleSectionVisibility,
     updateCustomization,
     reinitialize,
+    flush,
   } = useSyncEngine({
     initialState: initialFichaState,
     onConflict: handleConflict,
@@ -494,6 +495,7 @@ export default function EditorPage() {
       if (changes.fonts) updateCustomization(['fonts'], next.fonts);
       if (changes.spacing) updateCustomization(['spacing'], next.spacing);
       if (changes.template) updateCustomization(['template'], next.template);
+      if (changes.designId !== undefined) updateCustomization(['designId'], next.designId);
       if (changes.isGlobal !== undefined) updateCustomization(['isGlobal'], next.isGlobal);
 
       return next;
@@ -503,28 +505,41 @@ export default function EditorPage() {
   // Handler para selección de plantilla
   const handleTemplateSelect = useCallback((template: Template) => {
     const newCustomizations = templateToCustomization(template);
-    setCustomizations((prev) => ({
-      ...prev,
-      ...newCustomizations,
-      colors: { ...prev.colors, ...newCustomizations.colors },
-      fonts: { ...prev.fonts, ...newCustomizations.fonts },
-    }));
+
+    setCustomizations((prev) => {
+      const next = {
+        ...prev,
+        ...newCustomizations,
+        colors: { ...prev.colors, ...newCustomizations.colors },
+        fonts: { ...prev.fonts, ...newCustomizations.fonts },
+      };
+
+      // Sincronizar con el engine
+      if (newCustomizations.colors) updateCustomization(['colors'], next.colors);
+      if (newCustomizations.fonts) updateCustomization(['fonts'], next.fonts);
+      if (newCustomizations.template) updateCustomization(['template'], next.template);
+      if (newCustomizations.designId !== undefined) updateCustomization(['designId'], next.designId);
+
+      return next;
+    });
+
     addToast({
       type: 'success',
       message: `Plantilla "${template.name}" aplicada`,
     });
-  }, [addToast]);
+  }, [addToast, updateCustomization]);
 
   // Handler para cambio de scope
   const handleScopeChange = useCallback((isGlobal: boolean) => {
     setCustomizations((prev) => ({ ...prev, isGlobal }));
+    updateCustomization(['isGlobal'], isGlobal);
     addToast({
       type: 'info',
       message: isGlobal
         ? 'Los cambios se aplicarán a futuras fichas'
         : 'Los cambios solo afectan esta ficha',
     });
-  }, [addToast]);
+  }, [addToast, updateCustomization]);
 
   // Handler para volver con confirmación si hay cambios sin guardar
   const handleBack = useCallback(async () => {
@@ -742,12 +757,32 @@ export default function EditorPage() {
 
         logger.debug('Pozo enriquecido con fotos para PDF', { totalFotos: todasLasFotos.length }, 'EditorPage');
 
+        // Forzar sincronización inmediata para asegurar que el PDF tenga los últimos cambios
+        flush();
+
         // Generar PDF usando pdfMakeGenerator directamente en el cliente
         // Esto es mucho más robusto para manejar las imágenes locales (blobs)
         try {
-          logger.info('Importando y ejecutando pdfMakeGenerator', null, 'EditorPage');
           const { pdfMakeGenerator } = await import('@/lib/pdf/pdfMakeGenerator');
-          const result = await pdfMakeGenerator.generatePDF(syncedState, enrichedPozo);
+
+          // Obtener el diseño personalizado si existe
+          const { useDesignStore } = await import('@/stores/designStore');
+          const designStore = useDesignStore.getState();
+          const customDesign = customizations.designId
+            ? designStore.getVersionById(customizations.designId)
+            : designStore.versions.find(v => v.id === customizations.template);
+
+          logger.info('Iniciando generación de PDF con diseño', {
+            template: customizations.template,
+            hasCustomDesign: !!customDesign,
+            designName: customDesign?.name
+          }, 'EditorPage');
+
+          const result = await pdfMakeGenerator.generatePDF(syncedState || initialFichaState!, enrichedPozo, {
+            pageNumbers: true,
+            includeDate: true,
+            includePhotos: true
+          }, customDesign);
 
           if (!result.success || !result.blob) {
             throw new Error(result.error || 'Error al generar el PDF con pdfMake');
