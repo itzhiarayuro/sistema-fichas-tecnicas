@@ -74,7 +74,18 @@ export const FIELD_PATHS: Record<string, string> = {
     'sum_4_tipo': 'sumideros.sumideros[3].tipoSumidero.value',
     'sum_4_material': 'sumideros.sumideros[3].materialTuberia.value',
 
-    // FOTOS (Expandido a 12 slots)
+    // FOTOS ESPECÍFICAS
+    'foto_panoramica': 'fotos.fotos[P]',
+    'foto_tapa': 'fotos.fotos[T]',
+    'foto_interior': 'fotos.fotos[I]',
+    'foto_acceso': 'fotos.fotos[A]',
+    'foto_fondo': 'fotos.fotos[F]',
+    'foto_medicion': 'fotos.fotos[M]',
+    'foto_entrada_1': 'fotos.fotos[E1]',
+    'foto_salida_1': 'fotos.fotos[S1]',
+    'foto_sumidero_1': 'fotos.fotos[SUM1]',
+
+    // FOTOS GENÉRICAS
     'foto_1': 'fotos.fotos[0].blobId',
     'foto_2': 'fotos.fotos[1].blobId',
     'foto_3': 'fotos.fotos[2].blobId',
@@ -115,4 +126,10 @@ export const AVAILABLE_DATA_FIELDS = [
     { id: 'pozo_materialCanuela', label: 'Mat. Cañuela', category: 'Componentes' },
     { id: 'pozo_numPeldanos', label: 'Nº Peldaños', category: 'Componentes' },
     { id: 'pozo_observaciones', label: 'Observaciones', category: 'Observaciones' },
+    { id: 'foto_panoramica', label: 'Foto Panorámica (P)', category: 'Fotos' },
+    { id: 'foto_tapa', label: 'Foto Tapa (T)', category: 'Fotos' },
+    { id: 'foto_interior', label: 'Foto Interna (I)', category: 'Fotos' },
+    { id: 'foto_acceso', label: 'Foto Acceso (A)', category: 'Fotos' },
+    { id: 'foto_fondo', label: 'Foto Fondo (F)', category: 'Fotos' },
+    { id: 'foto_medicion', label: 'Foto Medición (M)', category: 'Fotos' },
 ];

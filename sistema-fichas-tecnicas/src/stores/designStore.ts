@@ -24,7 +24,8 @@ const createEmptyVersion = (name: string, description?: string): Omit<FichaDesig
     unit: 'mm',
     placements: [],
     shapes: [],
-    version: '1.0.0'
+    version: '1.0.0',
+    numPages: 1
 });
 
 export const useDesignStore = create<DesignState>()(
@@ -225,6 +226,44 @@ export const useDesignStore = create<DesignState>()(
 
             setCurrentVersion: (id) => {
                 set({ currentVersionId: id });
+            },
+
+            // Persistencia externa
+            exportVersion: (id) => {
+                const version = get().versions.find(v => v.id === id);
+                if (!version) return null;
+                return JSON.stringify(version, null, 2);
+            },
+
+            importVersion: (json) => {
+                try {
+                    const imported = JSON.parse(json) as FichaDesignVersion;
+                    // Validaciones básicas
+                    if (!imported.name || !Array.isArray(imported.placements)) return false;
+
+                    // Generar nuevo ID para evitar colisiones
+                    const newId = generateId();
+                    const now = Date.now();
+
+                    const versionToSave = {
+                        ...imported,
+                        id: newId,
+                        createdAt: now,
+                        updatedAt: now,
+                        isDefault: false
+                    };
+
+                    set(state => ({
+                        versions: [...state.versions, versionToSave],
+                        currentVersionId: newId,
+                        past: { ...state.past, [newId]: [] },
+                        future: { ...state.future, [newId]: [] }
+                    }));
+                    return true;
+                } catch (e) {
+                    console.error('Error importing version', e);
+                    return false;
+                }
             },
 
             // Gestión de placements

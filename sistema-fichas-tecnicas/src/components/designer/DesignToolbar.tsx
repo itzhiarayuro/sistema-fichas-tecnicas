@@ -103,14 +103,53 @@ export function DesignToolbar({
 </html>`;
 
         const blob = new Blob([html], { type: 'text/html' });
-        const url = URL.createObjectURL(blob);
+        const downloadUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url;
+        a.href = downloadUrl;
         a.download = `${version.name.replace(/\s+/g, '_')}.html`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
+        URL.revokeObjectURL(downloadUrl);
+    };
+
+    const handleExportJSON = () => {
+        const { exportVersion } = useDesignStore.getState();
+        const json = exportVersion(version.id);
+        if (!json) return;
+
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${version.name.replace(/\s+/g, '_')}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
         URL.revokeObjectURL(url);
+    };
+
+    const handleImportJSON = () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        input.onchange = (e) => {
+            const file = (e.target as HTMLInputElement).files?.[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (re) => {
+                const content = re.target?.result as string;
+                const { importVersion } = useDesignStore.getState();
+                const success = importVersion(content);
+                if (success) {
+                    alert('Plantilla importada con éxito');
+                } else {
+                    alert('Error al importar el archivo. Formato no válido.');
+                }
+            };
+            reader.readAsText(file);
+        };
+        input.click();
     };
 
     return (
@@ -260,6 +299,35 @@ export function DesignToolbar({
 
                 <div className="h-6 w-px bg-gray-200" />
 
+                {/* Páginas */}
+                <div className="flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-lg p-1">
+                    <button
+                        onClick={() => updateVersion(version.id, { numPages: Math.max(1, (version.numPages || 1) - 1) })}
+                        disabled={(version.numPages || 1) <= 1}
+                        className={`p-1.5 rounded transition-colors ${(version.numPages || 1) > 1 ? 'text-gray-600 hover:text-red-600 hover:bg-white' : 'text-gray-300 cursor-not-allowed'}`}
+                        title="Eliminar última página"
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </button>
+                    <span className="text-[10px] font-bold text-gray-500 px-1">
+                        {version.numPages || 1} Págs
+                    </span>
+                    <button
+                        onClick={() => updateVersion(version.id, { numPages: Math.min(5, (version.numPages || 1) + 1) })}
+                        disabled={(version.numPages || 1) >= 5}
+                        className={`p-1.5 rounded transition-colors ${(version.numPages || 1) < 5 ? 'text-gray-600 hover:text-green-600 hover:bg-white' : 'text-gray-300 cursor-not-allowed'}`}
+                        title="Añadir página"
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </button>
+                </div>
+
+                <div className="h-6 w-px bg-gray-200" />
+
                 {/* Duplicar */}
                 <button
                     onClick={handleDuplicate}
@@ -341,6 +409,30 @@ export function DesignToolbar({
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                     </svg>
                     HTML
+                </button>
+
+                {/* Export JSON (Backup) */}
+                <button
+                    onClick={handleExportJSON}
+                    className="flex items-center gap-2 bg-indigo-600 text-white px-3 py-2 rounded-lg font-medium hover:bg-indigo-700 transition-all active:scale-95 text-xs"
+                    title="Exportar Respaldo (JSON)"
+                >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                    </svg>
+                    Respaldo
+                </button>
+
+                {/* Import JSON */}
+                <button
+                    onClick={handleImportJSON}
+                    className="flex items-center gap-2 bg-gray-600 text-white px-3 py-2 rounded-lg font-medium hover:bg-gray-700 transition-all active:scale-95 text-xs"
+                    title="Importar Respaldo"
+                >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-10l-4-4m0 0l-4 4m4-4v12" />
+                    </svg>
+                    Importar
                 </button>
             </div>
         </div>

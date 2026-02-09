@@ -15,7 +15,7 @@ export interface AvailableField {
     defaultHeight: number; // en mm
 }
 
-export type ShapeType = 'rectangle' | 'circle' | 'line' | 'triangle' | 'text' | 'image';
+export type ShapeType = 'rectangle' | 'circle' | 'line' | 'triangle' | 'text' | 'image' | 'table';
 
 export interface ShapeElement {
     id: string;
@@ -25,6 +25,7 @@ export interface ShapeElement {
     width: number; // mm
     height: number; // mm
     zIndex: number;
+    pageNumber?: number; // 1-5
 
     // Estilos
     fillColor?: string;
@@ -68,6 +69,7 @@ export interface FieldPlacement {
     width: number; // Ancho en mm
     height: number; // Alto en mm
     zIndex: number;
+    pageNumber?: number; // 1-5
 
     // Estilos personalizables
     fontSize?: number;
@@ -99,6 +101,7 @@ export interface FichaDesignVersion {
     createdAt: number;
     updatedAt: number;
     isDefault: boolean;
+    numPages: number; // 1-5
 
     // Configuración de página
     pageSize: 'A4' | 'Letter';
@@ -131,6 +134,10 @@ export interface DesignState {
     duplicateVersion: (id: string, newName: string) => string;
     setDefaultVersion: (id: string) => void;
     setCurrentVersion: (id: string) => void;
+
+    // Persistencia externa
+    importVersion: (versionJson: string) => boolean;
+    exportVersion: (id: string) => string | null;
 
     // Gestión de placements
     addPlacement: (versionId: string, placement: Omit<FieldPlacement, 'id'>) => void;
@@ -201,7 +208,20 @@ export const AVAILABLE_FIELDS: AvailableField[] = [
     { id: 'sum_2_tipo', label: 'Sum 2 Tipo', fieldPath: 'sumideros.sumideros[1].tipoSumidero.value', category: 'sumideros', isRepeatable: true, defaultWidth: 50, defaultHeight: 10 },
     { id: 'sum_2_material', label: 'Sum 2 Mat', fieldPath: 'sumideros.sumideros[1].materialTuberia.value', category: 'sumideros', isRepeatable: true, defaultWidth: 50, defaultHeight: 10 },
 
-    // FOTOS (Hasta 12 slots)
+    // FOTOS ESPECÍFICAS (Por Nomenclatura)
+    { id: 'foto_panoramica', label: 'Foto Panorámica (P)', fieldPath: 'fotos.fotos[P]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+    { id: 'foto_tapa', label: 'Foto Tapa (T)', fieldPath: 'fotos.fotos[T]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+    { id: 'foto_interior', label: 'Foto Interna (I)', fieldPath: 'fotos.fotos[I]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+    { id: 'foto_acceso', label: 'Foto Acceso (A)', fieldPath: 'fotos.fotos[A]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+    { id: 'foto_fondo', label: 'Foto Fondo (F)', fieldPath: 'fotos.fotos[F]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+    { id: 'foto_medicion', label: 'Foto Medición (M)', fieldPath: 'fotos.fotos[M]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+
+    // FOTOS DE COMPONENTES
+    { id: 'foto_entrada_1', label: 'Foto Entrada 1', fieldPath: 'fotos.fotos[E1]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+    { id: 'foto_salida_1', label: 'Foto Salida', fieldPath: 'fotos.fotos[S1]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+    { id: 'foto_sumidero_1', label: 'Foto Sumidero 1', fieldPath: 'fotos.fotos[SUM1]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+
+    // FOTOS GENÉRICAS (Hasta 12 slots)
     { id: 'foto_1', label: 'Foto 1', fieldPath: 'fotos.fotos[0].blobId', category: 'fotos', isRepeatable: true, defaultWidth: 60, defaultHeight: 45 },
     { id: 'foto_2', label: 'Foto 2', fieldPath: 'fotos.fotos[1].blobId', category: 'fotos', isRepeatable: true, defaultWidth: 60, defaultHeight: 45 },
     { id: 'foto_3', label: 'Foto 3', fieldPath: 'fotos.fotos[2].blobId', category: 'fotos', isRepeatable: true, defaultWidth: 60, defaultHeight: 45 },
@@ -214,4 +234,7 @@ export const AVAILABLE_FIELDS: AvailableField[] = [
     { id: 'foto_10', label: 'Foto 10', fieldPath: 'fotos.fotos[9].blobId', category: 'fotos', isRepeatable: true, defaultWidth: 60, defaultHeight: 45 },
     { id: 'foto_11', label: 'Foto 11', fieldPath: 'fotos.fotos[10].blobId', category: 'fotos', isRepeatable: true, defaultWidth: 60, defaultHeight: 45 },
     { id: 'foto_12', label: 'Foto 12', fieldPath: 'fotos.fotos[11].blobId', category: 'fotos', isRepeatable: true, defaultWidth: 60, defaultHeight: 45 },
+
+    // WIDGETS DINÁMICOS
+    { id: 'widget_tuberias', label: 'Widget: Tabla Tuberías', fieldPath: 'tuberias.tuberias', category: 'otros', isRepeatable: false, defaultWidth: 190, defaultHeight: 40 },
 ];

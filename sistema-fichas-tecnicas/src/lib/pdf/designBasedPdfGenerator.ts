@@ -111,26 +111,22 @@ export async function generatePdfFromDesign(
             sum: design.placements.filter(p => p.fieldId.startsWith('sum_')).length
         };
 
+        const numPages = design.numPages || 1;
+
         // 3. Renderizar cada página
-        for (let pIdx = 0; pIdx < pageCount; pIdx++) {
-            if (pIdx > 0) doc.addPage();
+        for (let pIdx = 1; pIdx <= numPages; pIdx++) {
+            if (pIdx > 1) doc.addPage();
 
             for (const el of allElements) {
-                // Saltarnos si no es visible
                 if (el.isVisible === false) continue;
 
-                // Si no es la primera página, solo renderizar :
-                // a) Elementos marcados como repeatOnEveryPage
-                // b) Elementos de campos indexados (fotos, tuberías) que vamos a desplazar
-                const isRepeatable = (el as any).repeatOnEveryPage;
-                const fieldId = el.isShape ? undefined : (el as any).fieldId;
-                const isIndexedField = fieldId && (fieldId.startsWith('foto_') || fieldId.startsWith('tub_') || fieldId.startsWith('sum_'));
+                const isHeader = (el as any).repeatOnEveryPage;
+                const elementPage = (el as any).pageNumber || 1;
 
-                if (pIdx > 0 && !isRepeatable && !isIndexedField) {
-                    continue;
-                }
+                // Solo renderizar si es header (en cualquier pág) o si el número coincide
+                if (!isHeader && elementPage !== pIdx) continue;
 
-                // Manejar opacidad global para el elemento
+                // Manejar opacidad
                 const opacity = (el as any).opacity ?? 1;
                 if (opacity < 1) {
                     doc.setGState(new (doc as any).GState({ opacity: opacity }));
@@ -139,22 +135,35 @@ export async function generatePdfFromDesign(
                 }
 
                 if (el.isShape) {
-                    const shape = el as ShapeElement;
-                    await renderShape(doc, shape);
+                    await renderShape(doc, el as ShapeElement);
                 } else {
                     const placement = el as FieldPlacement;
 
-                    let path = FIELD_PATHS[placement.fieldId] || '';
-                    if (isIndexedField && pIdx > 0) {
-                        let offset = 0;
-                        if (placement.fieldId.startsWith('foto_')) offset = pIdx * slots.foto;
-                        else if (placement.fieldId.startsWith('tub_')) offset = pIdx * slots.tub;
-                        else if (placement.fieldId.startsWith('sum_')) offset = pIdx * slots.sum;
+                    // LÓGICA DE RESOLUCIÓN DE VALOR (FOTOS O CAMPOS)
+                    let value: any = '-';
 
-                        path = path.replace(/\[(\d+)\]/, (_, index) => `[${parseInt(index) + offset}]`);
+                    // Caso foto inteligente (Nomenclatura P, T, I, etc.)
+                    if (placement.fieldId.startsWith('foto_') && !/^\d+$/.test(placement.fieldId.split('_')[1])) {
+                        const codeMap: Record<string, string> = {
+                            'foto_panoramica': 'P', 'foto_tapa': 'T', 'foto_interior': 'I',
+                            'foto_acceso': 'A', 'foto_fondo': 'F', 'foto_medicion': 'M',
+                            'foto_entrada_1': 'E1', 'foto_salida_1': 'S1', 'foto_sumidero_1': 'SUM1'
+                        };
+                        const targetCode = codeMap[placement.fieldId];
+                        if (targetCode) {
+                            const found = pozo.fotos?.fotos?.find(f =>
+                                String(f.subcategoria || '').toUpperCase() === targetCode ||
+                                String(f.filename || '').toUpperCase().includes(`-${targetCode}`)
+                            );
+                            if (found) value = found.blobId || (found as any).dataUrl || found.id;
+                        }
+                    } else {
+                        // Campo normal
+                        const path = FIELD_PATHS[placement.fieldId];
+                        value = path ? getValueByPath(pozo, path) : '-';
                     }
 
-                    await renderField(doc, placement, pozo, path);
+                    await renderField(doc, placement, pozo, value);
                 }
             }
         }
@@ -220,19 +229,73 @@ async function renderShape(doc: jsPDF, shape: ShapeElement) {
     }
 }
 
-async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, path: string) {
-    const value = getValueByPath(pozo, path);
+async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, value: any) {
     const isPhoto = placement.fieldId.startsWith('foto_');
-
-    if (isPhoto && value && typeof value === 'string' && value.startsWith('data:image')) {
+    if (isPhoto && value && value !== '-') {
         try {
-            doc.addImage(value, 'JPEG', placement.x, placement.y, placement.width, placement.height, undefined, 'FAST');
+            let imageData = String(value);
+
+            // Si es un blobId, intentar resolverlo (esto es para el entorno real)
+            if (!imageData.startsWith('data:image')) {
+                const { blobStore } = await import('@/lib/storage/blobStore');
+                imageData = blobStore.getUrl(imageData) || imageData;
+            }
+
+            // Si sigue sin ser data URL, no podemos dibujarla en el PDF del cliente jsPDF con este motor
+            if (!imageData.startsWith('data:image') && !imageData.startsWith('blob:')) {
+                return;
+            }
+
+            doc.addImage(imageData, 'JPEG', placement.x, placement.y, placement.width, placement.height, undefined, 'FAST');
         } catch (e) {
-            console.warn(`Could not add photo from path ${path} to PDF`, e);
-            doc.setDrawColor('#cccccc');
-            doc.rect(placement.x, placement.y, placement.width, placement.height, 'D');
+            console.warn(`Could not add photo from field ${placement.fieldId} to PDF (leaving empty)`, e);
         }
     } else if (!isPhoto) {
+        const isWidget = placement.fieldId === 'widget_tuberias';
+
+        if (isWidget) {
+            // DIBUJAR TABLA DE TUBERÍAS
+            const rowHeight = 5;
+            const headerHeight = 6;
+            const cols = 3;
+            const colWidth = placement.width / cols;
+
+            // Header
+            doc.setFillColor('#f3f4f6');
+            doc.rect(placement.x, placement.y, placement.width, headerHeight, 'F');
+            doc.setDrawColor('#d1d5db');
+            doc.rect(placement.x, placement.y, placement.width, headerHeight, 'D');
+
+            doc.setFontSize(7);
+            doc.setTextColor('#374151');
+            doc.setFont('helvetica', 'bold');
+            const headers = ['Ø Diam', 'Material', 'Estado'];
+            headers.forEach((h, i) => {
+                doc.text(h, placement.x + (i * colWidth) + 2, placement.y + 4);
+            });
+
+            // Filas
+            const tuberias = (pozo.tuberias?.tuberias || []).slice(0, 8);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(6);
+
+            tuberias.forEach((t, idx) => {
+                const rowY = placement.y + headerHeight + (idx * rowHeight);
+                doc.setDrawColor('#e5e7eb');
+                doc.rect(placement.x, rowY, placement.width, rowHeight, 'D');
+
+                doc.text(sanitizeTextForPDF(t.diametro?.value || '-'), placement.x + 2, rowY + 3.5);
+                doc.text(sanitizeTextForPDF(t.material?.value || '-'), placement.x + colWidth + 2, rowY + 3.5);
+                doc.text(sanitizeTextForPDF(t.estado?.value || '-'), placement.x + (colWidth * 2) + 2, rowY + 3.5);
+            });
+
+            if (tuberias.length === 0) {
+                doc.setTextColor('#9ca3af');
+                doc.text('Sin tuberias registradas', placement.x + 5, placement.y + headerHeight + 4);
+            }
+            return;
+        }
+
         const content = String(value ?? '-');
         const fontSize = placement.fontSize || 10;
         const color = placement.color || '#000000';

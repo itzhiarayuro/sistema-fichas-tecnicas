@@ -21,6 +21,8 @@ import { PozosTable, PozoStatusDetail } from '@/components/pozos';
 import { RecommendationsPanel } from '@/components/guided';
 import { AppShell, NextStepIndicator, ProgressBar } from '@/components/layout';
 import { Pozo } from '@/types';
+import { useDesignStore } from '@/stores/designStore';
+import { useState } from 'react';
 
 export default function PozosPage() {
   const router = useRouter();
@@ -28,6 +30,7 @@ export default function PozosPage() {
   // Global store
   const pozos = useGlobalStore((state) => state.pozos);
   const setCurrentStep = useGlobalStore((state) => state.setCurrentStep);
+  const setLoading = useGlobalStore((state) => state.setLoading);
 
   // UI store
   const selectedPozoId = useUIStore((state) => state.selectedPozoId);
@@ -86,155 +89,155 @@ export default function PozosPage() {
     }
   };
 
-  // Handle generate PDF for selected pozo
-  const handleGeneratePDF = async () => {
-    if (!selectedPozoId) return;
+  // State for batch selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const { versions: customTemplates } = useDesignStore();
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('standard');
 
-    const pozo = pozos.get(selectedPozoId);
-    if (!pozo) return;
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
-    logger.info('Solicitud de generación de PDF (Lista)', { pozoId: selectedPozoId }, 'PozosPage');
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedIds(new Set(pozosArray.map(p => p.id)));
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
 
-    try {
-      // CRÍTICO: Obtener fotos globales asociadas por nomenclatura
-      const getPhotosByPozoId = useGlobalStore.getState().getPhotosByPozoId;
-      const fotosGlobales = getPhotosByPozoId(selectedPozoId);
-      const fotosIncrustadas = pozo.fotos?.fotos || [];
+  // Handle delete selected pozos
+  const handleDeleteSelected = () => {
+    if (selectedIds.size === 0) return;
 
-      // Unificar fotos eliminando duplicados por ID
-      const fotosIds = new Set(fotosIncrustadas.map(f => f.id));
-      const todasLasFotos = [...fotosIncrustadas];
-      fotosGlobales.forEach(f => {
-        if (!fotosIds.has(f.id)) {
-          todasLasFotos.push(f);
-        }
+    if (confirm(`¿Estás seguro de que deseas eliminar los ${selectedIds.size} pozos seleccionados?`)) {
+      const count = selectedIds.size;
+      useGlobalStore.setState((state) => {
+        const newPozos = new Map(state.pozos);
+        selectedIds.forEach(id => newPozos.delete(id));
+        return { pozos: newPozos };
       });
 
-      // Crear objeto pozo enriquecido con todas las fotos
-      const enrichedPozo = {
-        ...pozo,
-        fotos: {
-          ...pozo.fotos,
-          fotos: todasLasFotos
-        }
-      };
+      if (selectedPozoId && selectedIds.has(selectedPozoId)) {
+        setSelectedPozoId(null);
+      }
 
-      logger.debug('Pozo enriquecido con fotos', { totalFotos: todasLasFotos.length }, 'PozosPage');
+      setSelectedIds(new Set());
+      addToast({
+        type: 'success',
+        message: `${count} pozos eliminados correctamente`
+      });
+    }
+  };
 
-      // Intentar recuperar el estado guardado de la ficha para este pozo (Requirement Integrity)
-      const { recoverState } = await import('@/lib/state/integrity');
-      const savedFicha = recoverState(`ficha-${selectedPozoId}`, selectedPozoId);
+  // Handle generate PDF for selected pozo(s)
+  const handleGeneratePDF = async (batchIds?: string[]) => {
+    const idsToProcess = batchIds || (selectedPozoId ? [selectedPozoId] : Array.from(selectedIds));
+    if (idsToProcess.length === 0) return;
 
-      let ficha: any;
+    logger.info('Solicitud de generación de PDF (Lista)', { count: idsToProcess.length }, 'PozosPage');
+    setLoading(true);
 
-      if (savedFicha && savedFicha.stateStatus !== 'reset') {
-        // Usar la ficha guardada con sus personalizaciones
-        logger.info('Usando ficha guardada para generación de PDF', { version: savedFicha.version }, 'PozosPage');
-        ficha = savedFicha;
-      } else {
-        // Crear una ficha por defecto si no existe una guardada
-        logger.info('No se encontró ficha guardada, usando configuración por defecto', null, 'PozosPage');
-        ficha = {
-          id: `ficha-${selectedPozoId}`,
-          pozoId: selectedPozoId,
-          status: 'complete' as const,
-          sections: [
-            {
-              id: 'identificacion',
-              type: 'identificacion' as const,
-              order: 1,
-              visible: true,
-              locked: false,
-              content: {
-                codigo: { value: pozo.idPozo?.value || pozo.identificacion?.idPozo?.value || 'S/N', source: 'excel' as const },
-                direccion: { value: pozo.direccion?.value || pozo.ubicacion?.direccion?.value || 'S/D', source: 'excel' as const },
-                barrio: { value: pozo.barrio?.value || pozo.ubicacion?.barrio?.value || '-', source: 'excel' as const },
-                sistema: { value: pozo.sistema?.value || pozo.componentes?.sistema?.value || '-', source: 'excel' as const },
-                estado: { value: pozo.estado?.value || pozo.identificacion?.estado?.value || '-', source: 'excel' as const },
-                fecha: { value: pozo.fecha?.value || pozo.identificacion?.fecha?.value || '-', source: 'excel' as const },
-              },
-            },
-            {
-              id: 'estructura',
-              type: 'estructura' as const,
-              order: 2,
-              visible: true,
-              locked: false,
-              content: {
-                alturaTotal: { value: pozo.profundidad?.value || pozo.ubicacion?.profundidad?.value || '-', source: 'excel' as const },
-                rasante: { value: pozo.elevacion?.value || pozo.ubicacion?.elevacion?.value || '-', source: 'excel' as const },
-                tapaMaterial: { value: pozo.materialTapa?.value || pozo.componentes?.materialTapa?.value || '-', source: 'excel' as const },
-                tapaEstado: { value: pozo.estadoTapa?.value || pozo.componentes?.estadoTapa?.value || '-', source: 'excel' as const },
-              },
-            },
-            {
-              id: 'fotos',
-              type: 'fotos' as const,
-              order: 3,
-              visible: true,
-              locked: false,
-              content: {},
-            },
-          ] as any,
-          customizations: {
-            colors: {
-              headerBg: '#1F4E79',
-              headerText: '#FFFFFF',
-              sectionBg: '#F5F5F5',
-              sectionText: '#333333',
-              labelText: '#666666',
-              valueText: '#000000',
-              borderColor: '#CCCCCC',
-            },
-            fonts: {
-              titleSize: 14,
-              labelSize: 9,
-              valueSize: 10,
-              fontFamily: 'Roboto',
-            },
-            spacing: {
-              sectionGap: 8,
-              fieldGap: 4,
-              padding: 5,
-              margin: 15,
-            },
-            template: 'default',
-            isGlobal: false,
-          },
-          history: [],
-          errors: [],
-          lastModified: Date.now(),
-          version: 1,
+    try {
+      // 1. Obtener el diseño seleccionado
+      const customDesign = customTemplates.find(v => v.id === selectedTemplateId);
+      const isCustom = !!customDesign && selectedTemplateId !== 'standard';
+
+      for (const pozoId of idsToProcess) {
+        const pozo = pozos.get(pozoId);
+        if (!pozo) continue;
+
+        // CRÍTICO: Obtener fotos globales asociadas por nomenclatura
+        const getPhotosByPozoId = useGlobalStore.getState().getPhotosByPozoId;
+        const fotosGlobales = getPhotosByPozoId(pozoId);
+        const fotosIncrustadas = pozo.fotos?.fotos || [];
+
+        // Unificar fotos
+        const fotosIds = new Set(fotosIncrustadas.map(f => f.id));
+        const todasLasFotos = [...fotosIncrustadas];
+        fotosGlobales.forEach(f => {
+          if (!fotosIds.has(f.id)) {
+            todasLasFotos.push(f);
+          }
+        });
+
+        const enrichedPozo = {
+          ...pozo,
+          fotos: { ...pozo.fotos, fotos: todasLasFotos }
         };
+
+        if (isCustom && customDesign) {
+          // GENERACIÓN CON DISEÑO PERSONALIZADO
+          const { generatePdfFromDesign } = await import('@/lib/pdf/designBasedPdfGenerator');
+          const result = await generatePdfFromDesign(customDesign, enrichedPozo);
+          if (result.success && result.blob) {
+            const url = window.URL.createObjectURL(result.blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${enrichedPozo.idPozo?.value || pozo.identificacion.idPozo.value}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+          }
+        } else {
+          // GENERACIÓN CON DISEÑO ESTÁNDAR
+          // Intentar recuperar el estado guardado de la ficha
+          const { recoverState } = await import('@/lib/state/integrity');
+          const savedFicha = recoverState(`ficha-${pozoId}`, pozoId);
+
+          let ficha: any;
+          if (savedFicha && savedFicha.stateStatus !== 'reset') {
+            ficha = savedFicha;
+          } else {
+            ficha = {
+              id: `ficha-${pozoId}`,
+              pozoId: pozoId,
+              status: 'complete' as const,
+              sections: [
+                { id: 'identificacion', type: 'identificacion', order: 1, visible: true, locked: false, content: {} },
+                { id: 'estructura', type: 'estructura', order: 2, visible: true, locked: false, content: {} },
+                { id: 'fotos', type: 'fotos', order: 3, visible: true, locked: false, content: {} },
+              ],
+              customizations: {
+                colors: { headerBg: '#1F4E79', headerText: '#FFFFFF', sectionBg: '#F5F5F5' },
+                fonts: { titleSize: 14, labelSize: 9, valueSize: 10, fontFamily: 'Roboto' },
+                spacing: { sectionGap: 8, padding: 5, margin: 15 },
+                template: 'default'
+              },
+              version: 1,
+            };
+          }
+
+          const { pdfMakeGenerator } = await import('@/lib/pdf/pdfMakeGenerator');
+          const result = await pdfMakeGenerator.generatePDF(ficha, enrichedPozo);
+          if (result.success && result.blob) {
+            const url = window.URL.createObjectURL(result.blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${enrichedPozo.idPozo?.value || pozo.identificacion.idPozo.value}.pdf`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+          }
+        }
       }
-
-      // Generar PDF usando pdfMakeGenerator directamente en el cliente
-      // Esto es más eficiente y permite acceder a los blobs locales
-      logger.info('Importando y ejecutando pdfMakeGenerator', null, 'PozosPage');
-      const { pdfMakeGenerator } = await import('@/lib/pdf/pdfMakeGenerator');
-      const result = await pdfMakeGenerator.generatePDF(ficha, enrichedPozo);
-
-      if (!result.success || !result.blob) {
-        throw new Error(result.error || 'Error al generar el PDF con pdfMake');
-      }
-
-      const url = window.URL.createObjectURL(result.blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = result.filename || `${pozo.idPozo?.value || pozo.identificacion.idPozo.value}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
 
       addToast({
         type: 'success',
-        message: 'PDF generado correctamente'
+        message: `${idsToProcess.length} PDF(s) generados correctamente`
       });
     } catch (error) {
-      logger.error('Error en el manejador de generación de PDF', error, 'PozosPage');
-      console.error('Error:', error);
-      alert(`Error al generar el PDF: ${error instanceof Error ? error.message : 'Error desconocido'}`);
+      logger.error('Error en generación masiva', error, 'PozosPage');
+      alert('Error al generar los PDFs');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -255,6 +258,21 @@ export default function PozosPage() {
             </div>
 
             <div className="flex items-center gap-3">
+              {/* Template Selector for Batch */}
+              <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5">
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Diseño:</span>
+                <select
+                  value={selectedTemplateId}
+                  onChange={(e) => setSelectedTemplateId(e.target.value)}
+                  className="bg-transparent border-none text-sm font-bold text-primary focus:ring-0 cursor-pointer"
+                >
+                  <option value="standard">Ficha Estándar</option>
+                  {customTemplates.map(v => (
+                    <option key={v.id} value={v.id}>{v.name}</option>
+                  ))}
+                </select>
+              </div>
+
               <button
                 onClick={handleGoToUpload}
                 className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
@@ -262,13 +280,38 @@ export default function PozosPage() {
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                 </svg>
-                Cargar más archivos
+                Subir Fotos/Excel
               </button>
 
-              {selectedPozoId && (
+              {selectedIds.size > 0 && (
+                <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-4">
+                  <button
+                    onClick={() => handleGeneratePDF()}
+                    className="px-4 py-2 text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 shadow-md transition-all active:scale-95 flex items-center gap-2"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                    PDF ({selectedIds.size})
+                  </button>
+
+                  <button
+                    onClick={handleDeleteSelected}
+                    className="px-4 py-2 text-white bg-red-600 rounded-lg hover:bg-red-700 shadow-md transition-all active:scale-95 flex items-center gap-2"
+                    title="Eliminar seleccionados"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Eliminar ({selectedIds.size})
+                  </button>
+                </div>
+              )}
+
+              {selectedPozoId && selectedIds.size === 0 && (
                 <>
                   <button
-                    onClick={handleGeneratePDF}
+                    onClick={() => handleGeneratePDF([selectedPozoId])}
                     className="px-4 py-2 text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -325,6 +368,9 @@ export default function PozosPage() {
                 selectedPozoId={selectedPozoId}
                 onSelectPozo={handleSelectPozo}
                 onDoubleClickPozo={handleDoubleClickPozo}
+                selectedIds={selectedIds}
+                onToggleSelect={handleToggleSelect}
+                onSelectAll={handleSelectAll}
               />
             ) : (
               <EmptyState onUpload={handleGoToUpload} />

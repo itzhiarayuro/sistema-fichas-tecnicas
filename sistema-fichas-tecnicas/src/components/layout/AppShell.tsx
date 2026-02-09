@@ -46,7 +46,7 @@ export function AppShell({ children, noPadding = false }: AppShellProps) {
 
       {/* Contenido principal */}
       <div
-        className={`transition-all duration-300 w-full flex-1 flex flex-col
+        className={`transition-all duration-300 flex-1 flex flex-col
           ${sidebarCollapsed
             ? 'lg:ml-16'
             : 'desktop:ml-[280px] tablet:ml-[240px] ml-0'}`}

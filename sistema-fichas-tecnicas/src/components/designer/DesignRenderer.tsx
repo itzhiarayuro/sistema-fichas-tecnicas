@@ -6,6 +6,7 @@
 
 import { FichaDesignVersion } from '@/types/fichaDesign';
 import { Pozo } from '@/types/pozo';
+import { blobStore } from '@/lib/storage/blobStore';
 
 interface DesignRendererProps {
     design: FichaDesignVersion;
@@ -92,6 +93,33 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
 
     // Helper para obtener valor de campo con fallback
     const getFieldValue = (fieldId: string) => {
+        // CASO ESPECIAL: Fotos específicas por nomenclatura
+        if (fieldId.startsWith('foto_') && !/^\d+$/.test(fieldId.split('_')[1])) {
+            const codeMap: Record<string, string> = {
+                'panoramica': 'P',
+                'tapa': 'T',
+                'interior': 'I',
+                'acceso': 'A',
+                'fondo': 'F',
+                'medicion': 'M',
+                'entrada_1': 'E1-T',
+                'salida_1': 'S-T',
+                'sumidero_1': 'SUM1'
+            };
+            const typeKey = fieldId.replace('foto_', '');
+            const targetCode = codeMap[typeKey];
+
+            if (targetCode) {
+                const found = pozo.fotos?.fotos?.find(f =>
+                    String(f.subcategoria || '').toUpperCase() === targetCode ||
+                    String(f.subcategoria || '').toUpperCase() === targetCode.split('-')[0] ||
+                    String(f.tipo || '').toUpperCase().includes(typeKey.toUpperCase()) ||
+                    String(f.filename || '').toUpperCase().includes(`-${targetCode}`)
+                );
+                if (found) return found.blobId ? blobStore.getUrl(found.blobId) : (found as any).dataUrl || '-';
+            }
+        }
+
         const path = fieldMapping[fieldId];
         if (!path) return '-';
 
@@ -111,154 +139,138 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
         ...(design.placements || []).map(p => ({ ...p, isShape: false }))
     ].sort((a, b) => (Number(a.zIndex) || 0) - (Number(b.zIndex) || 0));
 
+    const numPages = design.numPages || 1;
+    const pages = Array.from({ length: numPages }, (_, i) => i + 1);
+
+    const renderElement = (el: any, isShape: boolean, currentPage: number) => {
+        const isHeader = el.repeatOnEveryPage;
+        const elementPage = el.pageNumber || 1;
+        if (!isHeader && elementPage !== currentPage) return null;
+
+        const x = el.x * MM_TO_PX;
+        const y = el.y * MM_TO_PX;
+        const width = el.width * MM_TO_PX;
+        const height = el.height * MM_TO_PX;
+
+        if (isShape) {
+            const shape = el;
+            return (
+                <div
+                    key={`${shape.id}-${currentPage}`}
+                    className="absolute overflow-hidden"
+                    style={{
+                        left: x,
+                        top: y,
+                        width,
+                        height,
+                        zIndex: shape.zIndex || 1,
+                        opacity: shape.opacity ?? 1,
+                        backgroundColor: shape.type !== 'line' && shape.fillColor ? shape.fillColor : 'transparent',
+                        borderColor: shape.strokeColor,
+                        borderWidth: shape.strokeWidth ? `${shape.strokeWidth * (zoom > 1 ? zoom : 1)}px` : 0,
+                        borderStyle: 'solid',
+                        borderRadius: shape.type === 'circle' ? '50%' : (shape.borderRadius ? `${shape.borderRadius * MM_TO_PX / zoom}px` : 0),
+                        display: shape.type === 'text' ? 'flex' : 'block',
+                        alignItems: shape.type === 'text' ? 'center' : 'stretch'
+                    }}
+                >
+                    {shape.type === 'text' && shape.content && (
+                        <div className="p-1 w-full" style={{
+                            fontSize: `${(shape.fontSize || 12) * zoom}pt`,
+                            fontFamily: shape.fontFamily || 'Inter',
+                            color: shape.color || '#000',
+                            textAlign: shape.textAlign || 'left'
+                        }}>
+                            {shape.content}
+                        </div>
+                    )}
+                    {shape.type === 'image' && shape.imageUrl && (
+                        <img src={shape.imageUrl} alt="" className="w-full h-full object-contain" />
+                    )}
+                </div>
+            );
+        } else {
+            const placement = el;
+            const value = getFieldValue(placement.fieldId);
+            const isPhoto = placement.fieldId.startsWith('foto_');
+            const isWidget = placement.fieldId === 'widget_tuberias';
+
+            return (
+                <div
+                    key={`${placement.id}-${currentPage}`}
+                    className="absolute overflow-hidden"
+                    style={{
+                        left: x,
+                        top: y,
+                        width,
+                        height,
+                        zIndex: placement.zIndex || 5,
+                        backgroundColor: placement.backgroundColor || 'transparent',
+                        borderRadius: placement.borderRadius ? `${placement.borderRadius * MM_TO_PX / zoom}px` : 0,
+                        padding: placement.padding ? `${placement.padding}px` : 0,
+                        display: 'flex',
+                        flexDirection: 'column',
+                    }}
+                >
+                    {isPhoto ? (
+                        <div className="w-full h-full relative">
+                            {(value && value !== '-') && (
+                                <img src={typeof value === 'string' && value.startsWith('data:') ? value : blobStore.getUrl(String(value))} alt="" className="w-full h-full object-cover" />
+                            )}
+                        </div>
+                    ) : isWidget ? (
+                        <div className="w-full border border-gray-300 rounded overflow-hidden text-[6pt]">
+                            <div className="grid grid-cols-3 bg-gray-100 font-bold border-b border-gray-300 p-1">
+                                <span>Ø Diam</span>
+                                <span>Material</span>
+                                <span>Estado</span>
+                            </div>
+                            {(pozo.tuberias?.tuberias || []).slice(0, 8).map((t, idx) => (
+                                <div key={idx} className="grid grid-cols-3 border-b border-gray-200 p-1 last:border-0 bg-white">
+                                    <span>{t.diametro?.value || '-'}</span>
+                                    <span>{t.material?.value || '-'}</span>
+                                    <span>{t.estado?.value || '-'}</span>
+                                </div>
+                            ))}
+                            {(pozo.tuberias?.tuberias?.length || 0) === 0 && <div className="p-2 text-center text-gray-400 italic">Sin tuberías</div>}
+                        </div>
+                    ) : (
+                        <div className="p-1">
+                            {placement.showLabel && (
+                                <span className="block truncate text-gray-400 uppercase font-bold" style={{ fontSize: `${(placement.fontSize || 10) * 0.65 * zoom}pt` }}>
+                                    {placement.customLabel || placement.fieldId}
+                                </span>
+                            )}
+                            <span className="block truncate" style={{
+                                fontSize: `${(placement.fontSize || 10) * zoom}pt`,
+                                fontFamily: placement.fontFamily || 'Inter',
+                                color: placement.color || '#000',
+                                textAlign: placement.textAlign || 'left'
+                            }}>
+                                {String(value || '-')}
+                            </span>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+    };
+
     return (
-        <div
-            id={`design-render-${design.id}`}
-            className="relative bg-white shadow-lg mx-auto overflow-hidden print:shadow-none"
-            style={{
-                width: isPortrait ? canvasWidth : canvasHeight,
-                height: isPortrait ? canvasHeight : canvasWidth,
-                minWidth: isPortrait ? canvasWidth : canvasHeight,
-                minHeight: isPortrait ? canvasHeight : canvasWidth,
-            }}
-        >
-            {allElements.map((el: any) => {
-                const x = el.x * MM_TO_PX;
-                const y = el.y * MM_TO_PX;
-                const width = el.width * MM_TO_PX;
-                const height = el.height * MM_TO_PX;
-
-                if (el.isShape) {
-                    const shape = el;
-                    return (
-                        <div
-                            key={shape.id}
-                            className="absolute overflow-hidden"
-                            style={{
-                                left: x,
-                                top: y,
-                                width,
-                                height,
-                                zIndex: shape.zIndex || 1,
-                                opacity: shape.opacity ?? 1,
-                                backgroundColor: shape.type !== 'line' && shape.fillColor ? shape.fillColor : 'transparent',
-                                borderColor: shape.strokeColor,
-                                borderWidth: shape.strokeWidth ? `${shape.strokeWidth * (zoom > 1 ? zoom : 1)}px` : 0,
-                                borderStyle: 'solid',
-                                borderRadius: shape.type === 'circle' ? '50%' : (shape.borderRadius ? `${shape.borderRadius * MM_TO_PX / zoom}px` : 0),
-                                display: shape.type === 'text' ? 'flex' : 'block',
-                                alignItems: shape.type === 'text' ? 'center' : 'stretch'
-                            }}
-                        >
-                            {shape.type === 'text' && shape.content && (
-                                <div
-                                    className="p-1 w-full"
-                                    style={{
-                                        fontSize: `${(shape.fontSize || 12) * zoom}pt`,
-                                        fontFamily: shape.fontFamily || 'Inter',
-                                        fontWeight: shape.fontWeight || 'normal',
-                                        color: shape.color || '#000000',
-                                        textAlign: (shape.textAlign as any) || 'left'
-                                    }}
-                                >
-                                    {shape.content}
-                                </div>
-                            )}
-                            {shape.type === 'line' && (
-                                <div
-                                    className="w-full h-full"
-                                    style={{
-                                        backgroundColor: shape.strokeColor || '#000',
-                                        height: `${(shape.strokeWidth || 1) * zoom}px`
-                                    }}
-                                />
-                            )}
-                            {shape.type === 'image' && shape.imageUrl && (
-                                // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                    src={shape.imageUrl}
-                                    alt="Shape"
-                                    className="w-full h-full object-contain"
-                                />
-                            )}
-                            {shape.repeatOnEveryPage && (
-                                <div className="absolute top-0 right-0 bg-blue-500 text-white text-[6px] px-1 py-0.5 rounded-bl opacity-70 pointer-events-none uppercase font-bold z-50">
-                                    Encabezado
-                                </div>
-                            )}
-                        </div>
-                    );
-                } else {
-                    const placement = el;
-                    const value = getFieldValue(placement.fieldId);
-                    const isPhoto = placement.fieldId.startsWith('foto_');
-
-                    return (
-                        <div
-                            key={placement.id}
-                            className="absolute overflow-hidden"
-                            style={{
-                                left: x,
-                                top: y,
-                                width,
-                                height,
-                                zIndex: placement.zIndex || 5,
-                                backgroundColor: placement.backgroundColor || 'transparent',
-                                borderRadius: placement.borderRadius ? `${placement.borderRadius * MM_TO_PX / zoom}px` : 0,
-                                padding: placement.padding ? `${placement.padding}px` : 0,
-                                display: 'flex',
-                                flexDirection: 'column',
-                                justifyContent: 'center'
-                            }}
-                        >
-                            {isPhoto ? (
-                                <div className="w-full h-full relative">
-                                    {value && value !== '-' ? (
-                                        // eslint-disable-next-line @next/next/no-img-element
-                                        <img
-                                            src={value as string}
-                                            alt={placement.fieldId}
-                                            className="w-full h-full object-cover"
-                                        />
-                                    ) : (
-                                        <div className="w-full h-full bg-gray-50 border border-dashed border-gray-200 flex items-center justify-center text-[8pt] text-gray-300">
-                                            Sin foto
-                                        </div>
-                                    )}
-                                </div>
-                            ) : (
-                                <div className="p-1">
-                                    {placement.showLabel && (
-                                        <span
-                                            className="block truncate text-gray-400 uppercase font-bold"
-                                            style={{ fontSize: `${(placement.fontSize || 10) * 0.65 * zoom}pt`, marginBottom: '1px' }}
-                                        >
-                                            {placement.customLabel || placement.fieldId}
-                                        </span>
-                                    )}
-                                    <span
-                                        className="block truncate"
-                                        style={{
-                                            fontSize: `${(placement.fontSize || 10) * zoom}pt`,
-                                            fontFamily: placement.fontFamily || 'Inter',
-                                            fontWeight: placement.fontWeight || 'normal',
-                                            color: placement.color || '#000000',
-                                            textAlign: (placement.textAlign as any) || 'left'
-                                        }}
-                                    >
-                                        {String(value || '-')}
-                                    </span>
-                                </div>
-                            )}
-                            {placement.repeatOnEveryPage && (
-                                <div className="absolute top-0 right-0 bg-primary text-white text-[6px] px-1 py-0.5 rounded-bl opacity-70 pointer-events-none uppercase font-bold z-50">
-                                    Encabezado
-                                </div>
-                            )}
-                        </div>
-                    );
-                }
-            })}
+        <div className="flex flex-col gap-4 items-center pb-20 overflow-auto max-h-[85vh]">
+            {pages.map(pageNo => (
+                <div
+                    key={pageNo}
+                    id={`design-render-${design.id}-p${pageNo}`}
+                    className="relative bg-white shadow-xl flex-shrink-0"
+                    style={{
+                        width: isPortrait ? canvasWidth : canvasHeight,
+                        height: isPortrait ? canvasHeight : canvasWidth,
+                    }}
+                >
+                    {allElements.map(el => renderElement(el, el.isShape, pageNo))}
+                </div>
+            ))}
         </div>
     );
 }

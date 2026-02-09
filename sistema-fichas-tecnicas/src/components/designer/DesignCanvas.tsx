@@ -39,7 +39,6 @@ export function DesignCanvas({
     onShapeAdded
 }: DesignCanvasProps) {
     const { updatePlacement, addPlacement, removePlacement, updateShape, addShape, removeShape } = useDesignStore();
-    const canvasRef = useRef<HTMLDivElement>(null);
 
     // Keyboard Shortcuts
     useEffect(() => {
@@ -99,6 +98,7 @@ export function DesignCanvas({
         startY: number;
         currX: number;
         currY: number;
+        pageNumber: number;
     } | null>(null);
 
     const [isDragging, setIsDragging] = useState(false);
@@ -117,14 +117,15 @@ export function DesignCanvas({
     // Drag & Drop desde FieldsPanel
     const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
         e.preventDefault();
-        if (!canvasRef.current || !version) return;
+        if (!version) return;
 
         try {
             const fieldData: AvailableField = JSON.parse(e.dataTransfer.getData('application/json'));
-            const rect = canvasRef.current.getBoundingClientRect();
+            const rect = e.currentTarget.getBoundingClientRect();
 
             const x = snapValue((e.clientX - rect.left) / (MM_TO_PX * zoom));
             const y = snapValue((e.clientY - rect.top) / (MM_TO_PX * zoom));
+            const pageNo = (e as any)._pageNumber || 1;
 
             const newPlacement: Omit<FieldPlacement, 'id'> = {
                 fieldId: fieldData.id,
@@ -137,14 +138,15 @@ export function DesignCanvas({
                 fontSize: 10,
                 fontFamily: 'Arial',
                 color: '#000000',
-                textAlign: 'left'
+                textAlign: 'left',
+                pageNumber: pageNo
             };
 
             addPlacement(version.id, newPlacement);
         } catch (error) {
             console.error('Error al agregar campo:', error);
         }
-    }, [version, zoom, snapValue, addPlacement]);
+    }, [version, zoom, snapValue, addPlacement, MM_TO_PX]);
 
     const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
         e.preventDefault();
@@ -157,22 +159,45 @@ export function DesignCanvas({
 
         const x = Math.min(x1, x2);
         const y = Math.min(y1, y2);
-        const width = Math.max(2, Math.abs(x2 - x1));
-        const height = Math.max(2, Math.abs(y2 - y1));
+        let width = Math.max(2, Math.abs(x2 - x1));
+        let height = Math.max(2, Math.abs(y2 - y1));
+
+        // Si es un clic simple (área muy pequeña), usar tamaño por defecto
+        if (width < 3 && height < 3) {
+            if (pendingField) {
+                width = pendingField.defaultWidth || 40;
+                height = pendingField.defaultHeight || 10;
+            } else if (pendingShape === 'image') {
+                width = 100; // 10cm - tamaño bueno para encabezados como el del usuario
+                height = 25;  // 2.5cm
+            } else if (pendingShape === 'text') {
+                width = 50;
+                height = 10;
+            } else if (pendingShape === 'line') {
+                width = 40;
+                height = 2;
+            } else {
+                width = 30;
+                height = 30;
+            }
+        }
+
+        const pageNo = drawingState?.pageNumber || 1;
 
         if (pendingField) {
             const newPlacement: Omit<FieldPlacement, 'id'> = {
                 fieldId: pendingField.id,
                 x,
                 y,
-                width: pendingField.defaultWidth,
-                height: pendingField.defaultHeight,
+                width,
+                height,
                 zIndex: version.placements.length + (version.shapes?.length || 0) + 1,
                 showLabel: true,
                 fontSize: 10,
                 fontFamily: 'Arial',
                 color: '#000000',
-                textAlign: 'left'
+                textAlign: 'left',
+                pageNumber: pageNo
             };
             addPlacement(version.id, newPlacement);
             onShapeAdded?.();
@@ -192,12 +217,13 @@ export function DesignCanvas({
                 fontFamily: pendingShape === 'text' ? 'Arial' : undefined,
                 color: pendingShape === 'text' ? '#000000' : undefined,
                 imageUrl: pendingShape === 'image' ? (pendingImageData || undefined) : undefined,
-                opacity: 1
+                opacity: 1,
+                pageNumber: pageNo
             };
             addShape(version.id, newShape);
             onShapeAdded?.();
         }
-    }, [version, pendingField, pendingShape, pendingImageData, addPlacement, addShape, onShapeAdded]);
+    }, [version, pendingField, pendingShape, pendingImageData, addPlacement, addShape, onShapeAdded, drawingState]);
 
     // Evento MouseDown en el CANVAS (para dibujo y deselección)
     const handleCanvasMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -207,18 +233,20 @@ export function DesignCanvas({
         }
 
         if (pendingShape || pendingField) {
-            if (!canvasRef.current || !version) return;
+            if (!version) return;
 
-            const rect = canvasRef.current.getBoundingClientRect();
+            const rect = e.currentTarget.getBoundingClientRect();
             const x = snapValue((e.clientX - rect.left) / (MM_TO_PX * zoom));
             const y = snapValue((e.clientY - rect.top) / (MM_TO_PX * zoom));
+            const pageNo = (e as any)._pageNumber || 1;
 
             setDrawingState({
                 active: true,
                 startX: x,
                 startY: y,
                 currX: x,
-                currY: y
+                currY: y,
+                pageNumber: pageNo
             });
             return;
         }
@@ -274,7 +302,9 @@ export function DesignCanvas({
 
         // Caso 1: Dibujando nuevo elemento
         if (drawingState?.active) {
-            const rect = canvasRef.current?.getBoundingClientRect();
+            // Encontrar el contenedor de la página actual para el rect
+            const pageElement = document.getElementById(`page-container-${drawingState.pageNumber}`);
+            const rect = pageElement?.getBoundingClientRect();
             if (!rect) return;
 
             const x = snapValue((e.clientX - rect.left) / (MM_TO_PX * zoom));
@@ -358,311 +388,160 @@ export function DesignCanvas({
 
     if (!version) return null;
 
-    return (
-        <div
-            ref={canvasRef}
-            className={`relative bg-white shadow-2xl mx-auto ${(pendingShape || pendingField) ? 'cursor-crosshair' : ''}`}
-            style={{
-                width: version.orientation === 'portrait' ? canvasWidth : canvasHeight,
-                height: version.orientation === 'portrait' ? canvasHeight : canvasWidth,
-            }}
-            onDrop={handleDrop}
-            onDragOver={handleDragOver}
-            onMouseDown={handleCanvasMouseDown}
-        >
-            {/* Grid */}
-            {snapToGrid && (
+    const numPages = version.numPages || 1;
+    const pages = Array.from({ length: numPages }, (_, i) => i + 1);
+
+    const renderElement = (el: any, isShape: boolean, currentPage: number) => {
+        const isSelected = isShape ? selectedShapeId === el.id : selectedPlacementId === el.id;
+        const isHidden = el.isVisible === false;
+
+        // Regla de Visibilidad por Página
+        // 1. Si es Header (repeatOnEveryPage), se renderiza en todas
+        // 2. Si no, solo se renderiza si su pageNumber coincide (default a pagina 1)
+        const isHeader = el.repeatOnEveryPage;
+        const elementPage = el.pageNumber || 1;
+
+        if (isHidden) return null;
+        if (!isHeader && elementPage !== currentPage) return null;
+
+        const x = el.x * MM_TO_PX * zoom;
+        const y = el.y * MM_TO_PX * zoom;
+        const width = el.width * MM_TO_PX * zoom;
+        const height = el.height * MM_TO_PX * zoom;
+
+        if (isShape) {
+            const shape = el as ShapeElement;
+            return (
                 <div
-                    className="absolute inset-0 pointer-events-none opacity-10"
+                    key={`${shape.id}-${currentPage}`}
+                    onMouseDown={(e) => handleShapeMouseDown(e, shape)}
+                    className={`absolute cursor-move select-none transition-shadow ${isSelected ? 'ring-2 ring-blue-500 ring-offset-2 z-50' : 'hover:ring-1 hover:ring-gray-300'}`}
                     style={{
-                        backgroundImage: `
-                            linear-gradient(to right, #cbd5e1 1px, transparent 1px),
-                            linear-gradient(to bottom, #cbd5e1 1px, transparent 1px)
-                        `,
-                        backgroundSize: `${gridSize * MM_TO_PX * zoom}px ${gridSize * MM_TO_PX * zoom}px`
+                        left: x,
+                        top: y,
+                        width,
+                        height,
+                        backgroundColor: shape.fillColor || 'transparent',
+                        border: shape.strokeColor ? `${(shape.strokeWidth || 1) * zoom}px solid ${shape.strokeColor}` : 'none',
+                        borderRadius: shape.type === 'circle' ? '50%' : (shape.borderRadius ? `${shape.borderRadius}px` : 0),
+                        opacity: shape.opacity ?? 1,
+                        zIndex: shape.zIndex,
+                        pointerEvents: (shape.isLocked || (isHeader && currentPage !== elementPage)) ? 'none' : 'auto'
                     }}
-                />
-            )}
-
-            {/* Shapes */}
-            {version.shapes?.map((shape) => {
-                const isSelected = selectedShapeId === shape.id;
-                const isHidden = shape.isVisible === false;
-
-                if (isHidden) return null;
-
-                if (shape.type === 'rectangle') {
-                    return (
-                        <div
-                            key={shape.id}
-                            onMouseDown={(e) => handleShapeMouseDown(e, shape)}
-                            className={`absolute cursor-move select-none transition-shadow ${isSelected ? 'ring-2 ring-blue-500 ring-offset-2 z-50' : 'hover:ring-1 hover:ring-gray-300'}`}
-                            style={{
-                                left: `${shape.x * MM_TO_PX * zoom}px`,
-                                top: `${shape.y * MM_TO_PX * zoom}px`,
-                                width: `${shape.width * MM_TO_PX * zoom}px`,
-                                height: `${shape.height * MM_TO_PX * zoom}px`,
-                                backgroundColor: shape.fillColor || 'transparent',
-                                border: shape.strokeColor ? `${shape.strokeWidth || 1}px solid ${shape.strokeColor}` : 'none',
-                                borderRadius: shape.borderRadius ? `${shape.borderRadius}px` : 0,
-                                opacity: shape.opacity ?? 1,
-                                zIndex: shape.zIndex,
-                                pointerEvents: shape.isLocked ? 'none' : 'auto'
-                            }}
-                        >
-                            {isSelected && !shape.isLocked && (
-                                <div
-                                    onMouseDown={(e) => handleResizeMouseDown(e, shape)}
-                                    className="absolute bottom-0 right-0 w-3 h-3 bg-blue-500 rounded-tl cursor-nwse-resize"
-                                />
-                            )}
+                >
+                    {shape.type === 'text' && (
+                        <div className="w-full h-full flex items-center p-1" style={{
+                            fontSize: `${(shape.fontSize || 12) * zoom}px`,
+                            fontFamily: shape.fontFamily || 'Arial',
+                            color: shape.color || '#000',
+                            textAlign: shape.textAlign || 'left'
+                        }}>
+                            {shape.content}
                         </div>
-                    );
-                }
-
-                if (shape.type === 'circle') {
-                    return (
-                        <div
-                            key={shape.id}
-                            onMouseDown={(e) => handleShapeMouseDown(e, shape)}
-                            className={`absolute rounded-full cursor-move select-none transition-shadow ${isSelected ? 'ring-2 ring-blue-500 ring-offset-2 z-50' : 'hover:ring-1 hover:ring-gray-300'}`}
-                            style={{
-                                left: `${shape.x * MM_TO_PX * zoom}px`,
-                                top: `${shape.y * MM_TO_PX * zoom}px`,
-                                width: `${shape.width * MM_TO_PX * zoom}px`,
-                                height: `${shape.height * MM_TO_PX * zoom}px`,
-                                backgroundColor: shape.fillColor || 'transparent',
-                                border: shape.strokeColor ? `${shape.strokeWidth || 1}px solid ${shape.strokeColor}` : 'none',
-                                opacity: shape.opacity ?? 1,
-                                zIndex: shape.zIndex,
-                                pointerEvents: shape.isLocked ? 'none' : 'auto'
-                            }}
-                        >
-                            {isSelected && !shape.isLocked && (
-                                <div
-                                    onMouseDown={(e) => handleResizeMouseDown(e, shape)}
-                                    className="absolute bottom-0 right-0 w-3 h-3 bg-blue-500 rounded-tl cursor-nwse-resize"
-                                />
-                            )}
+                    )}
+                    {shape.type === 'image' && shape.imageUrl && (
+                        <img src={shape.imageUrl} alt="" className="w-full h-full object-contain" />
+                    )}
+                    {isHeader && (
+                        <div className="absolute -top-4 left-0 bg-blue-500 text-white text-[8px] px-1 rounded uppercase font-bold">Encabezado</div>
+                    )}
+                    {isSelected && !shape.isLocked && elementPage === currentPage && (
+                        <div onMouseDown={(e) => handleResizeMouseDown(e, shape)} className="absolute bottom-0 right-0 w-3 h-3 bg-blue-500 rounded-tl cursor-nwse-resize" />
+                    )}
+                </div>
+            );
+        } else {
+            const placement = el as FieldPlacement;
+            return (
+                <div
+                    key={`${placement.id}-${currentPage}`}
+                    onMouseDown={(e) => handlePlacementMouseDown(e, placement)}
+                    className={`absolute cursor-move select-none transition-shadow ${isSelected ? 'ring-2 ring-blue-500 ring-offset-2 z-50 shadow-lg' : 'hover:ring-1 hover:ring-blue-300'}`}
+                    style={{
+                        left: x,
+                        top: y,
+                        width,
+                        height,
+                        zIndex: placement.zIndex,
+                        backgroundColor: placement.backgroundColor || 'rgba(255,255,255,0.9)',
+                        borderRadius: placement.borderRadius ? `${placement.borderRadius}px` : 0,
+                        padding: placement.padding ? `${placement.padding}px` : '4px',
+                        border: '1px solid #e5e7eb',
+                        pointerEvents: (placement.isLocked || (isHeader && currentPage !== elementPage)) ? 'none' : 'auto',
+                    }}
+                >
+                    {placement.showLabel && (
+                        <div className="text-[8px] text-gray-400 font-medium mb-1 truncate">
+                            {placement.customLabel || `Campo ${placement.fieldId}`}
                         </div>
-                    );
-                }
+                    )}
+                    <div className="font-medium truncate" style={{
+                        fontSize: `${(placement.fontSize || 10) * zoom}px`,
+                        fontFamily: placement.fontFamily || 'Arial',
+                        color: placement.color || '#000',
+                        textAlign: placement.textAlign || 'left'
+                    }}>
+                        {`{{${placement.fieldId}}}`}
+                    </div>
+                    {isHeader && (
+                        <div className="absolute -top-4 left-0 bg-primary text-white text-[8px] px-1 rounded uppercase font-bold">Encabezado</div>
+                    )}
+                    {isSelected && !placement.isLocked && elementPage === currentPage && (
+                        <div onMouseDown={(e) => handleResizeMouseDown(e, placement)} className="absolute bottom-0 right-0 w-3 h-3 bg-blue-500 rounded-tl cursor-nwse-resize" />
+                    )}
+                </div>
+            );
+        }
+    };
 
-                if (shape.type === 'line') {
-                    return (
-                        <div
-                            key={shape.id}
-                            onMouseDown={(e) => handleShapeMouseDown(e, shape)}
-                            className={`absolute cursor-move select-none transition-shadow ${isSelected ? 'ring-2 ring-blue-500 ring-offset-2 z-50' : 'hover:ring-1 hover:ring-gray-300'}`}
-                            style={{
-                                left: `${shape.x * MM_TO_PX * zoom}px`,
-                                top: `${shape.y * MM_TO_PX * zoom}px`,
-                                width: `${shape.width * MM_TO_PX * zoom}px`,
-                                height: `${(shape.strokeWidth || 1) * zoom}px`,
-                                backgroundColor: shape.strokeColor || '#000000',
-                                opacity: shape.opacity ?? 1,
-                                zIndex: shape.zIndex,
-                                pointerEvents: shape.isLocked ? 'none' : 'auto'
-                            }}
-                        >
-                            {isSelected && !shape.isLocked && (
-                                <div
-                                    onMouseDown={(e) => handleResizeMouseDown(e, shape)}
-                                    className="absolute bottom-0 right-0 w-3 h-3 bg-blue-500 rounded-tl cursor-nwse-resize"
-                                />
-                            )}
-                        </div>
-                    );
-                }
-
-                if (shape.type === 'triangle') {
-                    return (
-                        <div
-                            key={shape.id}
-                            onMouseDown={(e) => handleShapeMouseDown(e, shape)}
-                            className={`absolute cursor-move select-none transition-shadow ${isSelected ? 'ring-2 ring-blue-500 ring-offset-2 z-50' : 'hover:ring-1 hover:ring-gray-300'}`}
-                            style={{
-                                left: `${shape.x * MM_TO_PX * zoom}px`,
-                                top: `${shape.y * MM_TO_PX * zoom}px`,
-                                width: `${shape.width * MM_TO_PX * zoom}px`,
-                                height: `${shape.height * MM_TO_PX * zoom}px`,
-                                opacity: shape.opacity ?? 1,
-                                zIndex: shape.zIndex,
-                                pointerEvents: shape.isLocked ? 'none' : 'auto'
-                            }}
-                        >
-                            <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
-                                <polygon
-                                    points="50,0 100,100 0,100"
-                                    fill={shape.fillColor || 'transparent'}
-                                    stroke={shape.strokeColor || '#374151'}
-                                    strokeWidth={shape.strokeWidth ? (shape.strokeWidth * (100 / (shape.width * MM_TO_PX * zoom))) : 1}
-                                />
-                            </svg>
-                            {isSelected && !shape.isLocked && (
-                                <div
-                                    onMouseDown={(e) => handleResizeMouseDown(e, shape)}
-                                    className="absolute bottom-0 right-0 w-3 h-3 bg-blue-500 rounded-tl cursor-nwse-resize"
-                                />
-                            )}
-                        </div>
-                    );
-                }
-
-                if (shape.type === 'text') {
-                    return (
-                        <div
-                            key={shape.id}
-                            onMouseDown={(e) => handleShapeMouseDown(e, shape)}
-                            className={`absolute cursor-move select-none transition-shadow flex items-center ${isSelected ? 'ring-2 ring-blue-500 ring-offset-2 z-50' : 'hover:ring-1 hover:ring-gray-300'}`}
-                            style={{
-                                left: `${shape.x * MM_TO_PX * zoom}px`,
-                                top: `${shape.y * MM_TO_PX * zoom}px`,
-                                width: `${shape.width * MM_TO_PX * zoom}px`,
-                                height: `${shape.height * MM_TO_PX * zoom}px`,
-                                fontSize: `${(shape.fontSize || 12) * zoom}px`,
-                                fontFamily: shape.fontFamily || 'Arial',
-                                fontWeight: shape.fontWeight || 'normal',
-                                color: shape.color || '#000000',
-                                textAlign: shape.textAlign || 'left',
-                                opacity: shape.opacity ?? 1,
-                                zIndex: shape.zIndex,
-                                pointerEvents: shape.isLocked ? 'none' : 'auto'
-                            }}
-                        >
-                            {shape.content || 'Texto'}
-                            {isSelected && !shape.isLocked && (
-                                <div
-                                    onMouseDown={(e) => handleResizeMouseDown(e, shape)}
-                                    className="absolute bottom-0 right-0 w-3 h-3 bg-blue-500 rounded-tl cursor-nwse-resize"
-                                />
-                            )}
-                        </div>
-                    );
-                }
-
-                if (shape.type === 'image') {
-                    return (
-                        <div
-                            key={shape.id}
-                            onMouseDown={(e) => handleShapeMouseDown(e, shape)}
-                            className={`absolute cursor-move select-none transition-shadow ${isSelected ? 'ring-2 ring-blue-500 ring-offset-2 z-50' : 'hover:ring-1 hover:ring-gray-300'}`}
-                            style={{
-                                left: `${shape.x * MM_TO_PX * zoom}px`,
-                                top: `${shape.y * MM_TO_PX * zoom}px`,
-                                width: `${shape.width * MM_TO_PX * zoom}px`,
-                                height: `${shape.height * MM_TO_PX * zoom}px`,
-                                opacity: shape.opacity ?? 1,
-                                zIndex: shape.zIndex,
-                                pointerEvents: shape.isLocked ? 'none' : 'auto'
-                            }}
-                        >
-                            {shape.imageUrl ? (
-                                <img
-                                    src={shape.imageUrl}
-                                    alt="User asset"
-                                    className="w-full h-full object-contain pointer-events-none"
-                                />
-                            ) : (
-                                <div className="w-full h-full bg-gray-200 flex items-center justify-center text-gray-400">
-                                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                    </svg>
-                                </div>
-                            )}
-                            {isSelected && !shape.isLocked && (
-                                <div
-                                    onMouseDown={(e) => handleResizeMouseDown(e, shape)}
-                                    className="absolute bottom-0 right-0 w-3 h-3 bg-blue-500 rounded-tl cursor-nwse-resize"
-                                />
-                            )}
-                        </div>
-                    );
-                }
-
-                return null;
-            })}
-
-            {/* Placements */}
-            {version.placements.map((placement) => {
-                if (placement.isVisible === false) return null;
-
-                return (
+    return (
+        <div className="flex flex-col gap-8 pb-32 items-center">
+            {pages.map(pageNo => (
+                <div key={pageNo} className="flex flex-col items-center gap-2">
+                    <div className="text-xs font-bold text-gray-400 uppercase tracking-widest">Página {pageNo}</div>
                     <div
-                        key={placement.id}
-                        onMouseDown={(e) => handlePlacementMouseDown(e, placement)}
-                        className={`absolute cursor-move select-none transition-shadow ${selectedPlacementId === placement.id
-                            ? 'ring-2 ring-blue-500 ring-offset-2 z-50 shadow-lg'
-                            : 'hover:ring-1 hover:ring-blue-300'
-                            }`}
+                        id={`page-container-${pageNo}`}
+                        className={`relative bg-white shadow-2xl ${(pendingShape || pendingField) ? 'cursor-crosshair' : ''}`}
                         style={{
-                            left: `${placement.x * MM_TO_PX * zoom}px`,
-                            top: `${placement.y * MM_TO_PX * zoom}px`,
-                            width: `${placement.width * MM_TO_PX * zoom}px`,
-                            height: `${placement.height * MM_TO_PX * zoom}px`,
-                            zIndex: placement.zIndex,
-                            backgroundColor: placement.backgroundColor || 'rgba(255,255,255,0.9)',
-                            borderRadius: placement.borderRadius ? `${placement.borderRadius}px` : 0,
-                            padding: placement.padding ? `${placement.padding}px` : '4px',
-                            border: '1px solid #e5e7eb',
-                            pointerEvents: placement.isLocked ? 'none' : 'auto',
-                            opacity: placement.isLocked ? 0.8 : 1
+                            width: version.orientation === 'portrait' ? canvasWidth : canvasHeight,
+                            height: version.orientation === 'portrait' ? canvasHeight : canvasWidth,
+                        }}
+                        onDrop={(e) => {
+                            // Inyectar el número de página en el evento de drop
+                            (e as any)._pageNumber = pageNo;
+                            handleDrop(e);
+                        }}
+                        onDragOver={handleDragOver}
+                        onMouseDown={(e) => {
+                            (e as any)._pageNumber = pageNo;
+                            handleCanvasMouseDown(e);
                         }}
                     >
-                        {placement.showLabel && (
-                            <div className="text-[8px] text-gray-400 font-medium mb-1 truncate">
-                                {placement.customLabel || `Campo ${placement.fieldId}`}
-                            </div>
+                        {/* Grid */}
+                        {snapToGrid && (
+                            <div className="absolute inset-0 pointer-events-none opacity-10" style={{
+                                backgroundImage: `linear-gradient(to right, #cbd5e1 1px, transparent 1px), linear-gradient(to bottom, #cbd5e1 1px, transparent 1px)`,
+                                backgroundSize: `${gridSize * MM_TO_PX * zoom}px ${gridSize * MM_TO_PX * zoom}px`
+                            }} />
                         )}
 
-                        <div
-                            className="font-medium truncate"
-                            style={{
-                                fontSize: `${(placement.fontSize || 10) * zoom}px`,
-                                fontFamily: placement.fontFamily || 'Arial',
-                                fontWeight: placement.fontWeight || 'normal',
-                                color: placement.color || '#000000',
-                                textAlign: placement.textAlign || 'left'
-                            }}
-                        >
-                            {`{{${placement.fieldId}}}`}
-                        </div>
+                        {/* Elementos de esta página */}
+                        {version.shapes?.map(s => renderElement(s, true, pageNo))}
+                        {version.placements.map(p => renderElement(p, false, pageNo))}
 
-                        {selectedPlacementId === placement.id && !placement.isLocked && (
-                            <div
-                                onMouseDown={(e) => handleResizeMouseDown(e, placement)}
-                                className="absolute bottom-0 right-0 w-3 h-3 bg-blue-500 rounded-tl cursor-nwse-resize shadow-sm"
-                            />
+                        {/* Ghost element while drawing */}
+                        {drawingState?.active && drawingState.pageNumber === pageNo && (
+                            <div className="absolute border-2 border-blue-500 bg-blue-500/10 pointer-events-none z-[100]" style={{
+                                left: Math.min(drawingState.startX, drawingState.currX) * MM_TO_PX * zoom,
+                                top: Math.min(drawingState.startY, drawingState.currY) * MM_TO_PX * zoom,
+                                width: Math.abs(drawingState.currX - drawingState.startX) * MM_TO_PX * zoom,
+                                height: Math.abs(drawingState.currY - drawingState.startY) * MM_TO_PX * zoom,
+                                borderRadius: pendingShape === 'circle' ? '50%' : '0px'
+                            }} />
                         )}
-                    </div>
-                );
-            })}
-
-            {/* Ghost drawing element */}
-            {drawingState?.active && (
-                <div
-                    className="absolute border-2 border-blue-500 bg-blue-500/10 pointer-events-none z-[100]"
-                    style={{
-                        left: `${Math.min(drawingState.startX, drawingState.currX) * MM_TO_PX * zoom}px`,
-                        top: `${Math.min(drawingState.startY, drawingState.currY) * MM_TO_PX * zoom}px`,
-                        width: `${Math.abs(drawingState.currX - drawingState.startX) * MM_TO_PX * zoom}px`,
-                        height: `${Math.abs(drawingState.currY - drawingState.startY) * MM_TO_PX * zoom}px`,
-                        borderRadius: pendingShape === 'circle' ? '50%' : '0px'
-                    }}
-                />
-            )}
-
-            {/* Drop Zone Indicator */}
-            {version.placements.length === 0 && (!version.shapes || version.shapes.length === 0) && (
-                <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                    <div className="text-center text-gray-300">
-                        <svg className="w-16 h-16 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                        </svg>
-                        <p className="text-sm font-medium">Arrastra campos o haz clic en figuras</p>
                     </div>
                 </div>
-            )}
+            ))}
         </div>
     );
 }

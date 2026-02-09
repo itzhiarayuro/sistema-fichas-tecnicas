@@ -20,8 +20,8 @@ export function ImagesPanel({ onImageSelect }: ImagesPanelProps) {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        if (file.size > 500 * 1024) {
-            alert('La imagen es demasiado grande. Máximo 500KB.');
+        if (file.size > 5 * 1024 * 1024) {
+            alert('La imagen es demasiado grande. Máximo 5MB.');
             return;
         }
 
@@ -57,7 +57,7 @@ export function ImagesPanel({ onImageSelect }: ImagesPanelProps) {
                     type="file"
                     ref={fileInputRef}
                     className="hidden"
-                    accept="image/png, image/jpeg, image/svg+xml"
+                    accept="image/*"
                     onChange={handleFileUpload}
                 />
             </div>
@@ -66,7 +66,7 @@ export function ImagesPanel({ onImageSelect }: ImagesPanelProps) {
                 <div className="flex-1 flex items-center justify-center text-center text-gray-400">
                     <div>
                         <p className="text-xs">Sin imágenes</p>
-                        <p className="text-[9px]">Sube un logo (max 500KB)</p>
+                        <p className="text-[9px]">Sube un logo o encabezado (max 5MB)</p>
                     </div>
                 </div>
             ) : (

@@ -23,6 +23,9 @@ interface PozosTableProps {
   selectedPozoId: string | null;
   onSelectPozo: (pozoId: string) => void;
   onDoubleClickPozo?: (pozoId: string) => void;
+  selectedIds: Set<string>;
+  onToggleSelect: (pozoId: string) => void;
+  onSelectAll: (checked: boolean) => void;
 }
 
 interface FilterState {
@@ -36,7 +39,10 @@ export function PozosTable({
   pozos,
   selectedPozoId,
   onSelectPozo,
-  onDoubleClickPozo
+  onDoubleClickPozo,
+  selectedIds,
+  onToggleSelect,
+  onSelectAll
 }: PozosTableProps) {
   const [sortField, setSortField] = useState<SortField>('codigo');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
@@ -289,6 +295,14 @@ export function PozosTable({
         <table className="w-full">
           <thead className="bg-gray-50 sticky top-0">
             <tr>
+              <th className="px-4 py-3 text-left w-10">
+                <input
+                  type="checkbox"
+                  className="rounded border-gray-300 text-primary focus:ring-primary h-4 w-4"
+                  checked={pozos.length > 0 && selectedIds.size === pozos.length}
+                  onChange={(e) => onSelectAll(e.target.checked)}
+                />
+              </th>
               <th className="px-4 py-3 text-left">
                 <button
                   onClick={() => handleSort('codigo')}
@@ -391,6 +405,14 @@ export function PozosTable({
                       }
                     `}
                   >
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        className="rounded border-gray-300 text-primary focus:ring-primary h-4 w-4"
+                        checked={selectedIds.has(pozo.id)}
+                        onChange={() => onToggleSelect(pozo.id)}
+                      />
+                    </td>
                     <td className="px-4 py-3">
                       <span className={`font-medium ${isSelected ? 'text-primary' : 'text-gray-900'}`}>
                         {String(pozo.idPozo?.value || '')}

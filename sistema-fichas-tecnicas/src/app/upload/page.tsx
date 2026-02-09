@@ -17,6 +17,7 @@ import { useRouter } from 'next/navigation';
 import { DropZone, DropZoneStatus, FileList, FileItem, UploadProgress, UploadStats, ExcelFormatGuide } from '@/components/upload';
 import { RecommendationsPanel } from '@/components/guided';
 import { AppShell, NextStepIndicator, ProgressBar } from '@/components/layout';
+import { logger } from '@/lib/logger';
 import { validateFile, isExcelFile, isImageFile } from '@/lib/validators';
 import { parseExcelFile, getParseResultSummary } from '@/lib/parsers/excelParser';
 import { parseNomenclatura } from '@/lib/parsers/nomenclatura';
@@ -154,12 +155,38 @@ export default function UploadPage() {
   const handleFilesAccepted = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
 
+    // Filtrar archivos no deseados según solicitud del usuario (Requirement: Eliminar -T, AT, -Z)
+    const filteredFiles = acceptedFiles.filter(file => {
+      // Ignorar archivos que no son imágenes para este filtro específico de sufijos
+      if (!isImageFile(file.name)) return true;
+
+      const nameWithoutExt = file.name.replace(/\.[^/.]+$/, '').trim().toUpperCase();
+      const shouldExclude = nameWithoutExt.endsWith('AT') ||
+        nameWithoutExt.endsWith('-Z');
+
+      if (shouldExclude) {
+        logger.info(`Archivo excluido por regla de sufijo: ${file.name}`, { file: file.name }, 'UploadPage');
+      }
+
+      return !shouldExclude;
+    });
+
+    const excludedCount = acceptedFiles.length - filteredFiles.length;
+    if (excludedCount > 0) {
+      showInfo(`Se han omitido ${excludedCount} archivos con sufijos no permitidos (AT, -Z) para evitar errores.`);
+    }
+
+    if (filteredFiles.length === 0) {
+      setDropZoneStatus('idle');
+      return;
+    }
+
     setIsProcessing(true);
     setDropZoneStatus('uploading');
     setProgress(0);
 
     const newStats: UploadStats = {
-      totalFiles: acceptedFiles.length,
+      totalFiles: filteredFiles.length,
       processedFiles: 0,
       totalPozos: 0,
       totalPhotos: 0,
@@ -170,7 +197,7 @@ export default function UploadPage() {
     setStats(newStats);
 
     // Crear items de archivo iniciales
-    const fileItems: FileItem[] = acceptedFiles.map(file => ({
+    const fileItems: FileItem[] = filteredFiles.map(file => ({
       id: generateFileId(),
       name: file.name,
       size: file.size,
@@ -184,8 +211,8 @@ export default function UploadPage() {
     const allPhotos: FotoInfo[] = [];
 
     // Procesar archivos uno por uno
-    for (let i = 0; i < acceptedFiles.length; i++) {
-      const file = acceptedFiles[i];
+    for (let i = 0; i < filteredFiles.length; i++) {
+      const file = filteredFiles[i];
       const fileItem = fileItems[i];
 
       // Actualizar estado a procesando
@@ -267,7 +294,7 @@ export default function UploadPage() {
 
       // Actualizar progreso
       newStats.processedFiles = i + 1;
-      const progressPercent = ((i + 1) / acceptedFiles.length) * 100;
+      const progressPercent = ((i + 1) / filteredFiles.length) * 100;
       setProgress(progressPercent);
       setStats({ ...newStats });
     }

@@ -1333,24 +1333,72 @@ export class PDFMakeGenerator {
             const value = this.getFieldValueByPath(pozo, field.fieldPath);
 
             // Caso especial: FOTOS
-            if (field.category === 'fotos' && value) {
+            const isPhotoField = field.category === 'fotos' || field.id.startsWith('foto_');
+            if (isPhotoField) {
                 try {
-                    let imageData = value;
-                    if (value.startsWith('blob:') || !value.startsWith('data:')) {
-                        imageData = (blobStore.get(value) as unknown as string) || value;
+                    logger.debug(`Procesando campo de foto en diseño personalizado: ${field.id}`, { fieldId: field.id, value }, 'PDFMakeGenerator');
+
+                    let imageData: string | null = null;
+
+                    // A. BUSCAR POR NOMBRE ESPECÍFICO (Si no es una foto genérica foto_1, foto_2...)
+                    const isGeneric = /^\d+$/.test(field.id.split('_')[1]);
+                    if (!isGeneric) {
+                        const codeMap: Record<string, string> = {
+                            'panoramica': 'P',
+                            'tapa': 'T',
+                            'interior': 'I',
+                            'acceso': 'A',
+                            'fondo': 'F',
+                            'medicion': 'M',
+                            'entrada_1': 'E1-T',
+                            'salida_1': 'S-T',
+                            'sumidero_1': 'SUM1'
+                        };
+                        const typeKey = field.id.replace('foto_', '');
+                        const targetCode = codeMap[typeKey];
+
+                        if (targetCode) {
+                            const found = pozo.fotos?.fotos?.find(f =>
+                                String(f.subcategoria || '').toUpperCase() === targetCode ||
+                                String(f.subcategoria || '').toUpperCase() === targetCode.split('-')[0] ||
+                                String(f.tipo || '').toUpperCase().includes(typeKey.toUpperCase()) ||
+                                String(f.filename || '').toUpperCase().includes(`-${targetCode}`)
+                            );
+                            if (found) {
+                                imageData = await this.getPhotoData(found);
+                            }
+                        }
+                    }
+
+                    // B. FALLBACK A RUTA DEL CAMPO (Para fotos genéricas foto_1...12)
+                    if (!imageData) {
+                        // Obtener la información completa de la foto para getPhotoData
+                        // El path suele ser fotos.fotos[X].blobId
+                        const parentPath = field.fieldPath.substring(0, field.fieldPath.lastIndexOf('.'));
+                        const photoObj = parentPath ? this.getFieldValueByObjectPath(pozo, parentPath) : null;
+
+                        if (photoObj && typeof photoObj === 'object') {
+                            // Intentar obtener los datos reales usando el helper robusto
+                            imageData = await this.getPhotoData(photoObj as any);
+                        } else {
+                            // Fallback si no hay objeto completo, intentar resolver el value directamente
+                            if (typeof value === 'string' && value.startsWith('data:')) {
+                                imageData = value;
+                            } else if (typeof value === 'string') {
+                                imageData = await this.getPhotoData({ blobId: value, filename: 'foto' } as any);
+                            }
+                        }
                     }
 
                     if (imageData && imageData.startsWith('data:')) {
-                        doc.addImage(imageData, 'JPEG', placement.x, placement.y, placement.width, placement.height);
+                        doc.addImage(imageData, 'JPEG', placement.x, placement.y, placement.width, placement.height, undefined, 'FAST');
                     } else {
-                        doc.setDrawColor(200, 200, 200);
-                        doc.rect(placement.x, placement.y, placement.width, placement.height, 'D');
-                        doc.setFontSize(8);
-                        doc.text('Foto no disponible', placement.x + 2, placement.y + 5);
+                        logger.debug(`Omitiendo renderizado de foto vacía para ${field.id}`, null, 'PDFMakeGenerator');
+                        // No dibujamos nada, el espacio queda en blanco (mantiene el diseño)
                     }
-                    continue;
+                    continue; // Importante: saltar el renderizado de texto para fotos
                 } catch (e) {
-                    logger.warn('Error agregando foto de pozo a jsPDF', { fieldId: field.id, e }, 'PDFMakeGenerator');
+                    logger.error('Error agregando foto de pozo a jsPDF en diseño personalizado', { fieldId: field.id, e }, 'PDFMakeGenerator');
                 }
             }
 
@@ -1386,18 +1434,26 @@ export class PDFMakeGenerator {
      * Resuelve un valor del objeto Pozo usando un path de strings
      */
     private getFieldValueByPath(obj: any, path: string): string {
+        const val = this.getFieldValueByObjectPath(obj, path);
+        return val !== undefined && val !== null ? String(val) : '';
+    }
+
+    /**
+     * Obtiene el valor crudo (objeto o valor) de una ruta
+     */
+    private getFieldValueByObjectPath(obj: any, path: string): any {
         try {
-            if (!path) return '';
+            if (!path) return undefined;
             const cleanPath = path.replace(/\[(\d+)\]/g, '.$1');
             const parts = cleanPath.split('.');
             let current = obj;
             for (const part of parts) {
-                if (current === null || current === undefined) return '';
+                if (current === null || current === undefined) return undefined;
                 current = current[part];
             }
-            return current !== undefined && current !== null ? String(current) : '';
+            return current;
         } catch (e) {
-            return '';
+            return undefined;
         }
     }
 }
