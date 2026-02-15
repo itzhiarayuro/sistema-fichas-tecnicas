@@ -80,6 +80,8 @@ export interface FieldPlacement {
     borderRadius?: number;
     padding?: number;
     textAlign?: 'left' | 'center' | 'right';
+    borderWidth?: number;
+    borderColor?: string;
 
     // Configuración de label
     showLabel: boolean;

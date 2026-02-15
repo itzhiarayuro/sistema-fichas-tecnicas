@@ -94,7 +94,7 @@ class ResourceManager {
      */
     public getStats(): SystemStats {
         const blobStats = blobStore.getStats();
-        const memMB = parseFloat(blobStats.totalSizeMB);
+        const memMB = blobStats.totalSizeInMemory / (1024 * 1024);
 
         let memoryStatus: 'normal' | 'warning' | 'critical' = 'normal';
         if (memMB > this.maxMemoryMB) memoryStatus = 'critical';
@@ -103,7 +103,7 @@ class ResourceManager {
         return {
             estimatedMemoryMB: memMB,
             workerCount: this.activeWorkers,
-            blobCount: blobStats.count,
+            blobCount: blobStats.totalStored,
             isDegraded: this.isDegradedMode,
             activeFichas: this.activeFichas.size,
             memoryStatus

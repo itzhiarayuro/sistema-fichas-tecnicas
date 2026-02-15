@@ -82,6 +82,35 @@ export function ImageEditor({
   // Hook para confirmación de eliminación
   const { confirmDeleteImage } = useConfirmDialog();
 
+  // Estado para URL de imagen (maneja blobs eviccionados de RAM)
+  const [imageUrl, setImageUrl] = useState<string>('');
+  const [imageLoading, setImageLoading] = useState(false);
+
+  // Cargar imagen de forma lazy (si fue eviccionada de RAM, recuperar de IDB)
+  useEffect(() => {
+    if (!image.blobId) return;
+
+    // Intentar obtener URL síncrona primero
+    const url = blobStore.getUrl(image.blobId);
+    if (url) {
+      setImageUrl(url);
+      return;
+    }
+
+    // Si no está en RAM, cargar desde IndexedDB
+    setImageLoading(true);
+    blobStore.ensureLoaded(image.blobId)
+      .then((loadedUrl) => {
+        setImageUrl(loadedUrl);
+      })
+      .catch(() => {
+        setImageUrl('');
+      })
+      .finally(() => {
+        setImageLoading(false);
+      });
+  }, [image.blobId]);
+
   // Sync local size with prop - Avoid infinite loop by checking primitive values
   useEffect(() => {
     if (!isResizing && (localSize.width !== size.width || localSize.height !== size.height)) {
@@ -170,13 +199,20 @@ export function ImageEditor({
         style={{ width: localSize.width, height: localSize.height }}
       >
         {/* Image */}
-        {image.blobId ? (
+        {image.blobId && imageUrl ? (
           <img
-            src={blobStore.getUrl(image.blobId)}
+            src={imageUrl}
             alt={image.descripcion || image.filename}
             className="w-full h-full object-cover"
             draggable={false}
           />
+        ) : image.blobId && imageLoading ? (
+          <div className="w-full h-full bg-gray-100 flex items-center justify-center">
+            <svg className="w-6 h-6 text-gray-400 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+          </div>
         ) : (
           <div className="w-full h-full bg-gray-100 flex items-center justify-center">
             <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -44,6 +44,8 @@ interface GlobalState {
   // Datos cargados (inmutables después de carga)
   pozos: Map<string, Pozo>;
   photos: Map<string, FotoInfo>;
+  // Índice caché para búsqueda rápida: pozoCode -> photoIds[]
+  photosByCodeCache: Map<string, string[]>;
   uploadedImages: { id: string; name: string; date: number; data: string }[];
 
   // Configuración global
@@ -59,6 +61,7 @@ interface GlobalState {
   loadPozos: (pozos: Pozo[]) => void;
   setPozos: (pozos: Map<string, Pozo>) => void;
   addPozo: (pozo: Pozo) => void;
+  addPozosBulk: (pozos: Pozo[]) => void;
   removePozo: (pozoId: string) => void;
 
   // Acciones de imágenes subidas
@@ -69,6 +72,7 @@ interface GlobalState {
   indexPhotos: (photos: FotoInfo[]) => void;
   setPhotos: (photos: Map<string, FotoInfo>) => void;
   addPhoto: (photo: FotoInfo) => void;
+  addPhotosBulk: (photos: FotoInfo[]) => void;
   removePhoto: (photoId: string) => void;
 
   // Acciones de configuración
@@ -155,6 +159,8 @@ const mapStorage = {
       if (parsed.state.photos) {
         parsed.state.photos = new Map(parsed.state.photos);
       }
+      // Re-inicializar caché vacía (se poblará al cargar/indexar)
+      parsed.state.photosByCodeCache = new Map();
     }
     return parsed;
   },
@@ -190,6 +196,7 @@ export const useGlobalStore = create<GlobalState>()(
       // Initial state
       pozos: new Map(),
       photos: new Map(),
+      photosByCodeCache: new Map(),
       uploadedImages: [],
       config: defaultConfig,
       templates: defaultTemplates,
@@ -209,6 +216,12 @@ export const useGlobalStore = create<GlobalState>()(
       addPozo: (pozo) => set((state) => {
         const newPozos = new Map(state.pozos);
         newPozos.set(pozo.id, pozo);
+        return { pozos: newPozos };
+      }),
+
+      addPozosBulk: (newPozosList) => set((state) => {
+        const newPozos = new Map(state.pozos);
+        newPozosList.forEach(p => newPozos.set(p.id, p));
         return { pozos: newPozos };
       }),
 
@@ -238,17 +251,58 @@ export const useGlobalStore = create<GlobalState>()(
       // Photo actions
       indexPhotos: (photos) => set(() => {
         const photosMap = new Map<string, FotoInfo>();
-        photos.forEach((photo) => photosMap.set(photo.id, photo));
-        return { photos: photosMap };
+        const cache = new Map<string, string[]>();
+
+        photos.forEach((photo) => {
+          photosMap.set(photo.id, photo);
+
+          // Actualizar caché de búsqueda
+          if (photo.filename) {
+            const code = photo.filename.split('-')[0].toUpperCase();
+            const existing = cache.get(code) || [];
+            cache.set(code, [...existing, photo.id]);
+          }
+        });
+
+        return { photos: photosMap, photosByCodeCache: cache };
       }),
 
       setPhotos: (photos) => set({ photos }),
 
       addPhoto: (photo) => set((state) => {
         const newPhotos = new Map(state.photos);
-        // Aseguramos que solo guardamos la referencia (id, blobId, etc.)
         newPhotos.set(photo.id, photo);
-        return { photos: newPhotos };
+
+        // Actualizar caché
+        const newCache = new Map(state.photosByCodeCache);
+        if (photo.filename) {
+          const code = photo.filename.split('-')[0].toUpperCase();
+          const existing = newCache.get(code) || [];
+          if (!existing.includes(photo.id)) {
+            newCache.set(code, [...existing, photo.id]);
+          }
+        }
+
+        return { photos: newPhotos, photosByCodeCache: newCache };
+      }),
+
+      addPhotosBulk: (newPhotosList) => set((state) => {
+        const newPhotos = new Map(state.photos);
+        const newCache = new Map(state.photosByCodeCache);
+
+        newPhotosList.forEach(photo => {
+          newPhotos.set(photo.id, photo);
+          if (photo.filename) {
+            const code = photo.filename.split('-')[0].toUpperCase();
+            const existing = newCache.get(code) || [];
+            if (!existing.includes(photo.id)) {
+              existing.push(photo.id);
+              newCache.set(code, existing);
+            }
+          }
+        });
+
+        return { photos: newPhotos, photosByCodeCache: newCache };
       }),
 
       removePhoto: (photoId) => set((state) => {
@@ -306,40 +360,27 @@ export const useGlobalStore = create<GlobalState>()(
       getPhotoById: (id) => get().photos.get(id),
 
       getPhotosByPozoId: (pozoId) => {
-        const photos: FotoInfo[] = [];
-        if (!pozoId) return photos;
+        if (!pozoId) return [];
+        const state = get();
 
-        const safePozoId = String(pozoId);
-
-        // El pozoId ahora es único por sesión (pozo-CODIGO-timestamp-index)
-        // Extraemos solo la parte del código (ej: M680 o MH-61) para asociar fotos
-        // Buscamos lo que hay entre el primer guion y el penúltimo guion (el timestamp)
-        let targetCode = safePozoId.toUpperCase();
-        if (safePozoId.startsWith('pozo-')) {
-          const parts = safePozoId.split('-');
+        // 1. Extraer código del pozo (ej: M680)
+        let targetCode = String(pozoId).toUpperCase();
+        if (targetCode.startsWith('POZO-')) {
+          const parts = targetCode.split('-');
           if (parts.length >= 4) {
-            // Caso: pozo-MH-61-123456789-0 -> parts: ["pozo", "MH", "61", "123456789", "0"]
-            // El código es todo lo que hay entre "pozo" y el timestamp (penúltimo)
-            targetCode = parts.slice(1, -2).join('-').toUpperCase();
+            targetCode = parts.slice(1, -2).join('-');
           } else if (parts.length >= 3) {
-            // Caso básico: pozo-M680-timestamp-index
-            targetCode = parts[1].toUpperCase();
+            targetCode = parts[1];
           }
         }
 
-        get().photos.forEach((photo) => {
-          if (!photo?.filename) return;
+        // 2. Buscar en caché (O(1) o muy cercano)
+        const photoIds = state.photosByCodeCache.get(targetCode) || [];
 
-          // Normalizar filename (remover extensión y a mayúsculas)
-          const nameWithoutExt = String(photo.filename).replace(/\.[^/.]+$/, '').toUpperCase();
-
-          // El filename debe empezar con el código seguido de un guion (ej: M680-P)
-          // O ser exactamente el código si no tiene sufijo
-          if (nameWithoutExt === targetCode || nameWithoutExt.startsWith(`${targetCode}-`)) {
-            photos.push(photo);
-          }
-        });
-        return photos;
+        // 3. Devolver objetos completos
+        return photoIds
+          .map(id => state.photos.get(id))
+          .filter((p): p is FotoInfo => !!p);
       },
     }),
     {

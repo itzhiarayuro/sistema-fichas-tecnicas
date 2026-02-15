@@ -18,6 +18,7 @@ export interface WorkerResponse<T> {
 class WorkerRegistry {
     private static instance: WorkerRegistry;
     private excelWorker: Worker | null = null;
+    private photoWorker: Worker | null = null;
 
     private constructor() { }
 
@@ -28,39 +29,58 @@ class WorkerRegistry {
         return WorkerRegistry.instance;
     }
 
-    /**
-     * Ejecuta una tarea en el worker de Excel con fallback al hilo principal
-     */
     public async runExcelTask<T>(buffer: ArrayBuffer, onProgress?: (p: number, m: string) => void): Promise<T> {
-        try {
-            return await this.executeInWorker<T>(buffer, onProgress);
-        } catch (error: any) {
-            console.warn('Web Worker falló, reintentando en hilo principal:', error);
-
-            // Fallback: Ejecutar directamente si el Worker falla (ej: por problemas de URL en Windows)
-            try {
-                const { parseExcelFile } = await import('../parsers/excelParser');
-                const result = await parseExcelFile(buffer);
-                return result as unknown as T;
-            } catch (fallbackError) {
-                console.error('Error crítico: Fallback también falló:', fallbackError);
-                throw fallbackError;
-            }
-        }
+        return this.executeInWorker<T>(
+            'excel',
+            { buffer },
+            [buffer],
+            onProgress
+        );
     }
 
     /**
-     * Lógica interna para ejecutar en Worker
+     * Ejecuta una tarea de procesamiento de fotos
      */
-    private async executeInWorker<T>(buffer: ArrayBuffer, onProgress?: (p: number, m: string) => void): Promise<T> {
+    public async runPhotoTask<T>(
+        file: File | Blob,
+        options: { maxWidth?: number; maxHeight?: number; quality?: number; generateHash?: boolean },
+        onProgress?: (p: number, m: string) => void
+    ): Promise<T> {
+        return this.executeInWorker<T>(
+            'photo',
+            { id: Math.random().toString(36).substring(7), file, options },
+            [], // No transferibles por ahora para evitar problemas con File
+            onProgress
+        );
+    }
+
+    /**
+     * Lógica interna para ejecutar en Worker genérico
+     */
+    private async executeInWorker<T>(
+        type: 'excel' | 'photo',
+        payload: any,
+        transferables: Transferable[] = [],
+        onProgress?: (p: number, m: string) => void
+    ): Promise<T> {
         return new Promise((resolve, reject) => {
             try {
-                if (!this.excelWorker) {
-                    // El error "Invalid URL" suele ocurrir aquí si import.meta.url no es lo que el navegador espera
-                    this.excelWorker = new Worker(new URL('../workers/excel.worker.ts', import.meta.url));
+                let worker: Worker | null = null;
+
+                if (type === 'excel') {
+                    if (!this.excelWorker) {
+                        this.excelWorker = new Worker(new URL('../workers/excel.worker.ts', import.meta.url));
+                    }
+                    worker = this.excelWorker;
+                } else {
+                    if (!this.photoWorker) {
+                        this.photoWorker = new Worker(new URL('../workers/photo.worker.ts', import.meta.url));
+                    }
+                    worker = this.photoWorker;
                 }
 
-                const worker = this.excelWorker;
+                if (!worker) return reject(new Error(`No se pudo inicializar worker de tipo ${type}`));
+
                 resourceManager.registerWorkerStart();
 
                 const handler = (e: MessageEvent<WorkerResponse<T>>) => {
@@ -82,12 +102,12 @@ class WorkerRegistry {
                 };
 
                 const cleanup = () => {
-                    worker.removeEventListener('message', handler);
+                    worker!.removeEventListener('message', handler);
                     resourceManager.registerWorkerEnd();
                 };
 
                 worker.addEventListener('message', handler);
-                worker.postMessage({ buffer }, [buffer]); // Transferable buffer
+                worker.postMessage(payload, transferables);
             } catch (err) {
                 reject(err);
             }
@@ -101,6 +121,10 @@ class WorkerRegistry {
         if (this.excelWorker) {
             this.excelWorker.terminate();
             this.excelWorker = null;
+        }
+        if (this.photoWorker) {
+            this.photoWorker.terminate();
+            this.photoWorker = null;
         }
     }
 }

@@ -8,3 +8,5 @@ export * from './pdfMakeGenerator';
 export * from './batchGenerator';
 export * from './designBasedPdfGenerator';
 export * from '@/types/pdf';
+export * from './highFidelityGenerator';
+export * from './highFidelityRenderer';

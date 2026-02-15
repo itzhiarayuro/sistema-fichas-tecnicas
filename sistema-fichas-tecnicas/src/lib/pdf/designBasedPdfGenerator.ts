@@ -2,6 +2,17 @@ import { jsPDF } from 'jspdf';
 import { FichaDesignVersion, FieldPlacement, ShapeElement } from '@/types/fichaDesign';
 import { Pozo } from '@/types/pozo';
 import { FIELD_PATHS } from '@/constants/fieldMapping';
+import {
+    drawSectionHeader,
+    drawDataTable,
+    drawFieldTable,
+    drawPhotoGrid,
+    extractTuberiasData,
+    extractSumiderosData,
+    extractIdentificacionFields,
+    extractEstructuraFields,
+    DEFAULT_STYLES
+} from './designHelpers';
 // Eliminadas dependencias externas de pdfFontUtils para evitar errores de compilación
 // Se incluyeron versiones simplificadas locales para mantener robustez
 
@@ -61,6 +72,14 @@ export async function generatePdfFromDesign(
     pozo: Pozo
 ): Promise<{ success: boolean; blob?: Blob; error?: string }> {
     try {
+        console.log('🎨 Generando PDF con diseño personalizado:', {
+            nombre: design.name,
+            placements: design.placements?.length || 0,
+            shapes: design.shapes?.length || 0,
+            pageSize: design.pageSize,
+            orientation: design.orientation
+        });
+
         const orientation = design.orientation === 'portrait' ? 'p' : 'l';
         const doc = new jsPDF({
             orientation,
@@ -71,11 +90,25 @@ export async function generatePdfFromDesign(
         // Configurar fuente para soporte UTF-8
         configurePDFFont(doc);
 
+        // Importar blobStore una sola vez al inicio
+        const { blobStore } = await import('@/lib/storage/blobStore');
+
         // 1. Combinar y ordenar todos los elementos por zIndex
         const allElements = [
             ...(design.shapes || []).map(s => ({ ...s, isShape: true })),
             ...(design.placements || []).map(p => ({ ...p, isShape: false }))
         ].sort((a, b) => (Number(a.zIndex) || 0) - (Number(b.zIndex) || 0));
+
+        console.log('📋 Total de elementos a renderizar:', allElements.length);
+
+        // DEBUG: Ver todas las fotos disponibles
+        console.log('📸 Fotos disponibles en el pozo:', pozo.fotos?.fotos?.map(f => ({
+            filename: f.filename,
+            subcategoria: f.subcategoria,
+            tipo: f.tipo,
+            descripcion: f.descripcion,
+            blobId: f.blobId
+        })));
 
         // 2. Determinar cuántas páginas necesitamos
         // Calculamos basándonos en la categoría que tenga más elementos pendientes vs el diseño
@@ -135,9 +168,11 @@ export async function generatePdfFromDesign(
                 }
 
                 if (el.isShape) {
+                    console.log('🔷 Renderizando shape:', (el as ShapeElement).type);
                     await renderShape(doc, el as ShapeElement);
                 } else {
                     const placement = el as FieldPlacement;
+                    console.log('📍 Renderizando placement:', placement.fieldId);
 
                     // LÓGICA DE RESOLUCIÓN DE VALOR (FOTOS O CAMPOS)
                     let value: any = '-';
@@ -151,11 +186,44 @@ export async function generatePdfFromDesign(
                         };
                         const targetCode = codeMap[placement.fieldId];
                         if (targetCode) {
-                            const found = pozo.fotos?.fotos?.find(f =>
-                                String(f.subcategoria || '').toUpperCase() === targetCode ||
-                                String(f.filename || '').toUpperCase().includes(`-${targetCode}`)
-                            );
-                            if (found) value = found.blobId || (found as any).dataUrl || found.id;
+                            // Buscar foto con múltiples criterios
+                            const found = pozo.fotos?.fotos?.find(f => {
+                                const subcat = String(f.subcategoria || '').toUpperCase();
+                                const filename = String(f.filename || '').toUpperCase();
+                                const tipo = String(f.tipo || '').toUpperCase();
+                                const desc = String(f.descripcion || '').toUpperCase();
+
+                                // Criterios de búsqueda
+                                return (
+                                    subcat === targetCode ||
+                                    subcat.includes(targetCode) ||
+                                    filename.includes(`-${targetCode}.`) ||
+                                    filename.includes(`-${targetCode}-`) ||
+                                    filename.endsWith(`-${targetCode}`) ||
+                                    tipo === targetCode ||
+                                    desc.includes(targetCode)
+                                );
+                            });
+
+                            if (found) {
+                                console.log(`✅ Foto encontrada para ${placement.fieldId} (código ${targetCode}):`, {
+                                    filename: found.filename,
+                                    blobId: found.blobId,
+                                    subcategoria: found.subcategoria,
+                                    tipo: found.tipo
+                                });
+                                // Resolver blobId a dataUrl usando el blobStore importado
+                                if (found.blobId) {
+                                    value = blobStore.getUrl(found.blobId);
+                                    console.log(`🔗 URL generada:`, value?.substring(0, 50) + '...');
+                                } else if ((found as any).dataUrl) {
+                                    value = (found as any).dataUrl;
+                                } else {
+                                    value = found.id;
+                                }
+                            } else {
+                                console.warn(`❌ No se encontró foto para ${placement.fieldId} con código ${targetCode}`);
+                            }
                         }
                     } else {
                         // Campo normal
@@ -170,7 +238,7 @@ export async function generatePdfFromDesign(
 
         return { success: true, blob: doc.output('blob') };
     } catch (error) {
-        console.error('Error generating design-based PDF:', error);
+        console.error('❌ Error generating design-based PDF:', error);
         return { success: false, error: error instanceof Error ? error.message : 'Error desconocido' };
     }
 }
@@ -231,188 +299,376 @@ async function renderShape(doc: jsPDF, shape: ShapeElement) {
 
 async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, value: any) {
     const isPhoto = placement.fieldId.startsWith('foto_');
+    const isWidget = placement.fieldId.startsWith('widget_');
+
+    // 1. DIBUJAR CAJA CONTENEDORA (Grid System)
+    // Esto asegura que se vea la "rejilla" tal cual se diseñó
+    if (placement.borderWidth || placement.backgroundColor) {
+        const style = (placement.backgroundColor && placement.backgroundColor !== 'transparent' && placement.borderWidth && placement.borderWidth > 0) ? 'FD' :
+            (placement.backgroundColor && placement.backgroundColor !== 'transparent') ? 'F' : 'S';
+
+        if (placement.backgroundColor && placement.backgroundColor !== 'transparent') {
+            doc.setFillColor(placement.backgroundColor);
+        }
+
+        if (placement.borderWidth && placement.borderWidth > 0) {
+            doc.setDrawColor(placement.borderColor || '#000000'); // Borde negro por defecto para grid
+            doc.setLineWidth(placement.borderWidth); // 0.1 o lo que venga del diseño
+        }
+
+        // Solo dibujar rectángulo si hay estilo definido (evita bordes por defecto si no se quieren)
+        if (style !== 'S' || (placement.borderWidth && placement.borderWidth > 0)) {
+            doc.rect(placement.x, placement.y, placement.width, placement.height, style);
+        }
+    }
+
+    // 2. RENDERIZAR FOTOS
     if (isPhoto && value && value !== '-') {
         try {
             let imageData = String(value);
 
-            // Si es un blobId, intentar resolverlo (esto es para el entorno real)
+            // Resolver blobId
             if (!imageData.startsWith('data:image')) {
                 const { blobStore } = await import('@/lib/storage/blobStore');
                 imageData = blobStore.getUrl(imageData) || imageData;
             }
 
-            // Si sigue sin ser data URL, no podemos dibujarla en el PDF del cliente jsPDF con este motor
-            if (!imageData.startsWith('data:image') && !imageData.startsWith('blob:')) {
-                return;
-            }
+            if (!imageData.startsWith('data:image') && !imageData.startsWith('blob:')) return;
 
-            // MEJORA: Aplicar padding interno para evitar que las imágenes se toquen
-            const padding = 2; // 2mm de padding interno
-            const imgX = placement.x + padding;
-            const imgY = placement.y + padding;
-            const imgWidth = placement.width - (padding * 2);
-            const imgHeight = placement.height - (padding * 2);
-
-            // MEJORA: Dibujar borde opcional para delimitar el área de la foto
-            if (placement.borderWidth && placement.borderWidth > 0) {
-                doc.setDrawColor(placement.borderColor || '#cccccc');
-                doc.setLineWidth(placement.borderWidth);
-                doc.rect(placement.x, placement.y, placement.width, placement.height, 'S');
-            }
-
-            // MEJORA: Dibujar fondo si está configurado
-            if (placement.backgroundColor && placement.backgroundColor !== 'transparent') {
-                doc.setFillColor(placement.backgroundColor);
-                doc.rect(placement.x, placement.y, placement.width, placement.height, 'F');
-            }
-
-            // Cargar imagen para obtener dimensiones reales y aplicar fit
+            // Cargar imagen
             const img = new Image();
             img.src = imageData;
-            
             await new Promise<void>((resolve, reject) => {
                 img.onload = () => resolve();
-                img.onerror = () => reject(new Error('Failed to load image'));
-                // Timeout de 2 segundos
-                setTimeout(() => reject(new Error('Image load timeout')), 2000);
+                img.onerror = () => resolve(); // No fallar todo el PDF por una foto
+                setTimeout(() => resolve(), 2000);
             });
 
-            // Calcular dimensiones manteniendo aspect ratio (contain)
+            // Lógica Object-Fit: Contain (Centrado perfecto)
             const imgAspect = img.width / img.height;
-            const boxAspect = imgWidth / imgHeight;
+            const boxAspect = placement.width / placement.height;
 
-            let finalWidth = imgWidth;
-            let finalHeight = imgHeight;
-            let offsetX = 0;
-            let offsetY = 0;
+            let drawW = placement.width;
+            let drawH = placement.height;
+            let drawX = placement.x;
+            let drawY = placement.y;
 
+            // Ajuste geométrico exacto
             if (imgAspect > boxAspect) {
-                // Imagen más ancha - ajustar por ancho
-                finalHeight = imgWidth / imgAspect;
-                offsetY = (imgHeight - finalHeight) / 2;
+                // Imagen más ancha que la caja
+                drawH = placement.width / imgAspect;
+                drawY = placement.y + (placement.height - drawH) / 2;
             } else {
-                // Imagen más alta - ajustar por alto
-                finalWidth = imgHeight * imgAspect;
-                offsetX = (imgWidth - finalWidth) / 2;
+                // Imagen más alta que la caja
+                drawW = placement.height * imgAspect;
+                drawX = placement.x + (placement.width - drawW) / 2;
             }
 
-            // Renderizar imagen centrada con aspect ratio correcto
-            doc.addImage(
-                imageData, 
-                'JPEG', 
-                imgX + offsetX, 
-                imgY + offsetY, 
-                finalWidth, 
-                finalHeight, 
-                undefined, 
-                'FAST'
-            );
-
-            // MEJORA: Agregar etiqueta opcional debajo de la foto
-            if (placement.showLabel && placement.customLabel) {
-                const labelFontSize = (placement.fontSize || 10) * 0.7;
-                doc.setFontSize(labelFontSize);
-                doc.setTextColor('#666666');
-                doc.setFont('helvetica', 'normal');
-                const labelY = placement.y + placement.height + 3;
-                doc.text(
-                    sanitizeTextForPDF(placement.customLabel), 
-                    placement.x + (placement.width / 2), 
-                    labelY,
-                    { align: 'center' }
-                );
+            // Margen interno de seguridad (padding)
+            const padding = 0.5;
+            if (drawW > placement.width - padding) {
+                const scale = (placement.width - padding) / drawW;
+                drawW *= scale;
+                drawH *= scale;
+                drawX = placement.x + (placement.width - drawW) / 2;
+                drawY = placement.y + (placement.height - drawH) / 2;
             }
+
+            doc.addImage(imageData, 'JPEG', drawX, drawY, drawW, drawH, undefined, 'FAST');
 
         } catch (e) {
-            console.warn(`Could not add photo from field ${placement.fieldId} to PDF (leaving empty)`, e);
-            
-            // MEJORA: Dibujar placeholder cuando falla la imagen
-            doc.setFillColor('#f3f4f6');
-            doc.rect(placement.x, placement.y, placement.width, placement.height, 'F');
-            doc.setDrawColor('#d1d5db');
-            doc.rect(placement.x, placement.y, placement.width, placement.height, 'S');
-            
-            doc.setFontSize(8);
-            doc.setTextColor('#9ca3af');
-            doc.text('Imagen no disponible', placement.x + (placement.width / 2), placement.y + (placement.height / 2), {
-                align: 'center'
-            });
+            console.warn(`Error foto ${placement.fieldId}`, e);
         }
-    } else if (!isPhoto) {
-        const isWidget = placement.fieldId === 'widget_tuberias';
+        return;
+    }
 
-        if (isWidget) {
-            // DIBUJAR TABLA DE TUBERÍAS
-            const rowHeight = 5;
-            const headerHeight = 6;
-            const cols = 3;
-            const colWidth = placement.width / cols;
+    // 3. RENDERIZAR WIDGETS
+    if (isWidget) {
+        if (placement.fieldId === 'widget_tuberias') {
+            // Renderizar tabla ocupando TODO el espacio de la caja diseñada
+            const tuberias = (pozo.tuberias?.tuberias || []).slice(0, 10);
+            const headers = ['Ø (mm)', 'Material', 'Estado'];
+            const headerH = 5;
+            const rowH = (placement.height - headerH) / Math.max(tuberias.length, 1);
 
             // Header
-            doc.setFillColor('#f3f4f6');
-            doc.rect(placement.x, placement.y, placement.width, headerHeight, 'F');
-            doc.setDrawColor('#d1d5db');
-            doc.rect(placement.x, placement.y, placement.width, headerHeight, 'D');
+            doc.setFillColor('#e5e7eb');
+            doc.rect(placement.x, placement.y, placement.width, headerH, 'F');
+            doc.line(placement.x, placement.y + headerH, placement.x + placement.width, placement.y + headerH);
 
             doc.setFontSize(7);
-            doc.setTextColor('#374151');
             doc.setFont('helvetica', 'bold');
-            const headers = ['Ø Diam', 'Material', 'Estado'];
+            doc.setTextColor('#000000');
+
+            const colW = placement.width / 3;
             headers.forEach((h, i) => {
-                doc.text(h, placement.x + (i * colWidth) + 2, placement.y + 4);
+                doc.text(h, placement.x + (i * colW) + 2, placement.y + 3.5);
             });
 
-            // Filas
-            const tuberias = (pozo.tuberias?.tuberias || []).slice(0, 8);
+            // Rows
             doc.setFont('helvetica', 'normal');
             doc.setFontSize(6);
-
-            tuberias.forEach((t, idx) => {
-                const rowY = placement.y + headerHeight + (idx * rowHeight);
-                doc.setDrawColor('#e5e7eb');
-                doc.rect(placement.x, rowY, placement.width, rowHeight, 'D');
-
-                doc.text(sanitizeTextForPDF(t.diametro?.value || '-'), placement.x + 2, rowY + 3.5);
-                doc.text(sanitizeTextForPDF(t.material?.value || '-'), placement.x + colWidth + 2, rowY + 3.5);
-                doc.text(sanitizeTextForPDF(t.estado?.value || '-'), placement.x + (colWidth * 2) + 2, rowY + 3.5);
+            tuberias.forEach((t, i) => {
+                const y = placement.y + headerH + (i * rowH);
+                doc.text(sanitizeTextForPDF(t.diametro?.value || '-'), placement.x + 2, y + (rowH / 2) + 1);
+                doc.text(sanitizeTextForPDF(t.material?.value || '-'), placement.x + colW + 2, y + (rowH / 2) + 1);
+                doc.text(sanitizeTextForPDF(t.estado?.value || '-'), placement.x + (colW * 2) + 2, y + (rowH / 2) + 1);
+                // Línea divisoria
+                doc.setDrawColor('#eeeeee');
+                doc.line(placement.x, y + rowH, placement.x + placement.width, y + rowH);
             });
-
-            if (tuberias.length === 0) {
-                doc.setTextColor('#9ca3af');
-                doc.text('Sin tuberias registradas', placement.x + 5, placement.y + headerHeight + 4);
-            }
-            return;
         }
+        return;
+    }
 
-        const content = String(value ?? '-');
-        const fontSize = placement.fontSize || 10;
-        const color = placement.color || '#000000';
+    // 4. RENDERIZAR CAMPOS DE TEXTO (Modo Grid)
+    const content = String(value ?? '');
+    const fontSize = placement.fontSize || 10;
 
-        if (placement.backgroundColor && placement.backgroundColor !== 'transparent') {
-            doc.setFillColor(placement.backgroundColor);
-            doc.rect(placement.x, placement.y, placement.width, placement.height, 'F');
-        }
+    // Configurar fuente
+    const font = getSafeFont(placement.fontFamily);
+    const style = placement.fontWeight === 'bold' ? 'bold' : 'normal';
+    doc.setFont(font, style);
+    doc.setTextColor(placement.color || '#000000');
 
-        let currentY = placement.y;
-        if (placement.showLabel) {
-            doc.setFontSize(fontSize * 0.65);
-            doc.setTextColor('#999999');
-            doc.setFont('helvetica', 'bold');
-            doc.text(sanitizeTextForPDF(placement.customLabel || placement.fieldId), placement.x + 1, currentY + (fontSize * 0.4));
-            currentY += (fontSize * 0.5);
-        } else {
-            currentY += (fontSize * 0.4);
-        }
+    // A. DIBUJAR LABEL (SI EXISTE) - Estilo "Input Label" pequeño arriba
+    let valueY = placement.y + (placement.height / 2) + (fontSize * 0.35 / 2); // Centrado vertical por defecto
 
-        doc.setFontSize(fontSize);
-        doc.setTextColor(color);
-        const font = getSafeFont(placement.fontFamily);
-        const style = placement.fontWeight === 'bold' ? 'bold' : 'normal';
+    if (placement.showLabel && placement.customLabel) {
+        const labelSize = 6; // Tamaño fijo pequeño para labels
+        doc.setFontSize(labelSize);
+        doc.setTextColor('#666666'); // Label gris
+        doc.text(
+            sanitizeTextForPDF(placement.customLabel),
+            placement.x + 1,
+            placement.y + 3 // Label pegado arriba
+        );
+
+        // Si hay label, bajamos un poco el valor para que no choque
+        valueY = placement.y + (placement.height) - 2;
+
+        // Restaurar color y fuente para el valor
+        doc.setTextColor(placement.color || '#000000');
         doc.setFont(font, style);
+    }
 
-        doc.text(sanitizeTextForPDF(content), placement.x + 1, currentY + (fontSize * 0.35), {
+    // B. DIBUJAR VALOR
+    doc.setFontSize(fontSize);
+
+    // Alineación
+    const align = placement.textAlign || 'left';
+    let textX = placement.x + 1; // Padding izquierdo default
+    if (align === 'center') textX = placement.x + (placement.width / 2);
+    if (align === 'right') textX = placement.x + placement.width - 1;
+
+    doc.text(
+        sanitizeTextForPDF(content),
+        textX,
+        valueY,
+        {
             maxWidth: placement.width - 2,
-            align: placement.textAlign || 'left'
-        });
+            align: align
+        }
+    );
+}
+
+
+/**
+ * Genera un PDF con layout automático estándar (similar al generador pdfMake)
+ * Se usa cuando el diseño personalizado tiene pocos o ningún placement definido
+ */
+async function generateStandardLayout(doc: jsPDF, pozo: Pozo, design: FichaDesignVersion) {
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 15;
+    const contentWidth = pageWidth - (margin * 2);
+
+    let currentY = margin;
+
+    // 1. ENCABEZADO CON LOGOS (si están en shapes)
+    const logoShapes = (design.shapes || []).filter(s => s.type === 'image');
+    if (logoShapes.length > 0) {
+        for (const logo of logoShapes) {
+            if (logo.imageUrl) {
+                try {
+                    doc.addImage(logo.imageUrl, 'PNG', logo.x, logo.y, logo.width, logo.height);
+                } catch (e) {
+                    console.warn('No se pudo cargar logo', e);
+                }
+            }
+        }
+        currentY = Math.max(...logoShapes.map(l => l.y + l.height)) + 5;
+    }
+
+    // 2. TÍTULO PRINCIPAL
+    drawSectionHeader(doc, 'FICHA TÉCNICA DE POZO DE INSPECCIÓN', margin, currentY, contentWidth, 10);
+    currentY += 12;
+
+    // Subtítulo con código del pozo
+    doc.setFontSize(12);
+    doc.setTextColor(DEFAULT_STYLES.textColor);
+    doc.setFont('helvetica', 'bold');
+    const codigoPozo = pozo.idPozo?.value || pozo.identificacion?.idPozo?.value || 'SIN CÓDIGO';
+    doc.text(`Pozo: ${codigoPozo}`, margin, currentY);
+    currentY += 8;
+
+    // 3. SECCIÓN: IDENTIFICACIÓN Y UBICACIÓN
+    drawSectionHeader(doc, 'IDENTIFICACIÓN Y UBICACIÓN', margin, currentY, contentWidth, 8);
+    currentY += 10;
+
+    const identFields = extractIdentificacionFields(pozo);
+    currentY = drawFieldTable(doc, margin, currentY, contentWidth, identFields, {
+        rowHeight: 6,
+        labelWidth: 0.3
+    });
+    currentY += 8;
+
+    // 4. SECCIÓN: REGISTRO FOTOGRÁFICO
+    drawSectionHeader(doc, 'REGISTRO FOTOGRÁFICO', margin, currentY, contentWidth, 8);
+    currentY += 10;
+
+    // Obtener fotos del pozo
+    const allPhotos = pozo.fotos?.fotos || [];
+    if (allPhotos.length > 0) {
+        // Preparar fotos con etiquetas
+        const photosWithLabels: Array<{ dataUrl: string; label: string }> = [];
+
+        for (const foto of allPhotos.slice(0, 6)) { // Máximo 6 fotos en primera página
+            try {
+                let imageData = foto.blobId || (foto as any).dataUrl || foto.id;
+
+                // Resolver blobId si es necesario
+                if (!imageData.startsWith('data:image')) {
+                    const { blobStore } = await import('@/lib/storage/blobStore');
+                    imageData = blobStore.getUrl(imageData) || imageData;
+                }
+
+                if (imageData.startsWith('data:image') || imageData.startsWith('blob:')) {
+                    photosWithLabels.push({
+                        dataUrl: imageData,
+                        label: foto.descripcion || foto.tipo || foto.subcategoria || 'Foto'
+                    });
+                }
+            } catch (e) {
+                console.warn('Error procesando foto', e);
+            }
+        }
+
+        if (photosWithLabels.length > 0) {
+            currentY = await drawPhotoGrid(doc, margin, currentY, contentWidth, photosWithLabels, {
+                columns: 2,
+                photoWidth: (contentWidth - 5) / 2,
+                photoHeight: 60,
+                spacing: 5,
+                showLabels: true
+            });
+        } else {
+            doc.setFontSize(9);
+            doc.setTextColor('#999999');
+            doc.text('Sin fotografías disponibles', margin, currentY);
+            currentY += 10;
+        }
+    } else {
+        doc.setFontSize(9);
+        doc.setTextColor('#999999');
+        doc.text('Sin fotografías registradas', margin, currentY);
+        currentY += 10;
+    }
+
+    currentY += 5;
+
+    // Verificar si necesitamos nueva página
+    if (currentY > pageHeight - 60) {
+        doc.addPage();
+        currentY = margin;
+    }
+
+    // 5. SECCIÓN: CARACTERÍSTICAS DE LA ESTRUCTURA
+    drawSectionHeader(doc, 'CARACTERÍSTICAS DEL POZO DE INSPECCIÓN', margin, currentY, contentWidth, 8);
+    currentY += 10;
+
+    const estructuraFields = extractEstructuraFields(pozo);
+    currentY = drawFieldTable(doc, margin, currentY, contentWidth, estructuraFields, {
+        rowHeight: 6,
+        labelWidth: 0.4
+    });
+    currentY += 8;
+
+    // 6. SECCIÓN: TUBERÍAS
+    const tuberiasData = extractTuberiasData(pozo);
+    if (tuberiasData.length > 0) {
+        // Verificar espacio
+        if (currentY > pageHeight - 50) {
+            doc.addPage();
+            currentY = margin;
+        }
+
+        drawSectionHeader(doc, 'TUBERÍAS (ENTRADAS Y SALIDAS)', margin, currentY, contentWidth, 8);
+        currentY += 10;
+
+        currentY = drawDataTable(
+            doc,
+            margin,
+            currentY,
+            contentWidth,
+            ['Ø (mm)', 'Material', 'Cota', 'Estado', 'Emboq.', 'Tipo'],
+            tuberiasData,
+            {
+                headerHeight: 6,
+                rowHeight: 5,
+                fontSize: 8,
+                columnWidths: [0.12, 0.20, 0.12, 0.18, 0.18, 0.20]
+            }
+        );
+        currentY += 8;
+    }
+
+    // 7. SECCIÓN: SUMIDEROS
+    const sumiderosData = extractSumiderosData(pozo);
+    if (sumiderosData.length > 0) {
+        // Verificar espacio
+        if (currentY > pageHeight - 40) {
+            doc.addPage();
+            currentY = margin;
+        }
+
+        drawSectionHeader(doc, 'SUMIDEROS', margin, currentY, contentWidth, 8);
+        currentY += 10;
+
+        currentY = drawDataTable(
+            doc,
+            margin,
+            currentY,
+            contentWidth,
+            ['ID', 'Tipo', 'Material', 'Ø (mm)', 'H Salida'],
+            sumiderosData,
+            {
+                headerHeight: 6,
+                rowHeight: 5,
+                fontSize: 8,
+                columnWidths: [0.15, 0.25, 0.25, 0.15, 0.20]
+            }
+        );
+        currentY += 8;
+    }
+
+    // 8. PIE DE PÁGINA (opcional)
+    const pageCount = doc.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor('#999999');
+        doc.text(
+            `Página ${i} de ${pageCount}`,
+            pageWidth / 2,
+            pageHeight - 10,
+            { align: 'center' }
+        );
+        doc.text(
+            `Generado: ${new Date().toLocaleDateString('es-ES')}`,
+            pageWidth - margin,
+            pageHeight - 10,
+            { align: 'right' }
+        );
     }
 }

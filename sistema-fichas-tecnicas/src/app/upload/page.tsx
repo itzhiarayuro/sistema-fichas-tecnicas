@@ -12,7 +12,7 @@
 
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { DropZone, DropZoneStatus, FileList, FileItem, UploadProgress, UploadStats, ExcelFormatGuide } from '@/components/upload';
 import { ChunkedUploader } from '@/components/upload/ChunkedUploader';
@@ -35,7 +35,7 @@ export default function UploadPage() {
   const router = useRouter();
 
   // Stores
-  const { addPozo, addPhoto, setCurrentStep, pozos, photos } = useGlobalStore();
+  const { addPozo, addPozosBulk, addPhoto, addPhotosBulk, setCurrentStep, pozos, photos } = useGlobalStore();
   const { showSuccess, showError, showWarning, showInfo } = useUIStore();
 
   // Estado local
@@ -58,10 +58,68 @@ export default function UploadPage() {
   const [showChunkedUploader, setShowChunkedUploader] = useState(false);
   const [performanceRecommendation, setPerformanceRecommendation] = useState<string>('');
 
+  // Refs para importación masiva optimizada
+  const realFilesRef = useRef<File[]>([]); // Archivos reales para ChunkedUploader
+  const fileUpdatesBuffer = useRef<Map<string, Partial<FileItem>>>(new Map());
+  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Actualizar paso del workflow al montar
   useEffect(() => {
     setCurrentStep('upload');
   }, [setCurrentStep]);
+
+  /**
+   * Aplica actualizaciones acumuladas al estado de archivos.
+   * En vez de hacer setFiles() por cada foto (7000 re-renders),
+   * acumulamos cambios y los aplicamos juntos cada 500ms.
+   */
+  const flushFileUpdates = useCallback(() => {
+    const updates = fileUpdatesBuffer.current;
+    if (updates.size === 0) return;
+
+    // Copiar y limpiar el buffer antes del setState
+    const pendingUpdates = new Map(updates);
+    updates.clear();
+
+    setFiles(prev => {
+      const newFiles = [...prev];
+      for (let i = 0; i < newFiles.length; i++) {
+        const update = pendingUpdates.get(newFiles[i].id);
+        if (update) {
+          newFiles[i] = { ...newFiles[i], ...update };
+        }
+      }
+      return newFiles;
+    });
+  }, []);
+
+  /**
+   * Programa una actualización de archivo para el próximo flush.
+   * Múltiples actualizaciones al mismo archivo se fusionan.
+   */
+  const scheduleFileUpdate = useCallback((fileId: string, update: Partial<FileItem>) => {
+    // Fusionar con update existente si hay
+    const existing = fileUpdatesBuffer.current.get(fileId) || {};
+    fileUpdatesBuffer.current.set(fileId, { ...existing, ...update });
+
+    // Programar flush si no hay uno pendiente
+    if (!flushTimerRef.current) {
+      flushTimerRef.current = setTimeout(() => {
+        flushTimerRef.current = null;
+        flushFileUpdates();
+      }, 500);
+    }
+  }, [flushFileUpdates]);
+
+  // Limpiar timer al desmontar
+  useEffect(() => {
+    return () => {
+      if (flushTimerRef.current) {
+        clearTimeout(flushTimerRef.current);
+        flushFileUpdates(); // Flush final
+      }
+    };
+  }, [flushFileUpdates]);
 
   /**
    * Genera un ID único para archivos
@@ -125,8 +183,27 @@ export default function UploadPage() {
       // Parsear nomenclatura
       const nomenclatura = parseNomenclatura(file.name);
 
+      // --- OPTIMIZACIÓN: Compresión en Worker ---
+      // Si la foto es grande (> 1MB), comprimirla antes de guardar
+      let finalFile: File | Blob = file;
+      if (file.size > 1024 * 1024) {
+        try {
+          const result = await workerRegistry.runPhotoTask<any>(file, {
+            maxWidth: 1200,
+            quality: 0.75,
+            generateHash: false
+          });
+          if (result && result.blob) {
+            finalFile = result.blob;
+            console.log(`📦 Imagen optimizada: ${file.name} (${(file.size / 1024).toFixed(0)}KB -> ${(finalFile.size / 1024).toFixed(0)}KB)`);
+          }
+        } catch (workerError) {
+          console.warn(`No se pudo comprimir ${file.name}, usando original:`, workerError);
+        }
+      }
+
       // Guardar en BlobStore (Principios de Hardening)
-      const blobId = await blobStore.store(file);
+      const blobId = await blobStore.store(finalFile);
 
       // Crear objeto FotoInfo estructural (LIVIANO)
       const fotoInfo: FotoInfo = {
@@ -165,8 +242,28 @@ export default function UploadPage() {
       const useChunked = confirm(
         `Detectamos ${acceptedFiles.length} archivos. Para un mejor rendimiento, ¿deseas usar el modo de carga optimizada para grandes volúmenes?`
       );
-      
+
       if (useChunked) {
+        realFilesRef.current = acceptedFiles; // Guardar archivos reales
+
+        // Inicializar FileItems para que aparezcan en la lista como "pendientes"
+        const initialFileItems: FileItem[] = acceptedFiles.map(file => ({
+          id: generateFileId(),
+          name: file.name,
+          size: file.size,
+          type: file.type || 'image/jpeg',
+          status: 'pending' as const,
+        }));
+        setFiles(initialFileItems);
+        setStats({
+          totalFiles: acceptedFiles.length,
+          processedFiles: 0,
+          totalPozos: 0,
+          totalPhotos: 0,
+          warnings: 0,
+          errors: 0,
+        });
+
         setShowChunkedUploader(true);
         return;
       }
@@ -291,28 +388,28 @@ export default function UploadPage() {
       setStats({ ...newStats });
     }
 
-    // Procesar imágenes en lotes (batch processing)
+    // Procesar imágenes en lotes (batch processing optimizado)
     if (imageFiles.length > 0) {
-      console.log(`📸 Procesando ${imageFiles.length} imágenes en lotes...`);
-      
+      console.log(`📸 Procesando ${imageFiles.length} imágenes en lotes optimizados...`);
+
+      // Para grandes volúmenes, usar modo bajo memoria
+      const isLargeImport = imageFiles.length > 200;
+
       await processBatch({
         items: imageFiles,
-        batchSize: 20, // Procesar 20 imágenes a la vez
-        delayBetweenBatches: 50, // 50ms entre lotes
+        batchSize: isLargeImport ? 15 : 20,
+        delayBetweenBatches: isLargeImport ? 100 : 50,
+        lowMemoryMode: isLargeImport, // No acumular todos los resultados en un array
         processor: async ({ file, fileItem }, globalIndex) => {
-          // Actualizar estado a procesando
-          setFiles(prev => prev.map(f =>
-            f.id === fileItem.id ? { ...f, status: 'processing' as const, progress: 0 } : f
-          ));
+          // Usar buffer en vez de setFiles() directo (evita N re-renders)
+          scheduleFileUpdate(fileItem.id, { status: 'processing' as const, progress: 0 });
 
           // Validar archivo
           const validation = await validateFile(file);
 
           if (!validation.isValid) {
             const errorMsg = validation.errors[0]?.userMessage || 'Archivo no válido';
-            setFiles(prev => prev.map(f =>
-              f.id === fileItem.id ? { ...f, status: 'error' as const, message: errorMsg } : f
-            ));
+            scheduleFileUpdate(fileItem.id, { status: 'error' as const, message: errorMsg });
             newStats.errors++;
             return null;
           }
@@ -328,32 +425,26 @@ export default function UploadPage() {
               allPhotos.push(foto);
               newStats.totalPhotos++;
 
-              setFiles(prev => prev.map(f =>
-                f.id === fileItem.id ? {
-                  ...f,
-                  status: 'success' as const,
-                  message: foto.categoria !== 'OTRO' ? `Asociada: ${foto.descripcion}` : 'Sin asociar',
-                  preview: blobStore.getUrl(foto.blobId)
-                } : f
-              ));
+              // NO generar ObjectURL para preview durante importación masiva
+              // Las previews se cargan bajo demanda cuando el usuario las ve
+              scheduleFileUpdate(fileItem.id, {
+                status: 'success' as const,
+                message: foto.categoria !== 'OTRO' ? `Asociada: ${foto.descripcion}` : 'Sin asociar',
+                // preview: omitido intencionalmente — se carga bajo demanda
+              });
 
               return foto;
             } else {
-              setFiles(prev => prev.map(f =>
-                f.id === fileItem.id ? {
-                  ...f,
-                  status: 'error' as const,
-                  message: 'Error al procesar imagen'
-                } : f
-              ));
+              scheduleFileUpdate(fileItem.id, {
+                status: 'error' as const,
+                message: 'Error al procesar imagen'
+              });
               newStats.errors++;
               return null;
             }
           } catch (error) {
             const message = error instanceof Error ? error.message : 'Error desconocido';
-            setFiles(prev => prev.map(f =>
-              f.id === fileItem.id ? { ...f, status: 'error' as const, message } : f
-            ));
+            scheduleFileUpdate(fileItem.id, { status: 'error' as const, message });
             newStats.errors++;
             return null;
           }
@@ -366,6 +457,13 @@ export default function UploadPage() {
           setProcessingMessage(`Procesando imágenes: ${processed}/${total}`);
         },
       });
+
+      // Flush final de actualizaciones pendientes
+      if (flushTimerRef.current) {
+        clearTimeout(flushTimerRef.current);
+        flushTimerRef.current = null;
+      }
+      flushFileUpdates();
     }
 
     // Guardar en estado local (acumulativo)
@@ -392,7 +490,7 @@ export default function UploadPage() {
       setDropZoneStatus('error');
       showError('No se pudieron procesar los archivos');
     }
-  }, [generateFileId, processExcelFile, processImageFile, showSuccess, showError, showWarning]);
+  }, [generateFileId, processExcelFile, processImageFile, showSuccess, showError, showWarning, showInfo, scheduleFileUpdate, flushFileUpdates]);
 
   /**
    * Elimina un archivo de la lista
@@ -405,12 +503,12 @@ export default function UploadPage() {
    * Continúa al siguiente paso
    */
   const handleContinue = useCallback(() => {
-    // Agregar datos en stores (acumulativo)
+    // Agregar datos en stores (masivamente para evitar miles de re-renders)
     if (processedPozos.length > 0) {
-      processedPozos.forEach(pozo => addPozo(pozo));
+      addPozosBulk(processedPozos);
     }
     if (processedPhotos.length > 0) {
-      processedPhotos.forEach(photo => addPhoto(photo));
+      addPhotosBulk(processedPhotos);
     }
 
     // Navegar a la página de pozos
@@ -543,27 +641,44 @@ export default function UploadPage() {
                 </svg>
               </button>
             </div>
-            
+
             <p className="text-sm text-blue-700 mb-4">
-              Este modo procesa archivos en lotes pequeños para evitar saturar el navegador. 
+              Este modo procesa archivos en lotes pequeños para evitar saturar el navegador.
               Ideal para cargas de 1000+ archivos.
             </p>
 
             <ChunkedUploader
-              files={files.map(f => new File([], f.name))} // Placeholder, necesitarías los archivos reales
+              files={realFilesRef.current} // Archivos reales para procesamiento
               chunkSize={100}
               onProgress={(processed, total, currentChunk, totalChunks) => {
                 setProgress((processed / total) * 100);
                 setProcessingMessage(`Chunk ${currentChunk}/${totalChunks}: ${processed}/${total} archivos`);
               }}
               onComplete={(results) => {
-                setShowChunkedUploader(false);
+                const validPhotos = results.filter((r): r is FotoInfo => r !== null);
+                setProcessedPhotos(prev => [...prev, ...validPhotos]);
                 setCanContinue(true);
-                showSuccess(`Carga completada: ${results.length} archivos procesados`);
+                setShowChunkedUploader(false);
+                setIsProcessing(false);
+                showSuccess(`Carga completada: ${validPhotos.length} fotos procesadas exitosamente`);
               }}
               processor={async (file, index) => {
-                // Aquí iría la lógica de procesamiento individual
-                return await processImageFile(file);
+                // Sincronizar con el estado de la lista de archivos (FileItem)
+                const fileId = files[index]?.id;
+                if (fileId) {
+                  scheduleFileUpdate(fileId, { status: 'processing', progress: 0 });
+                }
+
+                const result = await processImageFile(file);
+
+                if (fileId) {
+                  scheduleFileUpdate(fileId, {
+                    status: result ? 'success' : 'error',
+                    message: result ? (result.categoria !== 'OTRO' ? `Asociada: ${result.descripcion}` : 'Sin asociar') : 'Error'
+                  });
+                }
+
+                return result;
               }}
               disabled={isProcessing}
             />

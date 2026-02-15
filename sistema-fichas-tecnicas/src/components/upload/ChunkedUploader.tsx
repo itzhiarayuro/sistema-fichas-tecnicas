@@ -42,10 +42,10 @@ export function ChunkedUploader({
     setIsProcessing(true);
     setCurrentChunk(0);
     setProcessedFiles(0);
-    
+
     // Crear AbortController para poder cancelar
     abortControllerRef.current = new AbortController();
-    
+
     const allResults: any[] = [];
 
     try {
@@ -74,13 +74,14 @@ export function ChunkedUploader({
               if (abortControllerRef.current?.signal.aborted) {
                 throw new Error('Procesamiento cancelado');
               }
-              
+
               const globalIndex = chunkIndex * chunkSize + indexInChunk;
               const result = await processor(file, globalIndex);
-              
-              setProcessedFiles(prev => prev + 1);
-              onProgress?.(processedFiles + indexInChunk + 1, files.length, chunkIndex + 1, totalChunks);
-              
+
+              const newProcessedCount = globalIndex + 1;
+              setProcessedFiles(newProcessedCount);
+              onProgress?.(newProcessedCount, files.length, chunkIndex + 1, totalChunks);
+
               return result;
             }
           });
@@ -148,14 +149,14 @@ export function ChunkedUploader({
             <span>Chunk {currentChunk} de {totalChunks}</span>
             <span>{processedFiles} / {files.length} archivos</span>
           </div>
-          
+
           <div className="w-full bg-gray-200 rounded-full h-2">
             <div
               className="bg-blue-600 h-2 rounded-full transition-all duration-300"
               style={{ width: `${(processedFiles / files.length) * 100}%` }}
             />
           </div>
-          
+
           <div className="text-xs text-gray-500 text-center">
             Procesando en lotes de {chunkSize} archivos para optimizar rendimiento
           </div>

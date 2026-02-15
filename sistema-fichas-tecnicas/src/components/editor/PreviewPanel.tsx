@@ -92,6 +92,62 @@ function FieldDisplay({
   );
 }
 
+/**
+ * Componente para cargar fotos de forma lazy (soporta blobs eviccionados de RAM)
+ */
+function LazyPhoto({ foto }: { foto: FotoInfo }) {
+  const [url, setUrl] = useState<string>('');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!foto.blobId) return;
+
+    // Intentar URL síncrona primero
+    const syncUrl = blobStore.getUrl(foto.blobId);
+    if (syncUrl) {
+      setUrl(syncUrl);
+      return;
+    }
+
+    // Cargar desde IDB
+    setLoading(true);
+    blobStore.ensureLoaded(foto.blobId)
+      .then(loadedUrl => setUrl(loadedUrl))
+      .catch(() => setUrl(''))
+      .finally(() => setLoading(false));
+  }, [foto.blobId]);
+
+  const dataUrl = (foto as any).dataUrl;
+  const alt = foto.descripcion || (foto as any).descripcion?.value || foto.filename;
+
+  return (
+    <div className="aspect-[4/3] bg-gray-100 rounded-lg overflow-hidden relative group">
+      {url ? (
+        <img src={url} alt={alt} className="w-full h-full object-cover" />
+      ) : dataUrl ? (
+        <img src={dataUrl} alt={alt} className="w-full h-full object-cover" />
+      ) : loading ? (
+        <div className="w-full h-full flex items-center justify-center">
+          <svg className="w-6 h-6 text-gray-400 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+          </svg>
+        </div>
+      ) : (
+        <div className="w-full h-full flex items-center justify-center text-gray-400">
+          <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+        </div>
+      )}
+      {/* Overlay con descripción */}
+      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <p className="text-white text-xs truncate">{alt}</p>
+      </div>
+    </div>
+  );
+}
+
 export function PreviewPanel({
   fichaState,
   pozo,
@@ -541,41 +597,7 @@ export function PreviewPanel({
               {allPhotos.length > 0 ? (
                 <div className="grid grid-cols-3 gap-4">
                   {allPhotos.map((foto, index) => (
-                    <div
-                      key={foto.filename || index}
-                      className="aspect-[4/3] bg-gray-100 rounded-lg overflow-hidden relative group"
-                    >
-                      {foto.blobId ? (
-                        <img
-                          src={blobStore.getUrl(foto.blobId)}
-                          alt={foto.descripcion || (foto as any).descripcion?.value || (foto as any).filename}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (foto as any).dataUrl ? (
-                        <img
-                          src={(foto as any).dataUrl}
-                          alt={(foto as any).descripcion?.value || (foto as any).filename}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-gray-400">
-                          <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={1.5}
-                              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                            />
-                          </svg>
-                        </div>
-                      )}
-                      {/* Overlay con descripción */}
-                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <p className="text-white text-xs truncate">
-                          {foto.descripcion || (foto as any).descripcion?.value || (foto as any).filename}
-                        </p>
-                      </div>
-                    </div>
+                    <LazyPhoto key={foto.filename || index} foto={foto} />
                   ))}
                 </div>
               ) : (
