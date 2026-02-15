@@ -103,9 +103,9 @@ export default function PozosPage() {
     });
   };
 
-  const handleSelectAll = (checked: boolean) => {
-    if (checked) {
-      setSelectedIds(new Set(pozosArray.map(p => p.id)));
+  const handleSelectAll = (ids: string[]) => {
+    if (ids.length > 0) {
+      setSelectedIds(new Set(ids));
     } else {
       setSelectedIds(new Set());
     }

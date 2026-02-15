@@ -9,6 +9,9 @@ export type { DropZoneProps, DropZoneStatus, DropZoneFile } from './DropZone';
 export { FileList } from './FileList';
 export type { FileListProps, FileItem, FileStatus } from './FileList';
 
+export { ChunkedUploader } from './ChunkedUploader';
+export { PerformanceMonitor } from './PerformanceMonitor';
+
 export { UploadProgress } from './UploadProgress';
 export type { UploadProgressProps, UploadStats } from './UploadProgress';
 

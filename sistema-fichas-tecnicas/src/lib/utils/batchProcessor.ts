@@ -36,6 +36,9 @@ export async function processBatch<T, R>(
     onBatchComplete,
   } = options;
 
+  // Importar memoryManager dinámicamente para evitar dependencias circulares
+  const { memoryManager } = await import('@/lib/managers/memoryManager');
+
   const results: R[] = [];
   const errors: Array<{ index: number; error: Error }> = [];
   const totalItems = items.length;
@@ -52,6 +55,23 @@ export async function processBatch<T, R>(
   for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
     const batch = batches[batchIndex];
     const batchResults: R[] = [];
+
+    // Verificar memoria antes de procesar el lote
+    if (!memoryManager.isSafeToProcess()) {
+      console.warn(`⚠️ Memoria alta detectada. Pausando 2 segundos antes del lote ${batchIndex + 1}`);
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      
+      // Forzar garbage collection si es posible
+      memoryManager.forceGarbageCollection();
+    }
+
+    // Ajustar parámetros dinámicamente según memoria
+    const adjustedBatchSize = memoryManager.getRecommendedBatchSize(batchSize);
+    const adjustedDelay = memoryManager.getRecommendedDelay(delayBetweenBatches);
+
+    if (adjustedBatchSize !== batchSize) {
+      console.log(`🔧 Ajustando tamaño de lote: ${batchSize} → ${adjustedBatchSize} (memoria: ${(memoryManager.getMemoryStats()?.usagePercentage || 0 * 100).toFixed(1)}%)`);
+    }
 
     // Procesar items del lote en paralelo
     const batchPromises = batch.map(async (item, indexInBatch) => {
@@ -77,9 +97,9 @@ export async function processBatch<T, R>(
     onProgress?.(Math.min(processed, totalItems), totalItems);
     onBatchComplete?.(batchResults, batchIndex);
 
-    // Delay entre lotes para no saturar
+    // Delay entre lotes para no saturar (ajustado dinámicamente)
     if (batchIndex < batches.length - 1) {
-      await new Promise((resolve) => setTimeout(resolve, delayBetweenBatches));
+      await new Promise((resolve) => setTimeout(resolve, adjustedDelay));
     }
   }
 

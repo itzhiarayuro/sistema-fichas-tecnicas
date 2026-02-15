@@ -246,9 +246,97 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
                 return;
             }
 
-            doc.addImage(imageData, 'JPEG', placement.x, placement.y, placement.width, placement.height, undefined, 'FAST');
+            // MEJORA: Aplicar padding interno para evitar que las imágenes se toquen
+            const padding = 2; // 2mm de padding interno
+            const imgX = placement.x + padding;
+            const imgY = placement.y + padding;
+            const imgWidth = placement.width - (padding * 2);
+            const imgHeight = placement.height - (padding * 2);
+
+            // MEJORA: Dibujar borde opcional para delimitar el área de la foto
+            if (placement.borderWidth && placement.borderWidth > 0) {
+                doc.setDrawColor(placement.borderColor || '#cccccc');
+                doc.setLineWidth(placement.borderWidth);
+                doc.rect(placement.x, placement.y, placement.width, placement.height, 'S');
+            }
+
+            // MEJORA: Dibujar fondo si está configurado
+            if (placement.backgroundColor && placement.backgroundColor !== 'transparent') {
+                doc.setFillColor(placement.backgroundColor);
+                doc.rect(placement.x, placement.y, placement.width, placement.height, 'F');
+            }
+
+            // Cargar imagen para obtener dimensiones reales y aplicar fit
+            const img = new Image();
+            img.src = imageData;
+            
+            await new Promise<void>((resolve, reject) => {
+                img.onload = () => resolve();
+                img.onerror = () => reject(new Error('Failed to load image'));
+                // Timeout de 2 segundos
+                setTimeout(() => reject(new Error('Image load timeout')), 2000);
+            });
+
+            // Calcular dimensiones manteniendo aspect ratio (contain)
+            const imgAspect = img.width / img.height;
+            const boxAspect = imgWidth / imgHeight;
+
+            let finalWidth = imgWidth;
+            let finalHeight = imgHeight;
+            let offsetX = 0;
+            let offsetY = 0;
+
+            if (imgAspect > boxAspect) {
+                // Imagen más ancha - ajustar por ancho
+                finalHeight = imgWidth / imgAspect;
+                offsetY = (imgHeight - finalHeight) / 2;
+            } else {
+                // Imagen más alta - ajustar por alto
+                finalWidth = imgHeight * imgAspect;
+                offsetX = (imgWidth - finalWidth) / 2;
+            }
+
+            // Renderizar imagen centrada con aspect ratio correcto
+            doc.addImage(
+                imageData, 
+                'JPEG', 
+                imgX + offsetX, 
+                imgY + offsetY, 
+                finalWidth, 
+                finalHeight, 
+                undefined, 
+                'FAST'
+            );
+
+            // MEJORA: Agregar etiqueta opcional debajo de la foto
+            if (placement.showLabel && placement.customLabel) {
+                const labelFontSize = (placement.fontSize || 10) * 0.7;
+                doc.setFontSize(labelFontSize);
+                doc.setTextColor('#666666');
+                doc.setFont('helvetica', 'normal');
+                const labelY = placement.y + placement.height + 3;
+                doc.text(
+                    sanitizeTextForPDF(placement.customLabel), 
+                    placement.x + (placement.width / 2), 
+                    labelY,
+                    { align: 'center' }
+                );
+            }
+
         } catch (e) {
             console.warn(`Could not add photo from field ${placement.fieldId} to PDF (leaving empty)`, e);
+            
+            // MEJORA: Dibujar placeholder cuando falla la imagen
+            doc.setFillColor('#f3f4f6');
+            doc.rect(placement.x, placement.y, placement.width, placement.height, 'F');
+            doc.setDrawColor('#d1d5db');
+            doc.rect(placement.x, placement.y, placement.width, placement.height, 'S');
+            
+            doc.setFontSize(8);
+            doc.setTextColor('#9ca3af');
+            doc.text('Imagen no disponible', placement.x + (placement.width / 2), placement.y + (placement.height / 2), {
+                align: 'center'
+            });
         }
     } else if (!isPhoto) {
         const isWidget = placement.fieldId === 'widget_tuberias';

@@ -25,7 +25,7 @@ interface PozosTableProps {
   onDoubleClickPozo?: (pozoId: string) => void;
   selectedIds: Set<string>;
   onToggleSelect: (pozoId: string) => void;
-  onSelectAll: (checked: boolean) => void;
+  onSelectAll: (ids: string[]) => void;
 }
 
 interface FilterState {
@@ -72,6 +72,9 @@ export function PozosTable({
     };
   }, [pozos]);
 
+  // Get photos from global store for filtering
+  const { photos } = useGlobalStore();
+
   // Filter pozos
   const filteredPozos = useMemo(() => {
     return pozos.filter((pozo) => {
@@ -103,13 +106,13 @@ export function PozosTable({
 
       // Completitud filter
       if (filters.completitud) {
-        const status = getPozoStatus(pozo);
+        const status = getPozoStatus(pozo, photos);
         if (filters.completitud !== status) return false;
       }
 
       return true;
     });
-  }, [pozos, filters]);
+  }, [pozos, filters, photos]);
 
   // Sort pozos
   const sortedPozos = useMemo(() => {
@@ -299,8 +302,8 @@ export function PozosTable({
                 <input
                   type="checkbox"
                   className="rounded border-gray-300 text-primary focus:ring-primary h-4 w-4"
-                  checked={pozos.length > 0 && selectedIds.size === pozos.length}
-                  onChange={(e) => onSelectAll(e.target.checked)}
+                  checked={sortedPozos.length > 0 && selectedIds.size === sortedPozos.length}
+                  onChange={(e) => onSelectAll(e.target.checked ? sortedPozos.map(p => p.id) : [])}
                 />
               </th>
               <th className="px-4 py-3 text-left">
