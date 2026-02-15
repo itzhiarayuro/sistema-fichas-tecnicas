@@ -11,7 +11,7 @@
 
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { formatFileSize } from './DropZone';
 
 export type FileStatus = 'pending' | 'processing' | 'success' | 'error' | 'warning';
@@ -33,6 +33,7 @@ export interface FileListProps {
   onRetry?: (fileId: string) => void;
   showPreview?: boolean;
   className?: string;
+  itemsPerPage?: number; // Número de fotos por página
 }
 
 /**
@@ -123,7 +124,11 @@ export function FileList({
   onRetry,
   showPreview = true,
   className = '',
+  itemsPerPage = 50, // Por defecto 50 fotos por página
 }: FileListProps) {
+  // Estado de paginación para imágenes
+  const [currentPage, setCurrentPage] = useState(1);
+
   // Agrupar archivos por tipo
   const groupedFiles = useMemo(() => {
     const excel: FileItem[] = [];
@@ -153,6 +158,26 @@ export function FileList({
 
     return { total, success, errors, warnings, processing };
   }, [files]);
+
+  // Paginación de imágenes
+  const paginatedImages = useMemo(() => {
+    const totalPages = Math.ceil(groupedFiles.images.length / itemsPerPage);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const currentImages = groupedFiles.images.slice(startIndex, endIndex);
+
+    return {
+      images: currentImages,
+      totalPages,
+      hasMore: currentPage < totalPages,
+      hasPrevious: currentPage > 1,
+    };
+  }, [groupedFiles.images, currentPage, itemsPerPage]);
+
+  // Resetear página cuando cambian las imágenes
+  useMemo(() => {
+    setCurrentPage(1);
+  }, [groupedFiles.images.length]);
 
   if (files.length === 0) {
     return null;
@@ -278,15 +303,164 @@ export function FileList({
         </div>
       )}
 
-      {/* Imágenes */}
+      {/* Imágenes con Grid y Paginación */}
       {groupedFiles.images.length > 0 && (
         <div>
-          <h4 className="text-sm font-medium text-gray-700 mb-2">
-            Fotografías ({groupedFiles.images.length})
-          </h4>
-          <div className="space-y-2">
-            {groupedFiles.images.map(renderFileItem)}
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-sm font-medium text-gray-700">
+              Fotografías ({groupedFiles.images.length})
+            </h4>
+            {paginatedImages.totalPages > 1 && (
+              <span className="text-xs text-gray-500">
+                Página {currentPage} de {paginatedImages.totalPages}
+              </span>
+            )}
           </div>
+          
+          {/* Grid compacto de imágenes */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
+            {paginatedImages.images.map((file) => (
+              <div
+                key={file.id}
+                className={`relative group rounded-lg border ${getStatusBgColor(file.status)} overflow-hidden transition-all duration-200 hover:shadow-md`}
+              >
+                {/* Preview de imagen */}
+                <div className="aspect-square bg-gray-100">
+                  {showPreview && file.preview ? (
+                    <img
+                      src={file.preview}
+                      alt={file.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      {getFileIcon(file.type)}
+                    </div>
+                  )}
+                </div>
+
+                {/* Overlay con info y acciones */}
+                <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all duration-200 flex flex-col justify-between p-2 opacity-0 group-hover:opacity-100">
+                  {/* Nombre del archivo */}
+                  <div className="text-white text-xs font-medium truncate bg-black bg-opacity-50 rounded px-1">
+                    {file.name}
+                  </div>
+
+                  {/* Acciones */}
+                  <div className="flex items-center justify-end gap-1">
+                    {file.status === 'error' && onRetry && (
+                      <button
+                        type="button"
+                        onClick={() => onRetry(file.id)}
+                        className="p-1.5 bg-white rounded-full text-gray-700 hover:bg-gray-100 transition-colors"
+                        title="Reintentar"
+                      >
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                      </button>
+                    )}
+                    
+                    {onRemove && (
+                      <button
+                        type="button"
+                        onClick={() => onRemove(file.id)}
+                        className="p-1.5 bg-white rounded-full text-red-600 hover:bg-red-50 transition-colors"
+                        title="Eliminar"
+                      >
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Badge de estado en la esquina */}
+                <div className="absolute top-1 right-1">
+                  {getStatusIcon(file.status)}
+                </div>
+
+                {/* Barra de progreso */}
+                {file.status === 'processing' && file.progress !== undefined && (
+                  <div className="absolute bottom-0 left-0 right-0 bg-gray-200 h-1">
+                    <div
+                      className="bg-primary h-1 transition-all duration-300"
+                      style={{ width: `${file.progress}%` }}
+                    />
+                  </div>
+                )}
+
+                {/* Info adicional en la parte inferior */}
+                <div className="p-1.5 bg-white bg-opacity-90">
+                  <p className="text-xs text-gray-600 truncate" title={file.name}>
+                    {file.name}
+                  </p>
+                  <div className="flex items-center justify-between text-xs text-gray-500">
+                    <span>{formatFileSize(file.size)}</span>
+                    {file.message && (
+                      <span className={`truncate ml-1 ${file.status === 'error' ? 'text-red-600' : file.status === 'warning' ? 'text-yellow-600' : ''}`} title={file.message}>
+                        {file.message}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Controles de paginación */}
+          {paginatedImages.totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 mt-4">
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={!paginatedImages.hasPrevious}
+                className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Anterior
+              </button>
+              
+              <div className="flex items-center gap-1">
+                {Array.from({ length: Math.min(5, paginatedImages.totalPages) }, (_, i) => {
+                  let pageNum;
+                  if (paginatedImages.totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= paginatedImages.totalPages - 2) {
+                    pageNum = paginatedImages.totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+
+                  return (
+                    <button
+                      key={pageNum}
+                      type="button"
+                      onClick={() => setCurrentPage(pageNum)}
+                      className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                        currentPage === pageNum
+                          ? 'bg-primary text-white'
+                          : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.min(paginatedImages.totalPages, p + 1))}
+                disabled={!paginatedImages.hasMore}
+                className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Siguiente
+              </button>
+            </div>
+          )}
         </div>
       )}
 
