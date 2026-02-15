@@ -47,7 +47,7 @@ export interface ExcelParseResult {
 /**
  * Mapeo extensivo de columnas esperadas
  * Soporta múltiples variaciones de nombres para cada campo
- * Incluye todos los 33 campos del diccionario de datos
+ * Incluye todos los 35 campos del diccionario de datos
  */
 const COLUMN_MAPPING: Record<string, string> = {
   // IDENTIFICACIÓN
@@ -79,8 +79,14 @@ const COLUMN_MAPPING: Record<string, string> = {
   // COMPONENTES
   'sistema': 'sistema',
   'ano_instalacion': 'anoInstalacion',
+  'año_instalacion': 'anoInstalacion',
+  'ano_de_instalacion': 'anoInstalacion',
+  'año_de_instalacion': 'anoInstalacion',
   'tipo_camara': 'tipoCamara',
   'estructura_pavimento': 'estructuraPavimento',
+  'estructura_de_pavimento': 'estructuraPavimento',
+  'material_rasante': 'materialRasante',
+  'estado_rasante': 'estadoRasante',
   'existe_tapa': 'existeTapa',
   'tapa': 'existeTapa',
   'material_tapa': 'materialTapa',
@@ -93,6 +99,7 @@ const COLUMN_MAPPING: Record<string, string> = {
   'existe_cilindro': 'existeCilindro',
   'cilindro': 'existeCilindro',
   'diametro_cilindro': 'diametroCilindro',
+  'diametro_cilindro_m': 'diametroCilindro',
   'material_cilindro': 'materialCilindro',
   'estado_cilindro': 'estadoCilindro',
   'existe_canuela': 'existeCanuela',
@@ -164,15 +171,16 @@ const FOTO_MAPPING: Record<string, string> = {
 const REQUIRED_COLUMNS = ['idPozo', 'coordenadaX', 'coordenadaY', 'fecha', 'levanto', 'estado'];
 
 /**
- * Campos esperados para estadísticas (todos los 33 campos del diccionario)
+ * Campos esperados para estadísticas (todos los 35 campos del diccionario)
  */
 const EXPECTED_FIELDS = [
   // Identificación (6)
   'idPozo', 'coordenadaX', 'coordenadaY', 'fecha', 'levanto', 'estado',
   // Ubicación (4)
   'direccion', 'barrio', 'elevacion', 'profundidad',
-  // Componentes (23)
+  // Componentes (25)
   'sistema', 'anoInstalacion', 'tipoCamara', 'estructuraPavimento',
+  'materialRasante', 'estadoRasante',
   'existeTapa', 'materialTapa', 'estadoTapa',
   'existeCono', 'tipoCono', 'materialCono', 'estadoCono',
   'existeCilindro', 'diametroCilindro', 'materialCilindro', 'estadoCilindro',
@@ -851,6 +859,8 @@ function parseRow(
     anoInstalacion: { value: getValue('anoInstalacion'), source: 'excel' },
     tipoCamara: { value: getValue('tipoCamara'), source: 'excel' },
     estructuraPavimento: { value: getValue('estructuraPavimento'), source: 'excel' },
+    materialRasante: { value: getValue('materialRasante'), source: 'excel' },
+    estadoRasante: { value: getValue('estadoRasante'), source: 'excel' },
     existeTapa: { value: existeTapa, source: 'excel' },
     materialTapa: { value: getValue('materialTapa'), source: 'excel' },
     estadoTapa: { value: estadoTapa, source: 'excel' },
@@ -896,6 +906,8 @@ function parseRow(
       anoInstalacion: { value: getValue('anoInstalacion'), source: 'excel' },
       tipoCamara: { value: getValue('tipoCamara'), source: 'excel' },
       estructuraPavimento: { value: getValue('estructuraPavimento'), source: 'excel' },
+      materialRasante: { value: getValue('materialRasante'), source: 'excel' },
+      estadoRasante: { value: getValue('estadoRasante'), source: 'excel' },
       materialTapa: { value: getValue('materialTapa'), source: 'excel' },
       existeCono: { value: getValue('existeCono'), source: 'excel' },
       tipoCono: { value: getValue('tipoCono'), source: 'excel' },

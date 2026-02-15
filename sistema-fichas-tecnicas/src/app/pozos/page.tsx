@@ -148,6 +148,9 @@ export default function PozosPage() {
       const customDesign = customTemplates.find(v => v.id === selectedTemplateId);
       const isCustom = !!customDesign && selectedTemplateId !== 'standard';
 
+      // Generar todos los PDFs
+      const pdfBlobs: Array<{ name: string; blob: Blob }> = [];
+
       for (const pozoId of idsToProcess) {
         const pozo = pozos.get(pozoId);
         if (!pozo) continue;
@@ -171,19 +174,14 @@ export default function PozosPage() {
           fotos: { ...pozo.fotos, fotos: todasLasFotos }
         };
 
+        const pozoName = String(enrichedPozo.idPozo?.value || pozo.identificacion.idPozo.value);
+
         if (isCustom && customDesign) {
           // GENERACIÓN CON DISEÑO PERSONALIZADO
           const { generatePdfFromDesign } = await import('@/lib/pdf/designBasedPdfGenerator');
           const result = await generatePdfFromDesign(customDesign, enrichedPozo);
           if (result.success && result.blob) {
-            const url = window.URL.createObjectURL(result.blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${enrichedPozo.idPozo?.value || pozo.identificacion.idPozo.value}.pdf`;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
+            pdfBlobs.push({ name: pozoName, blob: result.blob });
           }
         } else {
           // GENERACIÓN CON DISEÑO ESTÁNDAR
@@ -217,25 +215,55 @@ export default function PozosPage() {
           const { pdfMakeGenerator } = await import('@/lib/pdf/pdfMakeGenerator');
           const result = await pdfMakeGenerator.generatePDF(ficha, enrichedPozo);
           if (result.success && result.blob) {
-            const url = window.URL.createObjectURL(result.blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${enrichedPozo.idPozo?.value || pozo.identificacion.idPozo.value}.pdf`;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            document.body.removeChild(a);
+            pdfBlobs.push({ name: pozoName, blob: result.blob });
           }
         }
       }
 
-      addToast({
-        type: 'success',
-        message: `${idsToProcess.length} PDF(s) generados correctamente`
-      });
+      // Si hay múltiples PDFs, generar ZIP; si hay uno solo, descargar directamente
+      if (pdfBlobs.length > 1) {
+        const { generateBatchPdfZip, downloadZip } = await import('@/lib/pdf/batchPdfGenerator');
+        const zipResult = await generateBatchPdfZip(pdfBlobs, 'fichas_tecnicas.zip');
+        
+        if (zipResult.success && zipResult.blob) {
+          downloadZip(zipResult.blob, 'fichas_tecnicas.zip');
+          addToast({
+            type: 'success',
+            message: `${pdfBlobs.length} fichas comprimidas en ZIP`
+          });
+        } else {
+          addToast({
+            type: 'error',
+            message: zipResult.message
+          });
+        }
+      } else if (pdfBlobs.length === 1) {
+        // Descargar PDF único directamente
+        const url = window.URL.createObjectURL(pdfBlobs[0].blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${pdfBlobs[0].name}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+
+        addToast({
+          type: 'success',
+          message: 'PDF generado correctamente'
+        });
+      } else {
+        addToast({
+          type: 'error',
+          message: 'No se pudieron generar los PDFs'
+        });
+      }
     } catch (error) {
       logger.error('Error en generación masiva', error, 'PozosPage');
-      alert('Error al generar los PDFs');
+      addToast({
+        type: 'error',
+        message: 'Error al generar los PDFs'
+      });
     } finally {
       setLoading(false);
     }
@@ -288,11 +316,12 @@ export default function PozosPage() {
                   <button
                     onClick={() => handleGeneratePDF()}
                     className="px-4 py-2 text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 shadow-md transition-all active:scale-95 flex items-center gap-2"
+                    title={selectedIds.size > 1 ? 'Descargar como ZIP comprimido' : 'Descargar PDF'}
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                     </svg>
-                    PDF ({selectedIds.size})
+                    {selectedIds.size > 1 ? `ZIP (${selectedIds.size})` : `PDF (${selectedIds.size})`}
                   </button>
 
                   <button

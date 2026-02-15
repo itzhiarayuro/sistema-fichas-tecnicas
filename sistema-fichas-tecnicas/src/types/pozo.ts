@@ -145,6 +145,12 @@ export interface ComponentesPozo {
   estructuraPavimento: FieldValue; // Tipo de pavimento superficial
 
   // 🟢 Opcional
+  materialRasante: FieldValue; // Material de la rasante
+
+  // 🟢 Opcional
+  estadoRasante: FieldValue; // Estado de la rasante
+
+  // 🟢 Opcional
   materialTapa: FieldValue; // Material de la tapa
 
   // 🟢 Opcional
@@ -368,6 +374,8 @@ export interface Pozo {
   anoInstalacion?: FieldValue;
   tipoCamara?: FieldValue;
   estructuraPavimento?: FieldValue;
+  materialRasante?: FieldValue;
+  estadoRasante?: FieldValue;
   existeTapa?: FieldValue;
   materialTapa?: FieldValue;
   estadoTapa?: FieldValue;
