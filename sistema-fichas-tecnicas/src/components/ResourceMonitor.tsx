@@ -18,22 +18,25 @@ export function ResourceMonitor() {
     const photosCount = useGlobalStore(s => s.photos.size);
 
     useEffect(() => {
-        // Intervalo de monitoreo (cada 5 segundos)
+        // Intervalo de monitoreo más largo (cada 15 segundos) para reducir overhead
         const interval = setInterval(() => {
             const status = resourceManager.getStatus();
 
-            // Si la memoria es crítica, activar modo degradado
-            if (status.memoryStatus === 'critical') {
+            // Solo activar modo degradado en casos extremos (más de 5000 fotos)
+            // La paginación ya maneja la visualización eficientemente
+            if (photosCount > 5000) {
                 setDegradedMode(true);
-                showWarning('Sistema bajo carga extrema. Activando modo de ahorro de recursos.');
+                // Advertencia silenciosa, solo en consola
+                console.warn(`⚠️ Sistema con ${photosCount} fotos. Modo degradado activado.`);
             }
 
-            // Monitorear límites de visualización
-            if (photosCount > 2000) {
+            // Si la memoria es crítica Y hay muchas fotos, activar modo degradado
+            if (status.memoryStatus === 'critical' && photosCount > 3000) {
                 setDegradedMode(true);
+                console.warn('⚠️ Memoria crítica con alta carga de fotos. Modo degradado activado.');
             }
 
-        }, 5000);
+        }, 15000); // Aumentado de 5s a 15s
 
         return () => clearInterval(interval);
     }, [showWarning, setDegradedMode, photosCount]);
