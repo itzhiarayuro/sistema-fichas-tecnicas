@@ -26,6 +26,7 @@ import { useGlobalStore } from '@/stores/globalStore';
 import { useUIStore } from '@/stores/uiStore';
 import { blobStore } from '@/lib/storage/blobStore';
 import { LimitManager } from '@/lib/managers/limitManager';
+import { processBatch } from '@/lib/utils/batchProcessor';
 import type { Pozo, FotoInfo } from '@/types';
 
 export default function UploadPage() {
@@ -210,11 +211,21 @@ export default function UploadPage() {
     const allPozos: Pozo[] = [];
     const allPhotos: FotoInfo[] = [];
 
-    // Procesar archivos uno por uno
-    for (let i = 0; i < filteredFiles.length; i++) {
-      const file = filteredFiles[i];
-      const fileItem = fileItems[i];
+    // Separar archivos por tipo
+    const excelFiles: Array<{ file: File; fileItem: FileItem; index: number }> = [];
+    const imageFiles: Array<{ file: File; fileItem: FileItem; index: number }> = [];
 
+    filteredFiles.forEach((file, index) => {
+      const fileItem = fileItems[index];
+      if (isExcelFile(file.name)) {
+        excelFiles.push({ file, fileItem, index });
+      } else if (isImageFile(file.name)) {
+        imageFiles.push({ file, fileItem, index });
+      }
+    });
+
+    // Procesar archivos Excel primero (secuencialmente)
+    for (const { file, fileItem, index } of excelFiles) {
       // Actualizar estado a procesando
       setFiles(prev => prev.map(f =>
         f.id === fileItem.id ? { ...f, status: 'processing' as const, progress: 0 } : f
@@ -226,7 +237,6 @@ export default function UploadPage() {
       const validation = await validateFile(file);
 
       if (!validation.isValid) {
-        // Archivo inválido
         const errorMsg = validation.errors[0]?.userMessage || 'Archivo no válido';
         setFiles(prev => prev.map(f =>
           f.id === fileItem.id ? { ...f, status: 'error' as const, message: errorMsg } : f
@@ -236,54 +246,23 @@ export default function UploadPage() {
         continue;
       }
 
-      // Agregar warnings
       if (validation.warnings.length > 0) {
         newStats.warnings += validation.warnings.length;
       }
 
       try {
-        if (isExcelFile(file.name)) {
-          // Procesar Excel
-          setProcessingMessage(`Extrayendo datos de ${file.name}...`);
-          const pozos = await processExcelFile(file);
-          allPozos.push(...pozos);
-          newStats.totalPozos += pozos.length;
+        setProcessingMessage(`Extrayendo datos de ${file.name}...`);
+        const pozos = await processExcelFile(file);
+        allPozos.push(...pozos);
+        newStats.totalPozos += pozos.length;
 
-          setFiles(prev => prev.map(f =>
-            f.id === fileItem.id ? {
-              ...f,
-              status: pozos.length > 0 ? 'success' as const : 'warning' as const,
-              message: `${pozos.length} pozos extraídos`
-            } : f
-          ));
-        } else if (isImageFile(file.name)) {
-          // Procesar imagen
-          setProcessingMessage(`Procesando imagen ${file.name}...`);
-          const foto = await processImageFile(file);
-
-          if (foto) {
-            allPhotos.push(foto);
-            newStats.totalPhotos++;
-
-            setFiles(prev => prev.map(f =>
-              f.id === fileItem.id ? {
-                ...f,
-                status: 'success' as const,
-                message: foto.categoria !== 'OTRO' ? `Asociada: ${foto.descripcion}` : 'Sin asociar',
-                preview: blobStore.getUrl(foto.blobId) // Usar ObjectURL temporal
-              } : f
-            ));
-          } else {
-            setFiles(prev => prev.map(f =>
-              f.id === fileItem.id ? {
-                ...f,
-                status: 'error' as const,
-                message: 'Error al procesar imagen'
-              } : f
-            ));
-            newStats.errors++;
-          }
-        }
+        setFiles(prev => prev.map(f =>
+          f.id === fileItem.id ? {
+            ...f,
+            status: pozos.length > 0 ? 'success' as const : 'warning' as const,
+            message: `${pozos.length} pozos extraídos`
+          } : f
+        ));
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Error desconocido';
         setFiles(prev => prev.map(f =>
@@ -292,11 +271,85 @@ export default function UploadPage() {
         newStats.errors++;
       }
 
-      // Actualizar progreso
-      newStats.processedFiles = i + 1;
-      const progressPercent = ((i + 1) / filteredFiles.length) * 100;
-      setProgress(progressPercent);
+      newStats.processedFiles++;
       setStats({ ...newStats });
+    }
+
+    // Procesar imágenes en lotes (batch processing)
+    if (imageFiles.length > 0) {
+      console.log(`📸 Procesando ${imageFiles.length} imágenes en lotes...`);
+      
+      await processBatch({
+        items: imageFiles,
+        batchSize: 20, // Procesar 20 imágenes a la vez
+        delayBetweenBatches: 50, // 50ms entre lotes
+        processor: async ({ file, fileItem }, globalIndex) => {
+          // Actualizar estado a procesando
+          setFiles(prev => prev.map(f =>
+            f.id === fileItem.id ? { ...f, status: 'processing' as const, progress: 0 } : f
+          ));
+
+          // Validar archivo
+          const validation = await validateFile(file);
+
+          if (!validation.isValid) {
+            const errorMsg = validation.errors[0]?.userMessage || 'Archivo no válido';
+            setFiles(prev => prev.map(f =>
+              f.id === fileItem.id ? { ...f, status: 'error' as const, message: errorMsg } : f
+            ));
+            newStats.errors++;
+            return null;
+          }
+
+          if (validation.warnings.length > 0) {
+            newStats.warnings += validation.warnings.length;
+          }
+
+          try {
+            const foto = await processImageFile(file);
+
+            if (foto) {
+              allPhotos.push(foto);
+              newStats.totalPhotos++;
+
+              setFiles(prev => prev.map(f =>
+                f.id === fileItem.id ? {
+                  ...f,
+                  status: 'success' as const,
+                  message: foto.categoria !== 'OTRO' ? `Asociada: ${foto.descripcion}` : 'Sin asociar',
+                  preview: blobStore.getUrl(foto.blobId)
+                } : f
+              ));
+
+              return foto;
+            } else {
+              setFiles(prev => prev.map(f =>
+                f.id === fileItem.id ? {
+                  ...f,
+                  status: 'error' as const,
+                  message: 'Error al procesar imagen'
+                } : f
+              ));
+              newStats.errors++;
+              return null;
+            }
+          } catch (error) {
+            const message = error instanceof Error ? error.message : 'Error desconocido';
+            setFiles(prev => prev.map(f =>
+              f.id === fileItem.id ? { ...f, status: 'error' as const, message } : f
+            ));
+            newStats.errors++;
+            return null;
+          }
+        },
+        onProgress: (processed, total) => {
+          newStats.processedFiles = excelFiles.length + processed;
+          const progressPercent = ((excelFiles.length + processed) / filteredFiles.length) * 100;
+          setProgress(progressPercent);
+          setStats({ ...newStats });
+          setProcessingMessage(`Procesando imágenes: ${processed}/${total}`);
+        },
+      });
     }
 
     // Guardar en estado local (acumulativo)
