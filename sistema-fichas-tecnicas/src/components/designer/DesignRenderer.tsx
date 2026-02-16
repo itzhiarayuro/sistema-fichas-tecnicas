@@ -247,36 +247,46 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
                             {/* SECCIÓN LABEL */}
                             {placement.showLabel && (
                                 <div
-                                    className="flex-shrink-0 mb-0.5"
+                                    className="flex-shrink-0 mb-0.5 box-border flex items-center overflow-hidden"
                                     style={{
                                         lineHeight: 1.2,
-                                        fontSize: `${(placement.labelFontSize || ((placement.fontSize || 10) * 0.8)) * zoom}pt`,
                                         fontWeight: placement.labelFontWeight || 'bold',
                                         color: placement.labelColor || '#6B7280',
                                         backgroundColor: placement.labelBackgroundColor || 'transparent',
                                         padding: placement.labelPadding ? `${placement.labelPadding * zoom}px` : 0,
                                         width: placement.labelWidth ? `${placement.labelWidth * MM_TO_PX}px` : '100%',
-                                        textAlign: placement.labelAlign || 'left',
-                                        textTransform: 'uppercase',
-                                        // Asegurar que el width funcione si es menor al contenedor
-                                        alignSelf: placement.labelAlign === 'center' ? 'center' : (placement.labelAlign === 'right' ? 'flex-end' : 'flex-start')
+                                        justifyContent: placement.labelAlign === 'center' ? 'center' : (placement.labelAlign === 'right' ? 'flex-end' : 'flex-start'),
+                                        alignSelf: placement.labelWidth && placement.labelAlign === 'center' ? 'center' : (placement.labelWidth && placement.labelAlign === 'right' ? 'flex-end' : 'flex-start')
                                     }}
                                 >
-                                    {placement.customLabel || placement.fieldId}
+                                    <span
+                                        className="truncate"
+                                        style={{
+                                            fontSize: `${(placement.labelFontSize || ((placement.fontSize || 10) * 0.8)) * zoom}pt`,
+                                            textTransform: 'uppercase'
+                                        }}
+                                    >
+                                        {placement.customLabel || placement.fieldId}
+                                    </span>
                                 </div>
                             )}
 
                             {/* SECCIÓN VALOR */}
-                            <div className="flex-grow w-full flex items-center overflow-hidden min-h-0" style={{
-                                justifyContent: placement.textAlign === 'center' ? 'center' : (placement.textAlign === 'right' ? 'flex-end' : 'flex-start'),
-                            }}>
-                                <span className="block truncate w-full" style={{
+                            {/* Usamos Flexbox para alinear el contenido horizontalmente (justifyContent) en lugar de textAlign */}
+                            <div
+                                className="flex-grow w-full flex items-center overflow-hidden min-h-0"
+                                style={{
+                                    justifyContent: placement.textAlign === 'center' ? 'center' : (placement.textAlign === 'right' ? 'flex-end' : 'flex-start')
+                                }}
+                            >
+                                <span className="block truncate" style={{
                                     fontSize: `${(placement.fontSize || 10) * zoom}pt`,
                                     fontFamily: placement.fontFamily || 'Inter',
                                     fontWeight: placement.fontWeight || 'normal',
                                     color: placement.color || '#000',
-                                    textAlign: placement.textAlign || 'left',
-                                    lineHeight: 1.2
+                                    // Eliminamos textAlign aquí porque lo maneja el padre flex
+                                    lineHeight: 1.2,
+                                    maxWidth: '100%'
                                 }}>
                                     {String(value || '-')}
                                 </span>

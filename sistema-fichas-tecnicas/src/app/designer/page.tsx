@@ -145,6 +145,16 @@ export default function DesignerPage() {
         if (id && !designerPanels.showProperties) {
             toggleDesignerPanel('properties');
         }
+        
+        // Scroll al elemento en el canvas si existe
+        if (id) {
+            setTimeout(() => {
+                const element = document.querySelector(`[data-placement-id="${id}"]`);
+                if (element) {
+                    element.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+                }
+            }, 100);
+        }
     };
 
     const handleSelectShapeFromLayers = (id: string | null) => {
@@ -156,6 +166,16 @@ export default function DesignerPage() {
         // Abrir propiedades cuando se selecciona desde capas
         if (id && !designerPanels.showProperties) {
             toggleDesignerPanel('properties');
+        }
+        
+        // Scroll al elemento en el canvas si existe
+        if (id) {
+            setTimeout(() => {
+                const element = document.querySelector(`[data-shape-id="${id}"]`);
+                if (element) {
+                    element.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+                }
+            }, 100);
         }
     };
 
@@ -391,7 +411,7 @@ export default function DesignerPage() {
                                         </svg>
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <p className="text-xs font-bold text-emerald-700 mb-2 uppercase tracking-wide">Seleccionado en Canvas</p>
+                                        <p className="text-xs font-bold text-emerald-700 mb-2 uppercase tracking-wide">Seleccionado</p>
                                         
                                         {/* Nombre del elemento */}
                                         <div className="bg-white rounded-md p-2 mb-2 border border-emerald-200">
@@ -409,12 +429,6 @@ export default function DesignerPage() {
                                                                     : shape?.type ? shape.type.charAt(0).toUpperCase() + shape.type.slice(1) : 'Elemento';
                                                         })()
                                                         : 'Elemento'
-                                                }
-                                            </p>
-                                            <p className="text-[10px] text-emerald-600 mt-1">
-                                                {selectedPlacementId 
-                                                    ? `📍 En el panel de capas`
-                                                    : `🔲 Figura geométrica`
                                                 }
                                             </p>
                                         </div>

@@ -449,6 +449,7 @@ export function DesignCanvas({
             return (
                 <div
                     key={`${shape.id}-${currentPage}`}
+                    data-shape-id={shape.id}
                     ref={isSelected && elementPage === currentPage ? selectedElementRef : null}
                     onMouseDown={(e) => handleShapeMouseDown(e, shape)}
                     className={`absolute select-none transition-all duration-200 ${
@@ -497,6 +498,7 @@ export function DesignCanvas({
             return (
                 <div
                     key={`${placement.id}-${currentPage}`}
+                    data-placement-id={placement.id}
                     ref={isSelected && elementPage === currentPage ? selectedElementRef : null}
                     onMouseDown={(e) => handlePlacementMouseDown(e, placement)}
                     className={`absolute select-none transition-all duration-200 ${
