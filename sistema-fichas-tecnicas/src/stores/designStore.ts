@@ -407,8 +407,7 @@ export const useDesignStore = create<DesignState>()(
         }),
         {
             name: 'fichas:design-versions',
-            // Opcional: blacklist de 'past' y 'future' si no queremos persistir historial entre sesiones
-            // partialize: (state) => ({ versions: state.versions, currentVersionId: state.currentVersionId })
+            partialize: (state) => ({ versions: state.versions, currentVersionId: state.currentVersionId }),
         }
     )
 );

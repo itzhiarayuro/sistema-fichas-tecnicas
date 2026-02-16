@@ -121,6 +121,8 @@ export default function DesignerPage() {
         setSelectedShapeId(null);
         setPendingShape(null);
         setPendingField(null);
+        
+        // NO abrir propiedades desde canvas - solo señalar en capas
     };
 
     const handleSelectShape = (id: string | null) => {
@@ -128,6 +130,33 @@ export default function DesignerPage() {
         setSelectedPlacementId(null);
         setPendingShape(null);
         setPendingField(null);
+        
+        // NO abrir propiedades desde canvas - solo señalar en capas
+    };
+
+    // Handlers para selección desde el panel de capas (SÍ abre propiedades)
+    const handleSelectPlacementFromLayers = (id: string | null) => {
+        setSelectedPlacementId(id);
+        setSelectedShapeId(null);
+        setPendingShape(null);
+        setPendingField(null);
+        
+        // Abrir propiedades cuando se selecciona desde capas
+        if (id && !designerPanels.showProperties) {
+            toggleDesignerPanel('properties');
+        }
+    };
+
+    const handleSelectShapeFromLayers = (id: string | null) => {
+        setSelectedShapeId(id);
+        setSelectedPlacementId(null);
+        setPendingShape(null);
+        setPendingField(null);
+        
+        // Abrir propiedades cuando se selecciona desde capas
+        if (id && !designerPanels.showProperties) {
+            toggleDesignerPanel('properties');
+        }
     };
 
     // Keyboard Shortcuts for Undo/Redo
@@ -206,6 +235,19 @@ export default function DesignerPage() {
                         >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    {/* Panel Toggle Derecho: Propiedades */}
+                    <div className="absolute top-2 right-2 z-20">
+                        <button
+                            onClick={() => toggleDesignerPanel('properties')}
+                            className={`p-2 rounded-lg shadow-md transition-all ${designerPanels.showProperties ? 'bg-purple-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100'}`}
+                            title="Propiedades"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
                             </svg>
                         </button>
                     </div>
@@ -305,8 +347,8 @@ export default function DesignerPage() {
                                     version={currentVersion}
                                     selectedPlacementId={selectedPlacementId}
                                     selectedShapeId={selectedShapeId}
-                                    onSelectPlacement={handleSelectPlacement}
-                                    onSelectShape={handleSelectShape}
+                                    onSelectPlacement={handleSelectPlacementFromLayers}
+                                    onSelectShape={handleSelectShapeFromLayers}
                                 />
                             </div>
                             {/* Mobile drawer for layers */}
@@ -324,8 +366,8 @@ export default function DesignerPage() {
                                         version={currentVersion}
                                         selectedPlacementId={selectedPlacementId}
                                         selectedShapeId={selectedShapeId}
-                                        onSelectPlacement={handleSelectPlacement}
-                                        onSelectShape={handleSelectShape}
+                                        onSelectPlacement={(id) => { handleSelectPlacementFromLayers(id); setDesignerPanelWidth('layers', 0); }}
+                                        onSelectShape={(id) => { handleSelectShapeFromLayers(id); setDesignerPanelWidth('layers', 0); }}
                                     />
                                 </div>
                             </div>
@@ -339,6 +381,56 @@ export default function DesignerPage() {
 
                     {/* Área Central: Canvas */}
                     <main className="flex-1 relative overflow-auto p-4 md:p-8 bg-gradient-to-br from-gray-100 to-gray-200 min-w-0">
+                        {/* Indicador de elemento seleccionado desde canvas */}
+                        {(selectedPlacementId || selectedShapeId) && currentVersion && (
+                            <div className="absolute top-4 right-4 bg-gradient-to-br from-emerald-50 to-green-50 border-2 border-emerald-300 text-emerald-900 px-4 py-3 rounded-lg shadow-xl z-10 max-w-sm">
+                                <div className="flex items-start gap-3">
+                                    <div className="flex-shrink-0 mt-0.5">
+                                        <svg className="w-5 h-5 text-emerald-600 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-xs font-bold text-emerald-700 mb-2 uppercase tracking-wide">Seleccionado en Canvas</p>
+                                        
+                                        {/* Nombre del elemento */}
+                                        <div className="bg-white rounded-md p-2 mb-2 border border-emerald-200">
+                                            <p className="text-sm font-bold text-emerald-900 truncate">
+                                                {selectedPlacementId 
+                                                    ? (currentVersion.placements.find(p => p.id === selectedPlacementId)?.customLabel || 
+                                                       `Campo ${currentVersion.placements.find(p => p.id === selectedPlacementId)?.fieldId}`)
+                                                    : selectedShapeId
+                                                        ? (() => {
+                                                            const shape = currentVersion.shapes?.find(s => s.id === selectedShapeId);
+                                                            return shape?.type === 'text' && shape.content 
+                                                                ? `Texto: ${shape.content.substring(0, 20)}${shape.content.length > 20 ? '...' : ''}`
+                                                                : shape?.type === 'image' 
+                                                                    ? 'Imagen'
+                                                                    : shape?.type ? shape.type.charAt(0).toUpperCase() + shape.type.slice(1) : 'Elemento';
+                                                        })()
+                                                        : 'Elemento'
+                                                }
+                                            </p>
+                                            <p className="text-[10px] text-emerald-600 mt-1">
+                                                {selectedPlacementId 
+                                                    ? `📍 En el panel de capas`
+                                                    : `🔲 Figura geométrica`
+                                                }
+                                            </p>
+                                        </div>
+
+                                        {/* Instrucción */}
+                                        <p className="text-[10px] text-emerald-700 flex items-center gap-1 font-medium">
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                                            </svg>
+                                            Haz clic en capas para editar propiedades
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        
                         {(pendingShape || pendingField) && (
                             <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-purple-600 text-white px-4 py-2 rounded-lg shadow-lg z-10 flex items-center gap-2">
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

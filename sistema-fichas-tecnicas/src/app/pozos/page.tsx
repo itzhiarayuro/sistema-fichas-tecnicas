@@ -178,10 +178,10 @@ export default function PozosPage() {
 
         if (isCustom && customDesign) {
           // GENERACIÓN CON DISEÑO PERSONALIZADO
-          
+
           // Detectar si usar generador de alta fidelidad
           const useHighFidelity = customDesign.name !== 'standard' && customDesign.placements && customDesign.placements.length > 0;
-          
+
           if (useHighFidelity) {
             console.log('🎯 Usando generador de ALTA FIDELIDAD para:', customDesign.name);
             const { generateHighFidelityPDF } = await import('@/lib/pdf/highFidelityGenerator');
@@ -245,7 +245,7 @@ export default function PozosPage() {
       if (pdfBlobs.length > 1) {
         const { generateBatchPdfZip, downloadZip } = await import('@/lib/pdf/batchPdfGenerator');
         const zipResult = await generateBatchPdfZip(pdfBlobs, 'fichas_tecnicas.zip');
-        
+
         if (zipResult.success && zipResult.blob) {
           downloadZip(zipResult.blob, 'fichas_tecnicas.zip');
           addToast({
@@ -430,11 +430,13 @@ export default function PozosPage() {
           {/* Preview panel */}
           {selectedPozo && (
             <div className="tablet:w-1/2 desktop:w-1/3 border-t tablet:border-t-0 tablet:border-l border-gray-200 bg-white overflow-auto">
-              <PozoPreviewPanel
-                pozo={selectedPozo}
-                onEdit={handleEditPozo}
-                onClose={() => setSelectedPozoId(null)}
-              />
+              <div id="preview-container-wrapper">
+                <PozoPreviewPanel
+                  pozo={selectedPozo}
+                  onEdit={handleEditPozo}
+                  onClose={() => setSelectedPozoId(null)}
+                />
+              </div>
             </div>
           )}
         </div>

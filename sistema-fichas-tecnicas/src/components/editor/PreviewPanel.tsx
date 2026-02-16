@@ -148,9 +148,86 @@ function LazyPhoto({ foto }: { foto: FotoInfo }) {
   );
 }
 
+// Pozo de ejemplo "Mock" para previsualización sin datos
+const MOCK_POZO: Partial<Pozo> = {
+  id: 'mock-001',
+  identificacion: {
+    idPozo: { value: 'PZ-MOCK-001', source: 'manual' },
+    coordenadaX: { value: '-74.000', source: 'manual' },
+    coordenadaY: { value: '4.600', source: 'manual' },
+    fecha: { value: '2024-01-15', source: 'manual' },
+    levanto: { value: 'Inspector Mock', source: 'manual' },
+    estado: { value: 'Bueno', source: 'manual' }
+  },
+  ubicacion: {
+    direccion: { value: 'Calle 10 # 5-20', source: 'manual' },
+    barrio: { value: 'Centro Histórico', source: 'manual' },
+    elevacion: { value: '1500.2', source: 'manual' },
+    profundidad: { value: '2.5', source: 'manual' }
+  },
+  componentes: {
+    existeTapa: { value: 'Sí', source: 'manual' },
+    estadoTapa: { value: 'Bueno', source: 'manual' },
+    existeCilindro: { value: 'Sí', source: 'manual' },
+    diametroCilindro: { value: '1.20', source: 'manual' },
+    sistema: { value: 'Sanitario', source: 'manual' },
+    anoInstalacion: { value: '2020', source: 'manual' },
+    tipoCamara: { value: 'Circular', source: 'manual' },
+    estructuraPavimento: { value: 'Asfalto', source: 'manual' },
+    materialRasante: { value: 'Concreto', source: 'manual' },
+    estadoRasante: { value: 'Bueno', source: 'manual' },
+    materialTapa: { value: 'Concreto', source: 'manual' },
+    existeCono: { value: 'Sí', source: 'manual' },
+    tipoCono: { value: 'Concéntrico', source: 'manual' },
+    materialCono: { value: 'Ladrillo', source: 'manual' },
+    estadoCono: { value: 'Bueno', source: 'manual' },
+    materialCilindro: { value: 'Ladrillo', source: 'manual' },
+    estadoCilindro: { value: 'Bueno', source: 'manual' },
+    existeCanuela: { value: 'Sí', source: 'manual' },
+    materialCanuela: { value: 'Concreto', source: 'manual' },
+    estadoCanuela: { value: 'Bueno', source: 'manual' },
+    existePeldanos: { value: 'Sí', source: 'manual' },
+    materialPeldanos: { value: 'Hierro', source: 'manual' },
+    numeroPeldanos: { value: '5', source: 'manual' },
+    estadoPeldanos: { value: 'Bueno', source: 'manual' }
+  },
+  tuberias: {
+    tuberias: [
+      {
+        idPozo: { value: 'PZ-MOCK-001', source: 'manual' },
+        idTuberia: { value: 'TB-1', source: 'manual' },
+        tipoTuberia: { value: 'Entrada', source: 'manual' },
+        diametro: { value: '8', source: 'manual' },
+        material: { value: 'PVC', source: 'manual' },
+        cota: { value: '1498.0', source: 'manual' },
+        estado: { value: 'Bueno', source: 'manual' },
+        emboquillado: { value: 'Bien', source: 'manual' },
+        longitud: { value: '45.0', source: 'manual' }
+      },
+      {
+        idPozo: { value: 'PZ-MOCK-001', source: 'manual' },
+        idTuberia: { value: 'TB-2', source: 'manual' },
+        tipoTuberia: { value: 'Salida', source: 'manual' },
+        diametro: { value: '10', source: 'manual' },
+        material: { value: 'Concreto', source: 'manual' },
+        cota: { value: '1497.8', source: 'manual' },
+        estado: { value: 'Regular', source: 'manual' },
+        emboquillado: { value: 'Regular', source: 'manual' },
+        longitud: { value: '12.5', source: 'manual' }
+      }
+    ]
+  },
+  observaciones: {
+    observaciones: { value: 'Pozo en buen estado general. Se recomienda limpieza preventiva.', source: 'manual' }
+  },
+  fotos: {
+    fotos: []
+  }
+};
+
 export function PreviewPanel({
   fichaState,
-  pozo,
+  pozo: propsPozo,
   customizations,
   showEditIndicators = true,
   zoom = 1,
@@ -159,6 +236,9 @@ export function PreviewPanel({
   const { getVersionById, getCurrentVersion } = useDesignStore();
   const degradedMode = useUIStore(s => s.degradedMode);
   const [useCustomDesign, setUseCustomDesign] = useState(!!fichaState?.customizations?.designId);
+
+  // Usar pozo real o fallback a MOCK_POZO
+  const pozo = (propsPozo || MOCK_POZO) as Pozo;
 
   // Determinar el diseño activo
   const activeDesign = useMemo(() => {
@@ -312,7 +392,9 @@ export function PreviewPanel({
           className="bg-gray-200 p-8 rounded-xl overflow-auto flex justify-center border-2 border-dashed border-gray-300 min-h-[600px] shadow-inner"
           style={{ zoom }}
         >
-          <DesignRenderer design={activeDesign} pozo={pozo} zoom={1} />
+          <div id="preview-print-container" className="bg-white shadow-lg mx-auto">
+            <DesignRenderer design={activeDesign} pozo={pozo} zoom={1} />
+          </div>
         </div>
       ) : (
         <div

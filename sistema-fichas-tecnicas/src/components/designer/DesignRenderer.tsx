@@ -195,22 +195,30 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
             const isPhoto = placement.fieldId.startsWith('foto_');
             const isWidget = placement.fieldId === 'widget_tuberias';
 
+            // Estilos base del contenedor principal
+            const containerStyle: React.CSSProperties = {
+                left: x,
+                top: y,
+                width,
+                height,
+                zIndex: placement.zIndex || 5,
+                borderRadius: placement.borderRadius ? `${placement.borderRadius * MM_TO_PX / zoom}px` : 0,
+                // Si el usuario define un fondo general para todo el campo (no para el label), se aplicaría aquí
+                backgroundColor: placement.backgroundColor || 'transparent',
+                // Borde general
+                borderWidth: placement.borderWidth ? `${placement.borderWidth}px` : 0,
+                borderColor: placement.borderColor || 'transparent',
+                borderStyle: 'solid',
+                padding: placement.padding ? `${placement.padding * zoom}px` : 0,
+                display: 'flex',
+                flexDirection: 'column',
+            };
+
             return (
                 <div
                     key={`${placement.id}-${currentPage}`}
-                    className="absolute overflow-hidden"
-                    style={{
-                        left: x,
-                        top: y,
-                        width,
-                        height,
-                        zIndex: placement.zIndex || 5,
-                        backgroundColor: placement.backgroundColor || 'transparent',
-                        borderRadius: placement.borderRadius ? `${placement.borderRadius * MM_TO_PX / zoom}px` : 0,
-                        padding: placement.padding ? `${placement.padding}px` : 0,
-                        display: 'flex',
-                        flexDirection: 'column',
-                    }}
+                    className="absolute overflow-hidden box-border"
+                    style={containerStyle}
                 >
                     {isPhoto ? (
                         <div className="w-full h-full relative">
@@ -219,7 +227,7 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
                             )}
                         </div>
                     ) : isWidget ? (
-                        <div className="w-full border border-gray-300 rounded overflow-hidden text-[6pt]">
+                        <div className="w-full h-full border border-gray-300 rounded overflow-hidden text-[6pt] bg-white">
                             <div className="grid grid-cols-3 bg-gray-100 font-bold border-b border-gray-300 p-1">
                                 <span>Ø Diam</span>
                                 <span>Material</span>
@@ -235,21 +243,45 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
                             {(pozo.tuberias?.tuberias?.length || 0) === 0 && <div className="p-2 text-center text-gray-400 italic">Sin tuberías</div>}
                         </div>
                     ) : (
-                        <div className="p-1">
+                        <>
+                            {/* SECCIÓN LABEL */}
                             {placement.showLabel && (
-                                <span className="block truncate text-gray-400 uppercase font-bold" style={{ fontSize: `${(placement.fontSize || 10) * 0.65 * zoom}pt` }}>
+                                <div
+                                    className="flex-shrink-0 mb-0.5"
+                                    style={{
+                                        lineHeight: 1.2,
+                                        fontSize: `${(placement.labelFontSize || ((placement.fontSize || 10) * 0.8)) * zoom}pt`,
+                                        fontWeight: placement.labelFontWeight || 'bold',
+                                        color: placement.labelColor || '#6B7280',
+                                        backgroundColor: placement.labelBackgroundColor || 'transparent',
+                                        padding: placement.labelPadding ? `${placement.labelPadding * zoom}px` : 0,
+                                        width: placement.labelWidth ? `${placement.labelWidth * MM_TO_PX}px` : '100%',
+                                        textAlign: placement.labelAlign || 'left',
+                                        textTransform: 'uppercase',
+                                        // Asegurar que el width funcione si es menor al contenedor
+                                        alignSelf: placement.labelAlign === 'center' ? 'center' : (placement.labelAlign === 'right' ? 'flex-end' : 'flex-start')
+                                    }}
+                                >
                                     {placement.customLabel || placement.fieldId}
-                                </span>
+                                </div>
                             )}
-                            <span className="block truncate" style={{
-                                fontSize: `${(placement.fontSize || 10) * zoom}pt`,
-                                fontFamily: placement.fontFamily || 'Inter',
-                                color: placement.color || '#000',
-                                textAlign: placement.textAlign || 'left'
+
+                            {/* SECCIÓN VALOR */}
+                            <div className="flex-grow w-full flex items-center overflow-hidden min-h-0" style={{
+                                justifyContent: placement.textAlign === 'center' ? 'center' : (placement.textAlign === 'right' ? 'flex-end' : 'flex-start'),
                             }}>
-                                {String(value || '-')}
-                            </span>
-                        </div>
+                                <span className="block truncate w-full" style={{
+                                    fontSize: `${(placement.fontSize || 10) * zoom}pt`,
+                                    fontFamily: placement.fontFamily || 'Inter',
+                                    fontWeight: placement.fontWeight || 'normal',
+                                    color: placement.color || '#000',
+                                    textAlign: placement.textAlign || 'left',
+                                    lineHeight: 1.2
+                                }}>
+                                    {String(value || '-')}
+                                </span>
+                            </div>
+                        </>
                     )}
                 </div>
             );

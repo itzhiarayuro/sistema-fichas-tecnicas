@@ -40,6 +40,20 @@ export function DesignCanvas({
 }: DesignCanvasProps) {
     const { updatePlacement, addPlacement, removePlacement, updateShape, addShape, removeShape } = useDesignStore();
 
+    // Refs para scroll automático
+    const selectedElementRef = useRef<HTMLDivElement>(null);
+
+    // Scroll automático cuando se selecciona un elemento desde el panel de capas
+    useEffect(() => {
+        if (selectedElementRef.current) {
+            selectedElementRef.current.scrollIntoView({
+                behavior: 'smooth',
+                block: 'center',
+                inline: 'center'
+            });
+        }
+    }, [selectedPlacementId, selectedShapeId]);
+
     // Keyboard Shortcuts
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
@@ -227,8 +241,8 @@ export function DesignCanvas({
 
     // Evento MouseDown en el CANVAS (para dibujo y deselección)
     const handleCanvasMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-        // Solo actuar si es clic directo en el canvas o la grid
-        if (e.target !== e.currentTarget && !(e.target as HTMLElement).classList.contains('pointer-events-none')) {
+        // Solo actuar si es clic directo en el canvas (no en un elemento)
+        if (e.target !== e.currentTarget) {
             return;
         }
 
@@ -262,10 +276,11 @@ export function DesignCanvas({
         e.stopPropagation();
         if (placement.isLocked) return;
 
+        // Seleccionar SIEMPRE cuando se hace clic
         onSelectPlacement(placement.id);
         onSelectShape(null);
 
-        isDraggingRef.current = true;
+        // Preparar para drag (pero no iniciar aún)
         dragElementTypeRef.current = 'placement';
         dragElementIdRef.current = placement.id;
         dragStartRef.current = {
@@ -274,7 +289,6 @@ export function DesignCanvas({
             initialX: placement.x,
             initialY: placement.y,
         };
-        setIsDragging(true);
     }, [onSelectPlacement, onSelectShape]);
 
     // Drag de shapes existentes
@@ -282,10 +296,11 @@ export function DesignCanvas({
         e.stopPropagation();
         if (shape.isLocked) return;
 
+        // Seleccionar SIEMPRE cuando se hace clic
         onSelectShape(shape.id);
         onSelectPlacement(null);
 
-        isDraggingRef.current = true;
+        // Preparar para drag (pero no iniciar aún)
         dragElementTypeRef.current = 'shape';
         dragElementIdRef.current = shape.id;
         dragStartRef.current = {
@@ -294,7 +309,6 @@ export function DesignCanvas({
             initialX: shape.x,
             initialY: shape.y,
         };
-        setIsDragging(true);
     }, [onSelectShape, onSelectPlacement]);
 
     const handleMouseMove = useCallback((e: MouseEvent) => {
@@ -330,18 +344,28 @@ export function DesignCanvas({
             return;
         }
 
-        // Caso 3: Moviendo existente
-        if (isDraggingRef.current) {
+        // Caso 3: Moviendo existente - SOLO si hay movimiento real
+        if (dragElementIdRef.current && dragElementTypeRef.current) {
             const dx = (e.clientX - dragStartRef.current.x) / (MM_TO_PX * zoom);
             const dy = (e.clientY - dragStartRef.current.y) / (MM_TO_PX * zoom);
+            
+            // Threshold: solo iniciar drag si se movió más de 2 píxeles
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            if (distance > 2) {
+                if (!isDraggingRef.current) {
+                    isDraggingRef.current = true;
+                    setIsDragging(true);
+                    document.body.style.cursor = 'grabbing';
+                }
+                
+                const newX = snapValue(dragStartRef.current.initialX + dx);
+                const newY = snapValue(dragStartRef.current.initialY + dy);
 
-            const newX = snapValue(dragStartRef.current.initialX + dx);
-            const newY = snapValue(dragStartRef.current.initialY + dy);
-
-            if (dragElementTypeRef.current === 'placement' && dragElementIdRef.current) {
-                updatePlacement(version.id, dragElementIdRef.current, { x: newX, y: newY });
-            } else if (dragElementTypeRef.current === 'shape' && dragElementIdRef.current) {
-                updateShape(version.id, dragElementIdRef.current, { x: newX, y: newY });
+                if (dragElementTypeRef.current === 'placement' && dragElementIdRef.current) {
+                    updatePlacement(version.id, dragElementIdRef.current, { x: newX, y: newY });
+                } else if (dragElementTypeRef.current === 'shape' && dragElementIdRef.current) {
+                    updateShape(version.id, dragElementIdRef.current, { x: newX, y: newY });
+                }
             }
         }
     }, [version, drawingState, zoom, snapValue, selectedPlacementId, selectedShapeId, updatePlacement, updateShape]);
@@ -352,18 +376,29 @@ export function DesignCanvas({
             setDrawingState(null);
         }
 
+        // Limpiar estado de drag
         isDraggingRef.current = false;
         isResizingRef.current = false;
         dragElementIdRef.current = null;
         dragElementTypeRef.current = null;
         setIsDragging(false);
         setIsResizing(false);
+        
+        // Restaurar cursor
+        document.body.style.cursor = '';
     }, [drawingState, finalizeCreation]);
 
     // Resize handles
     const handleResizeMouseDown = useCallback((e: React.MouseEvent, item: FieldPlacement | ShapeElement) => {
         e.stopPropagation();
         if (item.isLocked) return;
+
+        // Asegurar que el elemento está seleccionado
+        if ('fieldId' in item) {
+            onSelectPlacement(item.id);
+        } else {
+            onSelectShape(item.id);
+        }
 
         isResizingRef.current = true;
         resizeStartRef.current = {
@@ -373,7 +408,7 @@ export function DesignCanvas({
             initialH: item.height,
         };
         setIsResizing(true);
-    }, []);
+    }, [onSelectPlacement, onSelectShape]);
 
     useEffect(() => {
         if (isDragging || isResizing || drawingState?.active) {
@@ -414,8 +449,15 @@ export function DesignCanvas({
             return (
                 <div
                     key={`${shape.id}-${currentPage}`}
+                    ref={isSelected && elementPage === currentPage ? selectedElementRef : null}
                     onMouseDown={(e) => handleShapeMouseDown(e, shape)}
-                    className={`absolute cursor-move select-none transition-shadow ${isSelected ? 'ring-2 ring-blue-500 ring-offset-2 z-50' : 'hover:ring-1 hover:ring-gray-300'}`}
+                    className={`absolute select-none transition-all duration-200 ${
+                        shape.isLocked 
+                            ? 'cursor-not-allowed opacity-60' 
+                            : isDragging && selectedShapeId === shape.id
+                                ? 'cursor-grabbing scale-105'
+                                : 'cursor-grab hover:scale-[1.02]'
+                    } ${isSelected ? 'ring-2 ring-emerald-500 ring-offset-2 z-50 shadow-xl' : 'hover:ring-1 hover:ring-emerald-300'}`}
                     style={{
                         left: x,
                         top: y,
@@ -455,8 +497,15 @@ export function DesignCanvas({
             return (
                 <div
                     key={`${placement.id}-${currentPage}`}
+                    ref={isSelected && elementPage === currentPage ? selectedElementRef : null}
                     onMouseDown={(e) => handlePlacementMouseDown(e, placement)}
-                    className={`absolute cursor-move select-none transition-shadow ${isSelected ? 'ring-2 ring-blue-500 ring-offset-2 z-50 shadow-lg' : 'hover:ring-1 hover:ring-blue-300'}`}
+                    className={`absolute select-none transition-all duration-200 ${
+                        placement.isLocked 
+                            ? 'cursor-not-allowed opacity-60' 
+                            : isDragging && selectedPlacementId === placement.id
+                                ? 'cursor-grabbing scale-105'
+                                : 'cursor-grab hover:scale-[1.02]'
+                    } ${isSelected ? 'ring-2 ring-emerald-500 ring-offset-2 z-50 shadow-xl' : 'hover:ring-1 hover:ring-emerald-300'}`}
                     style={{
                         left: x,
                         top: y,

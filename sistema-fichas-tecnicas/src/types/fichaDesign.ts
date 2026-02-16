@@ -86,6 +86,13 @@ export interface FieldPlacement {
     // Configuración de label
     showLabel: boolean;
     customLabel?: string; // Si quiere cambiar el label por defecto
+    labelFontSize?: number;
+    labelFontWeight?: 'normal' | 'bold';
+    labelColor?: string;
+    labelBackgroundColor?: string;
+    labelPadding?: number;
+    labelWidth?: number; // Ancho fijo opcional para el label en mm
+    labelAlign?: 'left' | 'center' | 'right';
 
     // Para campos repetibles
     repeatIndex?: number; // Ej: foto 1, foto 2, etc.
