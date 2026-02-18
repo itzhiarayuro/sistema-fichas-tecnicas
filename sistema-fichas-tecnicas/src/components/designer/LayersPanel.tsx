@@ -28,11 +28,16 @@ export function LayersPanel({
     const { updatePlacement, updateShape } = useDesignStore();
     const selectedItemRef = useRef<HTMLDivElement>(null);
 
+    console.log('🔴 LayersPanel render - selectedPlacementId:', selectedPlacementId);
+    console.log('🔴 LayersPanel render - selectedShapeId:', selectedShapeId);
+
     // Scroll automático cuando se selecciona un elemento
     useEffect(() => {
+        console.log('🔴 useEffect scroll - selectedItemRef.current:', selectedItemRef.current);
         if (selectedItemRef.current) {
             // Pequeño delay para asegurar que el DOM está actualizado
             setTimeout(() => {
+                console.log('🔴 Haciendo scroll al elemento seleccionado');
                 selectedItemRef.current?.scrollIntoView({
                     behavior: 'smooth',
                     block: 'center',
@@ -115,6 +120,10 @@ export function LayersPanel({
                     const isSelected = item.isShape
                         ? (selectedShapeId === item.id)
                         : (selectedPlacementId === item.id);
+
+                    if (isSelected) {
+                        console.log('🔴 Elemento seleccionado encontrado:', item.id, item.label);
+                    }
 
                     return (
                         <div
