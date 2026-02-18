@@ -204,10 +204,16 @@ export async function generatePdfFromDesign(
                             if (!found) {
                                 found = pozo.fotos?.fotos?.find(f => {
                                     const filename = String(f.filename || '').toUpperCase();
-                                    return filename.includes(`-${upperTarget}.`) ||
+                                    const matchSimple = filename.includes(`-${upperTarget}.`) ||
                                         filename.includes(`_${upperTarget}.`) ||
                                         filename.endsWith(`-${upperTarget}`) ||
                                         filename.endsWith(`_${upperTarget}`);
+
+                                    // Caso especial: ARGIS mapea a L
+                                    if (upperTarget === 'L') {
+                                        return matchSimple || filename.includes('_ARGIS.');
+                                    }
+                                    return matchSimple;
                                 });
                             }
 

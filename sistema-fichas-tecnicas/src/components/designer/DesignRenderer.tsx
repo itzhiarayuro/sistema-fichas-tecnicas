@@ -123,10 +123,16 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
                 if (!found) {
                     found = pozo.fotos?.fotos?.find(f => {
                         const filename = String(f.filename || '').toUpperCase();
-                        return filename.includes(`-${targetCode}.`) ||
+                        const matchSimple = filename.includes(`-${targetCode}.`) ||
                             filename.includes(`_${targetCode}.`) ||
                             filename.endsWith(`-${targetCode}`) ||
                             filename.endsWith(`_${targetCode}`);
+
+                        // Caso especial: ARGIS mapea a L
+                        if (targetCode === 'L') {
+                            return matchSimple || filename.includes('_ARGIS.');
+                        }
+                        return matchSimple;
                     });
                 }
 
