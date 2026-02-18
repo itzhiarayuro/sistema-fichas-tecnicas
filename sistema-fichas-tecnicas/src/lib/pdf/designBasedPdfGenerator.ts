@@ -430,138 +430,12 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
         }
     }
 
-    // 2. RENDERIZAR FOTOS
-    if (isPhoto && value && value !== '-') {
-        try {
-            let imageData = String(value);
-
-            // Resolver blobId
-            if (!imageData.startsWith('data:image')) {
-                const { blobStore } = await import('@/lib/storage/blobStore');
-                imageData = blobStore.getUrl(imageData) || imageData;
-            }
-
-            if (!imageData.startsWith('data:image') && !imageData.startsWith('blob:')) return;
-
-            // Cargar imagen
-            const img = new Image();
-            img.src = imageData;
-            await new Promise<void>((resolve, reject) => {
-                img.onload = () => resolve();
-                img.onerror = () => resolve(); // No fallar todo el PDF por una foto
-                setTimeout(() => resolve(), 2000);
-            });
-
-            // Lógica Object-Fit: Contain (Centrado perfecto)
-            const imgAspect = img.width / img.height;
-            const boxAspect = placement.width / placement.height;
-
-            let drawW = placement.width;
-            let drawH = placement.height;
-            let drawX = placement.x;
-            let drawY = placement.y;
-
-            // Ajuste geométrico exacto
-            if (imgAspect > boxAspect) {
-                // Imagen más ancha que la caja
-                drawH = placement.width / imgAspect;
-                drawY = placement.y + (placement.height - drawH) / 2;
-            } else {
-                // Imagen más alta que la caja
-                drawW = placement.height * imgAspect;
-                drawX = placement.x + (placement.width - drawW) / 2;
-            }
-
-            // Margen interno de seguridad (padding)
-            const padding = 0.5;
-            if (drawW > placement.width - padding) {
-                const scale = (placement.width - padding) / drawW;
-                drawW *= scale;
-                drawH *= scale;
-                drawX = placement.x + (placement.width - drawW) / 2;
-                drawY = placement.y + (placement.height - drawH) / 2;
-            }
-
-            // Detectar formato automáticamente para fotos de pozos
-            const format = imageData.toLowerCase().includes('png') || imageData.startsWith('data:image/png') ? 'PNG' : 'JPEG';
-            doc.addImage(imageData, format, drawX, drawY, drawW, drawH, undefined, 'FAST');
-
-        } catch (e) {
-            console.warn(`Error foto ${placement.fieldId}`, e);
-        }
-        return;
-    }
-
-    // 3. RENDERIZAR WIDGETS
-    if (isWidget) {
-        if (placement.fieldId === 'widget_tuberias') {
-            // Renderizar tabla ocupando TODO el espacio de la caja diseñada
-            const tuberias = (pozo.tuberias?.tuberias || []).slice(0, 10);
-            const headers = ['#', 'Ø (")', 'Material', 'Estado', 'Batea'];
-            const headerH = 5;
-            const rowH = (placement.height - headerH) / Math.max(tuberias.length, 1);
-
-            // Header
-            doc.setFillColor('#e5e7eb');
-            doc.rect(placement.x, placement.y, placement.width, headerH, 'F');
-            doc.setDrawColor('#cccccc');
-            doc.setLineWidth(0.1); // Reset a línea fina para widgets
-            doc.line(placement.x, placement.y + headerH, placement.x + placement.width, placement.y + headerH);
-
-            doc.setFontSize(7);
-            doc.setFont('helvetica', 'bold');
-            doc.setTextColor('#000000');
-
-            // Anchos proporcionales para 5 columnas
-            const colWidths = [0.1, 0.15, 0.35, 0.2, 0.2].map(w => w * placement.width);
-            let currentX = placement.x;
-
-            headers.forEach((h, i) => {
-                doc.text(h, currentX + 1, placement.y + 3.5);
-                currentX += colWidths[i];
-            });
-
-            // Rows
-            doc.setFont('helvetica', 'normal');
-            doc.setFontSize(5.5);
-            tuberias.forEach((t, i) => {
-                const y = placement.y + headerH + (i * rowH);
-                let curX = placement.x;
-
-                const rowData = [
-                    String(t.orden?.value || i + 1),
-                    String(t.diametroPulgadas?.value || t.diametro?.value || '-'),
-                    String(t.material?.value || '-'),
-                    String(t.estado?.value || '-'),
-                    String(t.batea?.value || '-')
-                ];
-
-                rowData.forEach((val, colIdx) => {
-                    doc.text(sanitizeTextForPDF(val), curX + 1, y + (rowH / 2) + 1, {
-                        maxWidth: colWidths[colIdx] - 1
-                    });
-                    curX += colWidths[colIdx];
-                });
-
-                // Línea divisoria
-                doc.setDrawColor('#eeeeee');
-                doc.setLineWidth(0.05); // Línea ultra-fina para filas
-                doc.line(placement.x, y + rowH, placement.x + placement.width, y + rowH);
-            });
-        }
-        return;
-    }
-
-    // 4. RENDERIZAR CAMPOS DE TEXTO (Modo Grid Avanzado)
-    const content = String(value ?? '');
+    // 2. LOGICA DE LABEL (GENÉRICA) - Aplica a todos los tipos de campo
     const fontSize = placement.fontSize || 10;
     const font = getSafeFont(placement.fontFamily);
-    const valueStyle = (placement.fontWeight === 'bold') ? 'bold' : 'normal';
-
-    let availableValueHeight = placement.height;
     let labelAreaHeight = 0;
+    let availableContentHeight = placement.height;
 
-    // A. DIBUJAR LABEL (SI EXISTE) - Soporte completo para fondos, anchos fijos y alineación
     if (placement.showLabel && (placement.customLabel || placement.fieldId)) {
         const labelText = sanitizeTextForPDF(placement.customLabel || placement.fieldId);
         const labelFontSize = placement.labelFontSize || (fontSize * 0.8);
@@ -593,10 +467,137 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
             maxWidth: labelWidthMM - (labelPadding * 2)
         });
 
-        availableValueHeight -= labelAreaHeight;
+        availableContentHeight -= labelAreaHeight;
     }
 
-    // B. DIBUJAR VALOR - Centrado en el espacio restante
+    // 3. RENDERIZAR FOTOS
+    if (isPhoto && value && value !== '-') {
+        try {
+            let imageData = String(value);
+
+            // Resolver blobId
+            if (!imageData.startsWith('data:image')) {
+                const { blobStore } = await import('@/lib/storage/blobStore');
+                imageData = blobStore.getUrl(imageData) || imageData;
+            }
+
+            if (!imageData.startsWith('data:image') && !imageData.startsWith('blob:')) return;
+
+            // Cargar imagen
+            const img = new Image();
+            img.src = imageData;
+            await new Promise<void>((resolve, reject) => {
+                img.onload = () => resolve();
+                img.onerror = () => resolve(); // No fallar todo el PDF por una foto
+                setTimeout(() => resolve(), 2000);
+            });
+
+            // Lógica Object-Fit: Contain (Centrado perfecto en el espacio restante)
+            const imgAspect = img.width / img.height;
+            const contentAreaY = placement.y + labelAreaHeight;
+            const boxAspect = placement.width / availableContentHeight;
+
+            let drawW = placement.width;
+            let drawH = availableContentHeight;
+            let drawX = placement.x;
+            let drawY = contentAreaY;
+
+            // Ajuste geométrico exacto
+            if (imgAspect > boxAspect) {
+                // Imagen más ancha que la caja
+                drawH = placement.width / imgAspect;
+                drawY = contentAreaY + (availableContentHeight - drawH) / 2;
+            } else {
+                // Imagen más alta que la caja
+                drawW = availableContentHeight * imgAspect;
+                drawX = placement.x + (placement.width - drawW) / 2;
+            }
+
+            // Margen interno de seguridad (padding)
+            const padding = 0.5;
+            if (drawW > placement.width - padding) {
+                const scale = (placement.width - padding) / drawW;
+                drawW *= scale;
+                drawH *= scale;
+                drawX = placement.x + (placement.width - drawW) / 2;
+                drawY = contentAreaY + (availableContentHeight - drawH) / 2;
+            }
+
+            // Detectar formato automáticamente para fotos de pozos
+            const format = imageData.toLowerCase().includes('png') || imageData.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+            doc.addImage(imageData, format, drawX, drawY, drawW, drawH, undefined, 'FAST');
+
+        } catch (e) {
+            console.warn(`Error foto ${placement.fieldId}`, e);
+        }
+        return;
+    }
+
+    // 4. RENDERIZAR WIDGETS
+    if (isWidget) {
+        if (placement.fieldId === 'widget_tuberias') {
+            // Renderizar tabla ocupando TODO el espacio de la caja diseñada
+            const tuberias = (pozo.tuberias?.tuberias || []).slice(0, 10);
+            const headers = ['#', 'Ø (")', 'Material', 'Estado', 'Batea'];
+            const headerH = 5;
+            const contentAreaY = placement.y + labelAreaHeight;
+            const rowH = (availableContentHeight - headerH) / Math.max(tuberias.length, 1);
+
+            // Header
+            doc.setFillColor('#e5e7eb');
+            doc.rect(placement.x, contentAreaY, placement.width, headerH, 'F');
+            doc.setDrawColor('#cccccc');
+            doc.setLineWidth(0.1);
+            doc.line(placement.x, contentAreaY + headerH, placement.x + placement.width, contentAreaY + headerH);
+
+            doc.setFontSize(7);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor('#000000');
+
+            // Anchos proporcionales para 5 columnas
+            const colWidths = [0.1, 0.15, 0.35, 0.2, 0.2].map(w => w * placement.width);
+            let currentX = placement.x;
+
+            headers.forEach((h, i) => {
+                doc.text(h, currentX + 1, contentAreaY + 3.5);
+                currentX += colWidths[i];
+            });
+
+            // Rows
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(5.5);
+            tuberias.forEach((t, i) => {
+                const y = contentAreaY + headerH + (i * rowH);
+                let curX = placement.x;
+
+                const rowData = [
+                    String(t.orden?.value || i + 1),
+                    String(t.diametroPulgadas?.value || t.diametro?.value || '-'),
+                    String(t.material?.value || '-'),
+                    String(t.estado?.value || '-'),
+                    String(t.batea?.value || '-')
+                ];
+
+                rowData.forEach((val, colIdx) => {
+                    doc.text(sanitizeTextForPDF(val), curX + 1, y + (rowH / 2) + 1, {
+                        maxWidth: colWidths[colIdx] - 1
+                    });
+                    curX += colWidths[colIdx];
+                });
+
+                // Línea divisoria
+                doc.setDrawColor('#eeeeee');
+                doc.setLineWidth(0.05);
+                doc.line(placement.x, y + rowH, placement.x + placement.width, y + rowH);
+            });
+        }
+        return;
+    }
+
+    // 5. RENDERIZAR CAMPOS DE TEXTO (Modo Grid Avanzado)
+    const content = String(value ?? '');
+    const valueStyle = (placement.fontWeight === 'bold') ? 'bold' : 'normal';
+
     doc.setFontSize(fontSize);
     doc.setFont(font, valueStyle);
     doc.setTextColor(placement.color || '#000000');
@@ -609,7 +610,7 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
     if (align === 'right') textX = placement.x + placement.width - padding;
 
     // Calcular Y para centrado vertical en el área restante
-    const textY = placement.y + labelAreaHeight + (availableValueHeight / 2) + (fontSize * 0.15);
+    const textY = placement.y + labelAreaHeight + (availableContentHeight / 2) + (fontSize * 0.15);
 
     doc.text(
         sanitizeTextForPDF(content),
@@ -621,6 +622,7 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
         }
     );
 }
+
 
 
 /**

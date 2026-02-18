@@ -469,9 +469,8 @@ export function DesignCanvas({
                         width,
                         height,
                         backgroundColor: shape.fillColor || 'transparent',
-                        // CAMBIO: Remover multiplicación por zoom para que el borde sea consistente
-                        // Antes: border: shape.strokeColor ? `${(shape.strokeWidth || 1) * zoom}px solid ${shape.strokeColor}` : 'none',
-                        border: shape.strokeColor ? `${shape.strokeWidth || 0.5}px solid ${shape.strokeColor}` : 'none',
+                        // CAMBIO: Bordes transparentes para textos
+                        border: shape.type === 'text' ? 'none' : (shape.strokeColor ? `${shape.strokeWidth || 0.5}px solid ${shape.strokeColor}` : 'none'),
                         borderRadius: shape.type === 'circle' ? '50%' : (shape.borderRadius ? `${shape.borderRadius}px` : 0),
                         opacity: shape.opacity ?? 1,
                         zIndex: shape.zIndex,
