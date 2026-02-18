@@ -1,11 +1,12 @@
-# Cambios: Reducción de Grosor de Bordes en Figuras
+# Cambios: Reducción de Grosor de Bordes en Figuras y Consistencia de PDFs
 
 ## Problema
-Las figuras (shapes) en el canvas tenían bordes muy gruesos, especialmente cuando se hacía zoom. El borde se multiplicaba por el factor de zoom, haciendo que se viera desproporcionado. Además, había inconsistencia entre el PDF generado desde el diseñador (que se veía bien) y el PDF generado desde la página de pozos (que se veía grueso).
+Las figuras (shapes) en el canvas tenían bordes muy gruesos, especialmente cuando se hacía zoom. Además, había inconsistencia entre el PDF generado desde el diseñador (que se veía bien) y el PDF generado desde el editor (que se veía grueso).
 
 ## Causa Raíz
 - El `pdfMakeGenerator` estaba multiplicando el strokeWidth por 0.264
-- La página de pozos usaba `highFidelityGenerator` para diseños personalizados, que tenía diferentes calibraciones
+- La página de pozos usaba `highFidelityGenerator` para diseños personalizados
+- El editor usaba `pdfMakeGenerator` incluso cuando había un diseño personalizado
 - El diseñador usaba `designBasedPdfGenerator`, que generaba bordes más delgados
 
 ## Solución Implementada
@@ -34,16 +35,23 @@ Las figuras (shapes) en el canvas tenían bordes muy gruesos, especialmente cuan
 - **Después:** `if (shape.strokeWidth) doc.setLineWidth(shape.strokeWidth);`
 - **Razón:** El strokeWidth ya está en mm (no en px), así que no necesita multiplicarse por 0.264.
 
-### 5. Usar designBasedPdfGenerator consistentemente
+### 5. Usar designBasedPdfGenerator en la página de pozos
 **Archivo:** `src/app/pozos/page.tsx` (línea ~183)
 - **Antes:** Usaba `highFidelityGenerator` para diseños personalizados
 - **Después:** Usa `designBasedPdfGenerator` para todos los diseños personalizados
-- **Razón:** `designBasedPdfGenerator` genera bordes más consistentes y delgados, igual que el diseñador
+- **Razón:** `designBasedPdfGenerator` genera bordes más consistentes y delgados.
+
+### 6. Usar designBasedPdfGenerator en el editor
+**Archivo:** `src/app/editor/[id]/page.tsx` (línea ~760)
+- **Antes:** Siempre usaba `pdfMakeGenerator`
+- **Después:** Usa `designBasedPdfGenerator` cuando hay un diseño personalizado
+- **Razón:** El PDF debe coincidir exactamente con lo que se ve en el canvas del diseñador.
 
 ## Impacto
 - ✅ Los bordes de las figuras ahora son más delgados y proporcionales
 - ✅ El zoom no afecta el grosor del borde
-- ✅ Consistencia entre el PDF del diseñador y el PDF de la página de pozos
+- ✅ Consistencia total entre el canvas del diseñador y el PDF generado
+- ✅ Consistencia entre el editor, la página de pozos y el diseñador
 - ✅ El PDF replica automáticamente los cambios del canvas
 - ✅ La experiencia visual es más profesional
 
@@ -52,6 +60,7 @@ Si necesitas volver a los valores anteriores, busca los comentarios `// CAMBIO:`
 - `DesignCanvas.tsx` (3 cambios)
 - `pdfMakeGenerator.ts` (1 cambio)
 - `pozos/page.tsx` (1 cambio)
+- `editor/[id]/page.tsx` (1 cambio)
 
 Y restaura los valores originales indicados en los comentarios.
 
@@ -60,6 +69,8 @@ Y restaura los valores originales indicados en los comentarios.
 2. Verificar que el borde sea delgado en el canvas
 3. Hacer zoom in/out y verificar que el borde NO cambie de grosor
 4. Generar un PDF desde el Preview del diseñador y verificar que el borde sea consistente
-5. Generar un PDF desde la página principal de pozos y verificar que el borde sea idéntico al del diseñador
+5. Generar un PDF desde el editor y verificar que sea idéntico al del diseñador
+6. Generar un PDF desde la página de pozos y verificar que sea idéntico
+
 
 

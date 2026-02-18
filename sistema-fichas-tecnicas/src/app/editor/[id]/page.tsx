@@ -760,11 +760,10 @@ export default function EditorPage() {
         // Forzar sincronización inmediata para asegurar que el PDF tenga los últimos cambios
         flush();
 
-        // Generar PDF usando pdfMakeGenerator directamente en el cliente
-        // Esto es mucho más robusto para manejar las imágenes locales (blobs)
+        // CAMBIO: Usar designBasedPdfGenerator cuando hay diseño personalizado
+        // Antes: Siempre usaba pdfMakeGenerator
+        // Razón: designBasedPdfGenerator genera PDFs que coinciden exactamente con el diseño del canvas
         try {
-          const { pdfMakeGenerator } = await import('@/lib/pdf/pdfMakeGenerator');
-
           // Obtener el diseño personalizado si existe
           const { useDesignStore } = await import('@/stores/designStore');
           const designStore = useDesignStore.getState();
@@ -778,14 +777,24 @@ export default function EditorPage() {
             designName: customDesign?.name
           }, 'EditorPage');
 
-          const result = await pdfMakeGenerator.generatePDF(syncedState || initialFichaState!, enrichedPozo, {
-            pageNumbers: true,
-            includeDate: true,
-            includePhotos: true
-          }, customDesign);
+          let result;
+
+          // Si hay un diseño personalizado, usar designBasedPdfGenerator
+          if (customDesign) {
+            const { generatePdfFromDesign } = await import('@/lib/pdf/designBasedPdfGenerator');
+            result = await generatePdfFromDesign(customDesign, enrichedPozo);
+          } else {
+            // Si no hay diseño personalizado, usar pdfMakeGenerator
+            const { pdfMakeGenerator } = await import('@/lib/pdf/pdfMakeGenerator');
+            result = await pdfMakeGenerator.generatePDF(syncedState || initialFichaState!, enrichedPozo, {
+              pageNumbers: true,
+              includeDate: true,
+              includePhotos: true
+            });
+          }
 
           if (!result.success || !result.blob) {
-            throw new Error(result.error || 'Error al generar el PDF con pdfMake');
+            throw new Error(result.error || 'Error al generar el PDF');
           }
 
           const filename = `ficha_${pozo.idPozo?.value || pozo.identificacion.idPozo.value}_${Date.now()}.pdf`;

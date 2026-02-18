@@ -49,6 +49,11 @@ function getSafeFont(fontFamily?: string): string {
     return 'helvetica';
 }
 
+// Constantes de diseño para asegurar fidelidad visual
+const MM_TO_PX = 3.78; // 1mm = 3.78px (96 DPI)
+const PX_TO_MM = 1 / MM_TO_PX; // 1px = 0.264mm
+const DEFAULT_FONT_SIZE = 10;
+
 // Helper para obtener valor de ruta (ej: "identificacion.idPozo.value")
 const getValueByPath = (obj: any, path: string) => {
     if (!path) return undefined;
@@ -256,7 +261,9 @@ async function renderShape(doc: jsPDF, shape: ShapeElement) {
         if (shape.fillColor && shape.fillColor !== 'transparent') doc.setFillColor(shape.fillColor);
         if (shape.strokeColor && shape.strokeColor !== 'transparent') {
             doc.setDrawColor(shape.strokeColor);
-            doc.setLineWidth(shape.strokeWidth || 0.1);
+            // Aplicar factor de escala para que 1px en pantalla sea ~0.26mm en PDF
+            const thickness = (shape.strokeWidth || 0.1) * PX_TO_MM;
+            doc.setLineWidth(thickness);
         }
 
         if (shape.type === 'circle') {
@@ -281,7 +288,8 @@ async function renderShape(doc: jsPDF, shape: ShapeElement) {
 
     if (shape.type === 'line') {
         doc.setDrawColor(shape.strokeColor || '#000000');
-        doc.setLineWidth(shape.strokeWidth || 0.5);
+        const thickness = (shape.strokeWidth || 0.5) * PX_TO_MM;
+        doc.setLineWidth(thickness);
         doc.line(shape.x, shape.y, shape.x + shape.width, shape.y + shape.height);
     }
 
@@ -364,7 +372,9 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
 
         if (placement.borderWidth && placement.borderWidth > 0) {
             doc.setDrawColor(placement.borderColor || '#000000');
-            doc.setLineWidth(placement.borderWidth);
+            // Aplicar factor de escala para bordes de campos
+            const thickness = placement.borderWidth * PX_TO_MM;
+            doc.setLineWidth(thickness);
         }
 
         if (style !== 'S' || (placement.borderWidth && placement.borderWidth > 0)) {
@@ -449,6 +459,8 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
             // Header
             doc.setFillColor('#e5e7eb');
             doc.rect(placement.x, placement.y, placement.width, headerH, 'F');
+            doc.setDrawColor('#cccccc');
+            doc.setLineWidth(0.1); // Reset a línea fina para widgets
             doc.line(placement.x, placement.y + headerH, placement.x + placement.width, placement.y + headerH);
 
             doc.setFontSize(7);
@@ -488,6 +500,7 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
 
                 // Línea divisoria
                 doc.setDrawColor('#eeeeee');
+                doc.setLineWidth(0.05); // Línea ultra-fina para filas
                 doc.line(placement.x, y + rowH, placement.x + placement.width, y + rowH);
             });
         }
