@@ -151,10 +151,14 @@ const SUMIDERO_MAPPING: Record<string, string> = {
   'tipo': 'tipoSumidero',
   'tipo_sumidero': 'tipoSumidero',
   'numero_esquema': 'numeroEsquema',
+  'esquema': 'numeroEsquema',
+  'o_pulg': 'diametro',
   'diametro': 'diametro',
   'material_tuberia': 'materialTuberia',
   'altura_salida': 'alturaSalida',
+  'h_salida_m': 'alturaSalida',
   'altura_llegada': 'alturaLlegada',
+  'h_llegada_m': 'alturaLlegada',
 };
 
 const FOTO_MAPPING: Record<string, string> = {
