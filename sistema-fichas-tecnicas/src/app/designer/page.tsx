@@ -117,6 +117,9 @@ export default function DesignerPage() {
     };
 
     const handleSelectPlacement = (id: string | null) => {
+        console.log('🔵 handleSelectPlacement llamado con id:', id);
+        console.log('🔵 Panel de capas abierto:', designerPanels.showLayers);
+        
         setSelectedPlacementId(id);
         setSelectedShapeId(null);
         setPendingShape(null);
@@ -124,11 +127,15 @@ export default function DesignerPage() {
         
         // Abrir panel de capas si hay selección y no está abierto
         if (id && !designerPanels.showLayers) {
+            console.log('🔵 Abriendo panel de capas...');
             toggleDesignerPanel('layers');
         }
     };
 
     const handleSelectShape = (id: string | null) => {
+        console.log('🟢 handleSelectShape llamado con id:', id);
+        console.log('🟢 Panel de capas abierto:', designerPanels.showLayers);
+        
         setSelectedShapeId(id);
         setSelectedPlacementId(null);
         setPendingShape(null);
@@ -136,6 +143,7 @@ export default function DesignerPage() {
         
         // Abrir panel de capas si hay selección y no está abierto
         if (id && !designerPanels.showLayers) {
+            console.log('🟢 Abriendo panel de capas...');
             toggleDesignerPanel('layers');
         }
     };
