@@ -84,10 +84,16 @@ export interface IdentificacionPozo {
   idPozo: FieldValue; // Identificador único (ej: PZ1666) -> Código
 
   // 🔴 Obligatorio
-  coordenadaX: FieldValue; // Longitud o Coordenada X (ej: -74.123456)
+  coordenadaX: FieldValue; // Coordenada X (Plana/Proyectada)
 
   // 🔴 Obligatorio
-  coordenadaY: FieldValue; // Latitud o Coordenada Y (ej: 4.678901)
+  coordenadaY: FieldValue; // Coordenada Y (Plana/Proyectada)
+
+  // 🟠 Importante
+  latitud: FieldValue; // Latitud (WGS84)
+
+  // 🟠 Importante
+  longitud: FieldValue; // Longitud (WGS84)
 
   // 🔴 Obligatorio
   fecha: FieldValue; // Fecha de inspección (YYYY-MM-DD)
@@ -97,6 +103,9 @@ export interface IdentificacionPozo {
 
   // 🔴 Obligatorio
   estado: FieldValue; // Estado general (Bueno/Regular/Malo/Muy Malo/No Aplica)
+
+  // 🟢 Opcional
+  enlace: FieldValue; // Enlace asociado
 }
 
 /**
@@ -363,6 +372,9 @@ export interface Pozo {
   idPozo?: FieldValue;
   coordenadaX?: FieldValue;
   coordenadaY?: FieldValue;
+  latitud?: FieldValue;
+  longitud?: FieldValue;
+  enlace?: FieldValue;
   fecha?: FieldValue;
   levanto?: FieldValue;
   estado?: FieldValue;

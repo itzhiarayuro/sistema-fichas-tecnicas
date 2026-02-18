@@ -40,6 +40,9 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
         'pozo_fecha': 'identificacion.fecha.value',
         'pozo_coordX': 'identificacion.coordenadaX.value',
         'pozo_coordY': 'identificacion.coordenadaY.value',
+        'pozo_latitud': 'identificacion.latitud.value',
+        'pozo_longitud': 'identificacion.longitud.value',
+        'pozo_enlace': 'identificacion.enlace.value',
         'pozo_levanto': 'identificacion.levanto.value',
         'pozo_estado': 'identificacion.estado.value',
 
@@ -279,15 +282,18 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
                                     justifyContent: placement.textAlign === 'center' ? 'center' : (placement.textAlign === 'right' ? 'flex-end' : 'flex-start')
                                 }}
                             >
-                                <span className="block truncate" style={{
+                                <span className={`block truncate ${placement.fieldId && getValueByPath(pozo, fieldMapping[placement.fieldId]?.replace('.value', '.link')) ? 'text-blue-600 underline cursor-pointer' : ''}`} style={{
                                     fontSize: `${(placement.fontSize || 10) * zoom}pt`,
                                     fontFamily: placement.fontFamily || 'Inter',
                                     fontWeight: placement.fontWeight || 'normal',
-                                    color: placement.color || '#000',
-                                    // Eliminamos textAlign aquí porque lo maneja el padre flex
+                                    color: (placement.fieldId && getValueByPath(pozo, fieldMapping[placement.fieldId]?.replace('.value', '.link'))) ? undefined : (placement.color || '#000'),
                                     lineHeight: 1.2,
                                     maxWidth: '100%'
-                                }}>
+                                }}
+                                    onClick={() => {
+                                        const link = placement.fieldId && getValueByPath(pozo, fieldMapping[placement.fieldId]?.replace('.value', '.link'));
+                                        if (link) window.open(link, '_blank');
+                                    }}>
                                     {String(value || '-')}
                                 </span>
                             </div>

@@ -37,6 +37,8 @@ export interface FieldValue {
   originalValue?: string;
   /** Timestamp de la última modificación */
   modifiedAt?: number;
+  /** Enlace o hipervínculo asociado al campo */
+  link?: string;
 }
 
 export interface FichaSection {

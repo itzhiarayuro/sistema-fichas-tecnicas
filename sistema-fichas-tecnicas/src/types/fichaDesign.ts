@@ -174,6 +174,9 @@ export const AVAILABLE_FIELDS: AvailableField[] = [
     { id: 'pozo_fecha', label: 'Fecha', fieldPath: 'identificacion.fecha.value', category: 'pozo', isRepeatable: false, defaultWidth: 40, defaultHeight: 10 },
     { id: 'pozo_coordX', label: 'Coordenada X', fieldPath: 'identificacion.coordenadaX.value', category: 'pozo', isRepeatable: false, defaultWidth: 40, defaultHeight: 10 },
     { id: 'pozo_coordY', label: 'Coordenada Y', fieldPath: 'identificacion.coordenadaY.value', category: 'pozo', isRepeatable: false, defaultWidth: 40, defaultHeight: 10 },
+    { id: 'pozo_latitud', label: 'Latitud', fieldPath: 'identificacion.latitud.value', category: 'pozo', isRepeatable: false, defaultWidth: 40, defaultHeight: 10 },
+    { id: 'pozo_longitud', label: 'Longitud', fieldPath: 'identificacion.longitud.value', category: 'pozo', isRepeatable: false, defaultWidth: 40, defaultHeight: 10 },
+    { id: 'pozo_enlace', label: 'Enlace', fieldPath: 'identificacion.enlace.value', category: 'pozo', isRepeatable: false, defaultWidth: 60, defaultHeight: 10 },
     { id: 'pozo_levanto', label: 'Levantó', fieldPath: 'identificacion.levanto.value', category: 'pozo', isRepeatable: false, defaultWidth: 50, defaultHeight: 10 },
     { id: 'pozo_estado', label: 'Estado Gral', fieldPath: 'identificacion.estado.value', category: 'pozo', isRepeatable: false, defaultWidth: 40, defaultHeight: 10 },
 

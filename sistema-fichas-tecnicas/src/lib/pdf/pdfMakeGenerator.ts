@@ -1,5 +1,5 @@
 import pdfMake from 'pdfmake/build/pdfmake';
-import { FichaState, FichaSection, FichaCustomization } from '@/types/ficha';
+import { FichaState, FichaSection, FichaCustomization, FieldValue } from '@/types/ficha';
 import { Pozo, FotoInfo } from '@/types/pozo';
 import { AVAILABLE_FIELDS, FichaDesignVersion, DesignElement, isFieldPlacement, isShapeElement } from '@/types/fichaDesign';
 import { blobStore } from '@/lib/storage/blobStore';
@@ -458,17 +458,21 @@ export class PDFMakeGenerator {
             logger.debug(`buildGenericSection (${section.type}): Seccion vacía, usando mapeo por defecto`, null, 'PDFMakeGenerator');
 
             if (section.type === 'identificacion') {
-                const idMap = {
-                    'Código': pozo.idPozo?.value || pozo.identificacion?.idPozo?.value || 'S/N',
-                    'Dirección': pozo.direccion?.value || pozo.ubicacion?.direccion?.value || 'S/D',
-                    'Barrio': pozo.barrio?.value || pozo.ubicacion?.barrio?.value || '-',
-                    'Sistema': pozo.sistema?.value || pozo.componentes?.sistema?.value || '-',
-                    'Estado': pozo.estado?.value || pozo.identificacion?.estado?.value || '-',
-                    'Fecha': pozo.fecha?.value || pozo.identificacion?.fecha?.value || '-',
-                    'Profundidad': pozo.profundidad?.value || pozo.ubicacion?.profundidad?.value || '-',
-                    'Elevación': pozo.elevacion?.value || pozo.ubicacion?.elevacion?.value || '-'
+                const idMap: Record<string, FieldValue> = {
+                    'Código': pozo.idPozo || pozo.identificacion?.idPozo || { value: 'S/N', source: 'default' },
+                    'Dirección': pozo.direccion || pozo.ubicacion?.direccion || { value: 'S/D', source: 'default' },
+                    'Barrio': pozo.barrio || pozo.ubicacion?.barrio || { value: '-', source: 'default' },
+                    'Sistema': pozo.sistema || pozo.componentes?.sistema || { value: '-', source: 'default' },
+                    'Estado': pozo.estado || pozo.identificacion?.estado || { value: '-', source: 'default' },
+                    'Fecha': pozo.fecha || pozo.identificacion?.fecha || { value: '-', source: 'default' },
+                    'Coordenada X': pozo.coordenadaX || pozo.identificacion?.coordenadaX || { value: '-', source: 'default' },
+                    'Coordenada Y': pozo.coordenadaY || pozo.identificacion?.coordenadaY || { value: '-', source: 'default' },
+                    'Latitud': pozo.latitud || pozo.identificacion?.latitud || { value: '-', source: 'default' },
+                    'Longitud': pozo.longitud || pozo.identificacion?.longitud || { value: '-', source: 'default' },
+                    'Profundidad': pozo.profundidad || pozo.ubicacion?.profundidad || { value: '-', source: 'default' },
+                    'Elevación': pozo.elevacion || pozo.ubicacion?.elevacion || { value: '-', source: 'default' }
                 };
-                fields = Object.entries(idMap).map(([k, v]) => [k, { value: String(v), source: 'excel' as const }]);
+                fields = Object.entries(idMap);
             }
         }
 
@@ -483,11 +487,13 @@ export class PDFMakeGenerator {
 
             const row = [];
             const val1 = f1[1] ? (f1[1] as any).value : '-';
-            row.push(this.buildField(f1[0] || 'Campo', val1));
+            const link1 = f1[1] ? (f1[1] as any).link : undefined;
+            row.push(this.buildField(f1[0] || 'Campo', val1, link1));
 
             if (f2) {
                 const val2 = f2[1] ? (f2[1] as any).value : '-';
-                row.push(this.buildField(f2[0] || 'Campo', val2));
+                const link2 = f2[1] ? (f2[1] as any).link : undefined;
+                row.push(this.buildField(f2[0] || 'Campo', val2, link2));
             } else {
                 row.push({ text: '' });
             }
@@ -510,11 +516,19 @@ export class PDFMakeGenerator {
         return { stack: rows };
     }
 
-    private buildField(label: string, value: any) {
+    private buildField(label: string, value: any, link?: string) {
+        const valuePart: any = { text: String(value || '-'), style: 'value' };
+
+        if (link && link.trim() !== '') {
+            valuePart.link = link;
+            valuePart.color = 'blue';
+            valuePart.decoration = 'underline';
+        }
+
         return {
             text: [
                 { text: `${label}: `, style: 'label' },
-                { text: String(value || '-'), style: 'value' }
+                valuePart
             ],
             margin: [0, 2, 0, 2]
         };
@@ -948,7 +962,7 @@ export class PDFMakeGenerator {
             };
 
             // Función auxiliar: Campo (label: value)
-            const addField = (label: string, value: any, xOffset: number = 0) => {
+            const addField = (label: string, value: any, xOffset: number = 0, link?: string) => {
                 doc.setFontSize(fonts.label);
                 doc.setFont('helvetica', 'bold');
                 doc.setTextColor(...colors.labelText);
@@ -956,9 +970,28 @@ export class PDFMakeGenerator {
 
                 doc.setFont('helvetica', 'normal');
                 doc.setFontSize(fonts.value);
-                doc.setTextColor(...colors.valueText);
+
                 const valueText = String(value || '-');
-                doc.text(valueText, margin + xOffset + spacing.padding + (doc.getTextWidth(`${label}:`)), yPos);
+                const xVal = margin + xOffset + (doc.getTextWidth(`${label}: `));
+
+                if (link && link.trim() !== '') {
+                    // Texto azul y subrayado para enlaces
+                    doc.setTextColor(31, 78, 121); // #1F4E79 (Azul del header)
+                    doc.text(valueText, xVal, yPos);
+
+                    // Añadir link (jsPDF usa rectángulos para links)
+                    const textWidth = doc.getTextWidth(valueText);
+                    const textHeight = fonts.value * 0.3528;
+                    doc.link(xVal, yPos - textHeight, textWidth, textHeight, { url: link });
+
+                    // Subrayado
+                    doc.setDrawColor(31, 78, 121);
+                    doc.setLineWidth(0.1);
+                    doc.line(xVal, yPos + 0.5, xVal + textWidth, yPos + 0.5);
+                } else {
+                    doc.setTextColor(...colors.valueText);
+                    doc.text(valueText, xVal, yPos);
+                }
             };
 
             const idPozo = pozo.idPozo?.value || pozo.identificacion?.idPozo?.value || 'N/A';
@@ -1015,21 +1048,27 @@ export class PDFMakeGenerator {
                         case 'identificacion':
                             addSectionHeader('IDENTIFICACIÓN Y UBICACIÓN');
                             const identFields = [
-                                ['Código', idPozo],
-                                ['Dirección', pozo.direccion?.value || pozo.ubicacion?.direccion?.value || '-'],
-                                ['Barrio', pozo.barrio?.value || pozo.ubicacion?.barrio?.value || '-'],
-                                ['Sistema', pozo.sistema?.value || pozo.componentes?.sistema?.value || '-'],
-                                ['Estado', pozo.estado?.value || pozo.identificacion?.estado?.value || '-'],
-                                ['Fecha', pozo.fecha?.value || pozo.identificacion?.fecha?.value || '-'],
-                                ['Profundidad', pozo.profundidad?.value || pozo.ubicacion?.profundidad?.value || '-'],
-                                ['Elevación', pozo.elevacion?.value || pozo.ubicacion?.elevacion?.value || '-']
+                                { label: 'Código', value: idPozo },
+                                { label: 'Dirección', value: pozo.direccion?.value || pozo.ubicacion?.direccion?.value || '-' },
+                                { label: 'Barrio', value: pozo.barrio?.value || pozo.ubicacion?.barrio?.value || '-' },
+                                { label: 'Sistema', value: pozo.sistema?.value || pozo.componentes?.sistema?.value || '-' },
+                                { label: 'Estado', value: pozo.estado?.value || pozo.identificacion?.estado?.value || '-' },
+                                { label: 'Fecha', value: pozo.fecha?.value || pozo.identificacion?.fecha?.value || '-' },
+                                { label: 'Coordenada X', value: pozo.coordenadaX?.value || pozo.identificacion?.coordenadaX?.value || '-', link: pozo.coordenadaX?.link || pozo.identificacion?.coordenadaX?.link },
+                                { label: 'Coordenada Y', value: pozo.coordenadaY?.value || pozo.identificacion?.coordenadaY?.value || '-', link: pozo.coordenadaY?.link || pozo.identificacion?.coordenadaY?.link },
+                                { label: 'Latitud', value: pozo.latitud?.value || pozo.identificacion?.latitud?.value || '-', link: pozo.latitud?.link || pozo.identificacion?.latitud?.link },
+                                { label: 'Longitud', value: pozo.longitud?.value || pozo.identificacion?.longitud?.value || '-', link: pozo.longitud?.link || pozo.identificacion?.longitud?.link },
+                                { label: 'Profundidad', value: pozo.profundidad?.value || pozo.ubicacion?.profundidad?.value || '-' },
+                                { label: 'Elevación', value: pozo.elevacion?.value || pozo.ubicacion?.elevacion?.value || '-' }
                             ];
-                            const rowH = (fonts.value * 0.3528) + spacing.fieldGap;
+                            const rowH = (fonts.value * 0.3528) + spacing.fieldGap + 2;
                             for (let i = 0; i < identFields.length; i += 2) {
                                 checkPageBreak(rowH);
-                                addField(identFields[i][0], identFields[i][1], 0);
+                                const f1 = identFields[i];
+                                addField(f1.label, f1.value, 0, (f1 as any).link);
                                 if (identFields[i + 1]) {
-                                    addField(identFields[i + 1][0], identFields[i + 1][1], contentWidth / 2);
+                                    const f2 = identFields[i + 1];
+                                    addField(f2.label, f2.value, contentWidth / 2, (f2 as any).link);
                                 }
                                 yPos += rowH;
                             }

@@ -56,10 +56,11 @@ const COLUMN_MAPPING: Record<string, string> = {
   'pozo': 'idPozo',
   'coordenada_x': 'coordenadaX',
   'x': 'coordenadaX',
-  'longitud': 'coordenadaX',
+  'longitud': 'longitud',
   'coordenada_y': 'coordenadaY',
   'y': 'coordenadaY',
-  'latitud': 'coordenadaY',
+  'latitud': 'latitud',
+  'enlace': 'enlace',
   'fecha': 'fecha',
   'fecha_inspeccion': 'fecha',
   'levanto': 'levanto',
@@ -174,8 +175,8 @@ const REQUIRED_COLUMNS = ['idPozo', 'coordenadaX', 'coordenadaY', 'fecha', 'leva
  * Campos esperados para estadísticas (todos los 35 campos del diccionario)
  */
 const EXPECTED_FIELDS = [
-  // Identificación (6)
-  'idPozo', 'coordenadaX', 'coordenadaY', 'fecha', 'levanto', 'estado',
+  // Identificación (9)
+  'idPozo', 'coordenadaX', 'coordenadaY', 'latitud', 'longitud', 'enlace', 'fecha', 'levanto', 'estado',
   // Ubicación (4)
   'direccion', 'barrio', 'elevacion', 'profundidad',
   // Componentes (25)
@@ -722,6 +723,10 @@ function parseRow(
     // No retornar null, solo advertir - las coordenadas son opcionales
   }
 
+  const latitud = getValue('latitud');
+  const longitud = getValue('longitud');
+  const enlace = getValue('enlace');
+
   // ============================================================================
   // VALIDACIÓN DE CAMPOS NUMÉRICOS POSITIVOS
   // ============================================================================
@@ -846,8 +851,11 @@ function parseRow(
     id: uniqueId,
     // --- CAPA PLANA (Poblada directamente) ---
     idPozo: { value: idPozo, source: 'excel' },
-    coordenadaX: { value: coordenadaX, source: 'excel' },
-    coordenadaY: { value: coordenadaY, source: 'excel' },
+    coordenadaX: { value: coordenadaX, source: 'excel', link: enlace },
+    coordenadaY: { value: coordenadaY, source: 'excel', link: enlace },
+    latitud: { value: latitud, source: 'excel', link: enlace },
+    longitud: { value: longitud, source: 'excel', link: enlace },
+    enlace: { value: enlace, source: 'excel' },
     fecha: { value: fechaNormalizada, source: 'excel' },
     levanto: { value: levanto, source: 'excel' },
     estado: { value: estado, source: 'excel' },
@@ -885,8 +893,11 @@ function parseRow(
     // --- CAPA JERÁRQUICA (Mantener para compatibilidad) ---
     identificacion: {
       idPozo: { value: idPozo, source: 'excel' },
-      coordenadaX: { value: coordenadaX, source: 'excel' },
-      coordenadaY: { value: coordenadaY, source: 'excel' },
+      coordenadaX: { value: coordenadaX, source: 'excel', link: enlace },
+      coordenadaY: { value: coordenadaY, source: 'excel', link: enlace },
+      latitud: { value: latitud, source: 'excel', link: enlace },
+      longitud: { value: longitud, source: 'excel', link: enlace },
+      enlace: { value: enlace, source: 'excel' },
       fecha: { value: fechaNormalizada, source: 'excel' },
       levanto: { value: levanto, source: 'excel' },
       estado: { value: estado, source: 'excel' },
