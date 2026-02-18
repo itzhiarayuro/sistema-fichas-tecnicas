@@ -98,6 +98,49 @@ export async function generatePdfFromDesign(
         // Importar blobStore una sola vez al inicio
         const { blobStore } = await import('@/lib/storage/blobStore');
 
+        // 1. PRE-CARGA DE BLOBS (Paso Crítico para evitar imágenes en blanco)
+        // Recopilamos todos los IDs de fotos que vamos a necesitar
+        const neededBlobIds = new Set<string>();
+
+        // Recopilar de Placements (Fotos inteligentes)
+        const photoFields = design.placements.filter(p =>
+            p.fieldId.startsWith('foto_') && !/^\d+$/.test(p.fieldId.split('_')[1])
+        );
+
+        const codeMap: Record<string, string> = {
+            'foto_panoramica': 'P', 'foto_tapa': 'T', 'foto_interior': 'I',
+            'foto_acceso': 'A', 'foto_fondo': 'F', 'foto_medicion': 'M',
+            'foto_entrada_1': 'E1', 'foto_salida_1': 'S1', 'foto_sumidero_1': 'SUM1',
+            'foto_esquema': 'L', 'foto_shape': 'L' // mapear ambos a Localización
+        };
+
+        photoFields.forEach(p => {
+            const targetCode = codeMap[p.fieldId];
+            if (targetCode) {
+                const upperTarget = targetCode.toUpperCase();
+                const found = pozo.fotos?.fotos?.find(f =>
+                    String(f.subcategoria || '').toUpperCase() === upperTarget ||
+                    String(f.filename || '').toUpperCase().includes(`-${upperTarget}.`) ||
+                    String(f.filename || '').toUpperCase().includes(`_${upperTarget}.`) ||
+                    (upperTarget === 'L' && String(f.filename || '').toUpperCase().includes('_ARGIS.'))
+                );
+                if (found?.blobId) neededBlobIds.add(found.blobId);
+            }
+        });
+
+        // Recopilar de Shapes (Logos, imágenes libres)
+        design.shapes?.filter(s => s.type === 'image' && s.imageUrl?.startsWith('blob:'))
+            .forEach(s => {
+                const id = s.imageUrl!.split('/').pop();
+                if (id) neededBlobIds.add(id);
+            });
+
+        // Asegurar que todos estén en RAM antes de empezar
+        if (neededBlobIds.size > 0) {
+            console.log(`📦 Pre-cargando ${neededBlobIds.size} imágenes en RAM...`);
+            await blobStore.ensureMultipleLoaded(Array.from(neededBlobIds));
+        }
+
         // 1. Combinar y ordenar todos los elementos por zIndex
         const allElements = [
             ...(design.shapes || []).map(s => ({ ...s, isShape: true })),
@@ -188,7 +231,7 @@ export async function generatePdfFromDesign(
                             'foto_panoramica': 'P', 'foto_tapa': 'T', 'foto_interior': 'I',
                             'foto_acceso': 'A', 'foto_fondo': 'F', 'foto_medicion': 'M',
                             'foto_entrada_1': 'E1', 'foto_salida_1': 'S1', 'foto_sumidero_1': 'SUM1',
-                            'foto_esquema': 'L'
+                            'foto_esquema': 'L', 'foto_shape': 'L'
                         };
                         const targetCode = codeMap[placement.fieldId];
                         const typeKey = placement.fieldId.replace('foto_', '');
@@ -200,7 +243,7 @@ export async function generatePdfFromDesign(
                                 String(f.subcategoria || '').toUpperCase() === upperTarget
                             );
 
-                            // 2. Prioridad: Nombre de archivo con delimitadores exactos (evita que M001-I coincida con M001-I2)
+                            // 2. Prioridad: Nombre de archivo con delimitadores exactos
                             if (!found) {
                                 found = pozo.fotos?.fotos?.find(f => {
                                     const filename = String(f.filename || '').toUpperCase();
@@ -211,7 +254,7 @@ export async function generatePdfFromDesign(
 
                                     // Caso especial: ARGIS mapea a L
                                     if (upperTarget === 'L') {
-                                        return matchSimple || filename.includes('_ARGIS.');
+                                        return matchSimple || filename.includes('_ARGIS');
                                     }
                                     return matchSimple;
                                 });
@@ -348,9 +391,12 @@ async function renderShape(doc: jsPDF, shape: ShapeElement) {
                     drawW = shape.height * imgAspect;
                     drawX = shape.x + (shape.width - drawW) / 2;
                 }
-                doc.addImage(shape.imageUrl, 'JPEG', drawX, drawY, drawW, drawH, undefined, 'FAST');
+                // Detectar formato automáticamente
+                const format = shape.imageUrl.toLowerCase().includes('png') || shape.imageUrl.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+                doc.addImage(shape.imageUrl, format, drawX, drawY, drawW, drawH, undefined, 'FAST');
             } else {
-                doc.addImage(shape.imageUrl, 'JPEG', shape.x, shape.y, shape.width, shape.height, undefined, 'FAST');
+                const format = shape.imageUrl.toLowerCase().includes('png') || shape.imageUrl.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+                doc.addImage(shape.imageUrl, format, shape.x, shape.y, shape.width, shape.height, undefined, 'FAST');
             }
         } catch (e) {
             console.warn('Could not add shape image to PDF', e);
@@ -445,7 +491,9 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
                 drawY = placement.y + (placement.height - drawH) / 2;
             }
 
-            doc.addImage(imageData, 'JPEG', drawX, drawY, drawW, drawH, undefined, 'FAST');
+            // Detectar formato automáticamente para fotos de pozos
+            const format = imageData.toLowerCase().includes('png') || imageData.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+            doc.addImage(imageData, format, drawX, drawY, drawW, drawH, undefined, 'FAST');
 
         } catch (e) {
             console.warn(`Error foto ${placement.fieldId}`, e);

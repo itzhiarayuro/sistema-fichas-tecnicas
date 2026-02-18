@@ -108,7 +108,8 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
                 'entrada_1': 'E1',
                 'salida_1': 'S1',
                 'sumidero_1': 'SUM1',
-                'esquema': 'L'
+                'esquema': 'L',
+                'shape': 'L'
             };
             const typeKey = fieldId.replace('foto_', '');
             const targetCode = codeMap[typeKey];
@@ -130,7 +131,7 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
 
                         // Caso especial: ARGIS mapea a L
                         if (targetCode === 'L') {
-                            return matchSimple || filename.includes('_ARGIS.');
+                            return matchSimple || filename.includes('_ARGIS');
                         }
                         return matchSimple;
                     });
