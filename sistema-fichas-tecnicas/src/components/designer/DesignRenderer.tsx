@@ -46,6 +46,7 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
                 'entrada_1': 'E1', 'entrada_2': 'E2', 'entrada_3': 'E3', 'entrada_4': 'E4', 'entrada_5': 'E5', 'entrada_6': 'E6',
                 'salida_1': 'S1', 'salida_2': 'S2', 'salida_3': 'S3', 'salida_4': 'S4', 'salida_5': 'S5', 'salida_6': 'S6',
                 'sumidero_1': 'SUM1', 'sumidero_2': 'SUM2', 'sumidero_3': 'SUM3', 'sumidero_4': 'SUM4', 'sumidero_5': 'SUM5', 'sumidero_6': 'SUM6',
+                'descarga_1': 'D1', 'descarga_2': 'D2', 'descarga_3': 'D3', 'descarga_4': 'D4', 'descarga_5': 'D5', 'descarga_6': 'D6',
                 'esquema': 'L', 'shape': 'L'
             };
             const typeKey = fieldId.replace('foto_', '');
@@ -174,6 +175,22 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
         } else {
             const placement = el;
             const value = getFieldValue(placement.fieldId);
+
+            // ADAPTACIÓN DINÁMICA: Si es un slot técnico y no tiene datos, saltar renderizado en preview
+            const isTechnicalSlot =
+                placement.fieldId.startsWith('foto_entrada_') ||
+                placement.fieldId.startsWith('foto_salida_') ||
+                placement.fieldId.startsWith('foto_sumidero_') ||
+                placement.fieldId.startsWith('foto_descarga_') ||
+                placement.fieldId.startsWith('tub_') ||
+                placement.fieldId.startsWith('sum_');
+
+            const hasNoData = !value || value === '-' || value === '' || value === 'Sin foto';
+
+            if (isTechnicalSlot && hasNoData) {
+                return null;
+            }
+
             const isPhoto = placement.fieldId.startsWith('foto_');
             const isWidget = placement.fieldId === 'widget_tuberias';
 

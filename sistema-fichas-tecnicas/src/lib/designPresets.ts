@@ -66,6 +66,7 @@ export const createStandardDesign = (): FichaDesignVersion => {
         numPages: 1,
         createdAt: now,
         updatedAt: now,
+        groups: [],
         shapes: [
             // Header Background
             createShape('rectangle', 10, 10, 190, 25, { fillColor: primaryColor, strokeColor: 'transparent', borderRadius: 4 }),
@@ -110,6 +111,7 @@ export const createCompactDesign = (): FichaDesignVersion => {
         numPages: 1,
         createdAt: now,
         updatedAt: now,
+        groups: [],
         shapes: [
             createShape('rectangle', 10, 10, 190, 15, { fillColor: primaryColor, strokeColor: 'transparent' }),
             createShape('text', 15, 12, 100, 8, { content: 'FICHA TÉCNICA (COMPACTA)', fontSize: 12, color: '#FFFFFF', fontWeight: 'bold' }),
@@ -141,6 +143,7 @@ export const createEnvironmentalDesign = (): FichaDesignVersion => {
         numPages: 1,
         createdAt: now,
         updatedAt: now,
+        groups: [],
         shapes: [
             createShape('rectangle', 0, 0, 210, 297, { fillColor: '#F1F8E9', strokeColor: 'transparent', zIndex: 0 }), // Background tint
             createShape('rectangle', 10, 10, 190, 25, { fillColor: primaryColor, strokeColor: 'transparent', borderRadius: 8, zIndex: 1 }),
@@ -170,6 +173,7 @@ export const createOfficialMarinillaDesign = (): FichaDesignVersion => {
         numPages: 1,
         createdAt: now,
         updatedAt: now,
+        groups: [],
         shapes: [
             // Borde exterior decorativo (opcional pero premium)
             createShape('rectangle', 5, 5, 200, 287, { fillColor: 'transparent', strokeColor: '#e2e8f0', strokeWidth: 0.5, zIndex: 1 }),

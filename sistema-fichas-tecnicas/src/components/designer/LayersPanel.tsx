@@ -64,9 +64,14 @@ export function LayersPanel({
 
     if (!version) return null;
 
+    // Asegurar que version.groups sea un array válido
+    const safeGroups = Array.isArray(version.groups) ? version.groups : [];
+    const safeShapes = Array.isArray(version.shapes) ? version.shapes : [];
+    const safePlacements = Array.isArray(version.placements) ? version.placements : [];
+
     // Combinar y ordenar para mostrar (Mayor Z-Index arriba en la lista visualmente, user expectation)
     const allElements = [
-        ...(version.shapes || []).map(s => ({ 
+        ...safeShapes.map(s => ({ 
             ...s, 
             isShape: true,
             isGroup: false,
@@ -76,14 +81,14 @@ export function LayersPanel({
                     ? 'Imagen'
                     : `${s.type.charAt(0).toUpperCase() + s.type.slice(1)}`
         })),
-        ...(version.placements || []).map(p => ({ 
+        ...safePlacements.map(p => ({ 
             ...p, 
             isShape: false,
             isGroup: false,
             label: p.customLabel || `Campo ${p.fieldId}`,
             hasCustomLabel: !!p.customLabel
         })),
-        ...(version.groups || []).map(g => ({
+        ...safeGroups.map(g => ({
             ...g,
             isShape: false,
             isGroup: true,

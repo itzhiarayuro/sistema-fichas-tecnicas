@@ -593,16 +593,66 @@ export const useDesignStore = create<DesignState>()(
             getCurrentVersion: () => {
                 const state = get();
                 if (!state.currentVersionId) return null;
-                return state.versions.find((v) => v.id === state.currentVersionId) || null;
+                const version = state.versions.find((v) => v.id === state.currentVersionId) || null;
+                
+                // Asegurar que la versión tiene todos los campos requeridos
+                if (version) {
+                    return {
+                        ...version,
+                        groups: Array.isArray(version.groups) ? version.groups : [],
+                        shapes: Array.isArray(version.shapes) ? version.shapes : [],
+                        placements: Array.isArray(version.placements) ? version.placements : []
+                    };
+                }
+                return null;
             },
 
             getVersionById: (id) => {
-                return get().versions.find((v) => v.id === id);
+                const version = get().versions.find((v) => v.id === id);
+                
+                // Asegurar que la versión tiene todos los campos requeridos
+                if (version) {
+                    return {
+                        ...version,
+                        groups: Array.isArray(version.groups) ? version.groups : [],
+                        shapes: Array.isArray(version.shapes) ? version.shapes : [],
+                        placements: Array.isArray(version.placements) ? version.placements : []
+                    };
+                }
+                return undefined;
             },
         }),
         {
             name: 'fichas:design-versions',
             partialize: (state) => ({ versions: state.versions, currentVersionId: state.currentVersionId }),
+            // Migración automática para asegurar que todas las versiones tengan el campo groups
+            migrate: (persistedState: any, version: number) => {
+                console.log('🔧 Ejecutando migración de store...');
+                
+                if (persistedState && persistedState.versions && Array.isArray(persistedState.versions)) {
+                    persistedState.versions = persistedState.versions.map((v: any) => {
+                        const migrated = {
+                            ...v,
+                            groups: Array.isArray(v.groups) ? v.groups : [],
+                            shapes: Array.isArray(v.shapes) ? v.shapes : [],
+                            placements: Array.isArray(v.placements) ? v.placements : []
+                        };
+                        
+                        if (!Array.isArray(v.groups) || !Array.isArray(v.shapes) || !Array.isArray(v.placements)) {
+                            console.log('✅ Versión migrada:', v.id, {
+                                hadGroups: Array.isArray(v.groups),
+                                hadShapes: Array.isArray(v.shapes),
+                                hadPlacements: Array.isArray(v.placements)
+                            });
+                        }
+                        
+                        return migrated;
+                    });
+                }
+                
+                console.log('✅ Migración completada');
+                return persistedState;
+            }
         }
     )
 );

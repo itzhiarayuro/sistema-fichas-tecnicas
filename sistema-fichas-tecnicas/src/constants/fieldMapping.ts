@@ -111,19 +111,48 @@ export const FIELD_PATHS: Record<string, string> = {
     'sum_4_hSalida': 'sumideros.sumideros[3].alturaSalida.value',
     'sum_4_hLlegada': 'sumideros.sumideros[3].alturaLlegada.value',
 
-    // FOTOS ESPECÍFICAS
+    // FOTOS ESPECÍFICAS (Mapeo por subcategoría)
     'foto_panoramica': 'fotos.fotos[P]',
     'foto_tapa': 'fotos.fotos[T]',
     'foto_interior': 'fotos.fotos[I]',
     'foto_acceso': 'fotos.fotos[A]',
     'foto_fondo': 'fotos.fotos[F]',
     'foto_medicion': 'fotos.fotos[M]',
-    'foto_entrada_1': 'fotos.fotos[E1]',
-    'foto_salida_1': 'fotos.fotos[S1]',
-    'foto_sumidero_1': 'fotos.fotos[SUM1]',
     'foto_esquema': 'fotos.fotos[L]',
 
-    // FOTOS GENÉRICAS
+    // ENTRADAS (1-6)
+    'foto_entrada_1': 'fotos.fotos[E1]',
+    'foto_entrada_2': 'fotos.fotos[E2]',
+    'foto_entrada_3': 'fotos.fotos[E3]',
+    'foto_entrada_4': 'fotos.fotos[E4]',
+    'foto_entrada_5': 'fotos.fotos[E5]',
+    'foto_entrada_6': 'fotos.fotos[E6]',
+
+    // SALIDAS (1-6)
+    'foto_salida_1': 'fotos.fotos[S1]',
+    'foto_salida_2': 'fotos.fotos[S2]',
+    'foto_salida_3': 'fotos.fotos[S3]',
+    'foto_salida_4': 'fotos.fotos[S4]',
+    'foto_salida_5': 'fotos.fotos[S5]',
+    'foto_salida_6': 'fotos.fotos[S6]',
+
+    // SUMIDEROS (1-6)
+    'foto_sumidero_1': 'fotos.fotos[SUM1]',
+    'foto_sumidero_2': 'fotos.fotos[SUM2]',
+    'foto_sumidero_3': 'fotos.fotos[SUM3]',
+    'foto_sumidero_4': 'fotos.fotos[SUM4]',
+    'foto_sumidero_5': 'fotos.fotos[SUM5]',
+    'foto_sumidero_6': 'fotos.fotos[SUM6]',
+
+    // DESCARGAS (1-6)
+    'foto_descarga_1': 'fotos.fotos[D1]',
+    'foto_descarga_2': 'fotos.fotos[D2]',
+    'foto_descarga_3': 'fotos.fotos[D3]',
+    'foto_descarga_4': 'fotos.fotos[D4]',
+    'foto_descarga_5': 'fotos.fotos[D5]',
+    'foto_descarga_6': 'fotos.fotos[D6]',
+
+    // FOTOS GENÉRICAS (Fallback para fotos no clasificadas)
     'foto_1': 'fotos.fotos[0].blobId',
     'foto_2': 'fotos.fotos[1].blobId',
     'foto_3': 'fotos.fotos[2].blobId',
@@ -179,4 +208,36 @@ export const AVAILABLE_DATA_FIELDS = [
     { id: 'foto_fondo', label: 'Foto Fondo (F)', category: 'Fotos' },
     { id: 'foto_medicion', label: 'Foto Medición (M)', category: 'Fotos' },
     { id: 'foto_esquema', label: 'Esquema Localización (L)', category: 'Fotos' },
+
+    // Fotos Entradas
+    { id: 'foto_entrada_1', label: 'Foto Entrada 1', category: 'Fotos Tuberías' },
+    { id: 'foto_entrada_2', label: 'Foto Entrada 2', category: 'Fotos Tuberías' },
+    { id: 'foto_entrada_3', label: 'Foto Entrada 3', category: 'Fotos Tuberías' },
+    { id: 'foto_entrada_4', label: 'Foto Entrada 4', category: 'Fotos Tuberías' },
+    { id: 'foto_entrada_5', label: 'Foto Entrada 5', category: 'Fotos Tuberías' },
+    { id: 'foto_entrada_6', label: 'Foto Entrada 6', category: 'Fotos Tuberías' },
+
+    // Fotos Salidas
+    { id: 'foto_salida_1', label: 'Foto Salida 1', category: 'Fotos Tuberías' },
+    { id: 'foto_salida_2', label: 'Foto Salida 2', category: 'Fotos Tuberías' },
+    { id: 'foto_salida_3', label: 'Foto Salida 3', category: 'Fotos Tuberías' },
+    { id: 'foto_salida_4', label: 'Foto Salida 4', category: 'Fotos Tuberías' },
+    { id: 'foto_salida_5', label: 'Foto Salida 5', category: 'Fotos Tuberías' },
+    { id: 'foto_salida_6', label: 'Foto Salida 6', category: 'Fotos Tuberías' },
+
+    // Fotos Sumideros
+    { id: 'foto_sumidero_1', label: 'Foto Sumidero 1', category: 'Fotos Sumideros' },
+    { id: 'foto_sumidero_2', label: 'Foto Sumidero 2', category: 'Fotos Sumideros' },
+    { id: 'foto_sumidero_3', label: 'Foto Sumidero 3', category: 'Fotos Sumideros' },
+    { id: 'foto_sumidero_4', label: 'Foto Sumidero 4', category: 'Fotos Sumideros' },
+    { id: 'foto_sumidero_5', label: 'Foto Sumidero 5', category: 'Fotos Sumideros' },
+    { id: 'foto_sumidero_6', label: 'Foto Sumidero 6', category: 'Fotos Sumideros' },
+
+    // Fotos Descargas
+    { id: 'foto_descarga_1', label: 'Foto Descarga 1', category: 'Fotos Envío' },
+    { id: 'foto_descarga_2', label: 'Foto Descarga 2', category: 'Fotos Envío' },
+    { id: 'foto_descarga_3', label: 'Foto Descarga 3', category: 'Fotos Envío' },
+    { id: 'foto_descarga_4', label: 'Foto Descarga 4', category: 'Fotos Envío' },
+    { id: 'foto_descarga_5', label: 'Foto Descarga 5', category: 'Fotos Envío' },
+    { id: 'foto_descarga_6', label: 'Foto Descarga 6', category: 'Fotos Envío' },
 ];

@@ -23,8 +23,8 @@ export interface NomenclaturaResult {
   /** ID del pozo extraído del nombre */
   pozoId: string;
   /** Categoría de la foto */
-  categoria: 'PRINCIPAL' | 'ENTRADA' | 'SALIDA' | 'SUMIDERO' | 'OTRO';
-  /** Subcategoría específica (ej: E1-T, S-Z, SUM1) */
+  categoria: 'PRINCIPAL' | 'ENTRADA' | 'SALIDA' | 'SUMIDERO' | 'DESCARGA' | 'OTRO';
+  /** Subcategoría específica (ej: E1-T, S-Z, SUM1, D1) */
   subcategoria: string;
   /** Descripción legible del tipo de foto */
   tipo: string;
@@ -48,6 +48,8 @@ const PATTERNS = {
   SALIDA_SIN_NUMERO: /^(.+)-(S)(?:-[TZ])?$/i,
   // Sumideros: M680-SUM1, M680-SUM2...
   SUMIDERO: /^(.+)-(SUM\d+)$/i,
+  // Descargas: M680-D1, M680-DESC1...
+  DESCARGA: /^(.+)-(D\d+|DESC\d*)$/i,
   // Esquema de localización: M680_ARGIS
   ARGIS: /^(.+)_ARGIS$/i,
 };
@@ -147,6 +149,24 @@ export function parseNomenclatura(filename: string): NomenclaturaResult {
     };
   }
 
+  // Intentar patrón DESCARGA
+  match = nameWithoutExt.match(PATTERNS.DESCARGA);
+  if (match) {
+    const descId = match[2].toUpperCase();
+    let subcat = descId;
+    if (descId.startsWith('DESC')) {
+      const num = descId.replace('DESC', '');
+      subcat = num ? `D${num}` : 'D1';
+    }
+    return {
+      pozoId: match[1].toUpperCase(),
+      categoria: 'DESCARGA',
+      subcategoria: subcat,
+      tipo: `Descarga ${subcat.slice(1) || '1'}`,
+      isValid: true,
+    };
+  }
+
   // Intentar patrón ARGIS
   match = nameWithoutExt.match(PATTERNS.ARGIS);
   if (match) {
@@ -198,6 +218,8 @@ export function buildNomenclatura(result: NomenclaturaResult): string {
     case 'SALIDA':
       return `${result.pozoId}-${result.subcategoria}`;
     case 'SUMIDERO':
+      return `${result.pozoId}-${result.subcategoria}`;
+    case 'DESCARGA':
       return `${result.pozoId}-${result.subcategoria}`;
     default:
       return '';
