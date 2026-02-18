@@ -80,21 +80,19 @@ export function DesignPreview({ version, isOpen, onClose }: DesignPreviewProps) 
                         <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
                             <button
                                 onClick={() => setPreviewMode('design')}
-                                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                                    previewMode === 'design'
+                                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${previewMode === 'design'
                                         ? 'bg-white text-primary shadow-sm'
                                         : 'text-gray-600 hover:text-gray-800'
-                                }`}
+                                    }`}
                             >
                                 Diseño
                             </button>
                             <button
                                 onClick={() => setPreviewMode('data')}
-                                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                                    previewMode === 'data'
+                                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${previewMode === 'data'
                                         ? 'bg-white text-primary shadow-sm'
                                         : 'text-gray-600 hover:text-gray-800'
-                                }`}
+                                    }`}
                                 disabled={pozos.size === 0}
                             >
                                 Con Datos
@@ -294,7 +292,7 @@ export function DesignPreview({ version, isOpen, onClose }: DesignPreviewProps) 
                             {/* Render Field Placements */}
                             {version.placements.map((placement) => {
                                 const field = AVAILABLE_FIELDS.find(f => f.id === placement.fieldId);
-                                
+
                                 // En modo diseño, mostrar el nombre del campo
                                 // En modo data, mostrar el valor real
                                 const displayValue = previewMode === 'design'
@@ -314,25 +312,50 @@ export function DesignPreview({ version, isOpen, onClose }: DesignPreviewProps) 
                                             backgroundColor: placement.backgroundColor || 'transparent',
                                             borderRadius: placement.borderRadius ? `${placement.borderRadius}px` : 0,
                                             padding: placement.padding ? `${placement.padding}px` : '2px',
-                                            border: previewMode === 'design' ? '1px dashed rgba(99, 102, 241, 0.3)' : 'none'
+                                            border: placement.borderWidth
+                                                ? `${placement.borderWidth}px solid ${placement.borderColor || '#000'}`
+                                                : (previewMode === 'design' ? '1px dashed rgba(99, 102, 241, 0.3)' : 'none'),
+                                            display: 'flex',
+                                            flexDirection: 'column',
                                         }}
                                     >
-                                        {placement.showLabel && previewMode === 'data' && (
-                                            <div className="text-[7px] text-gray-400 font-medium mb-0.5 truncate">
-                                                {placement.customLabel || field?.label}
+                                        {placement.showLabel && (
+                                            <div
+                                                className="flex-shrink-0 mb-0.5 flex items-center overflow-hidden"
+                                                style={{
+                                                    fontWeight: placement.labelFontWeight || 'bold',
+                                                    color: placement.labelColor || '#6B7280',
+                                                    backgroundColor: placement.labelBackgroundColor || 'transparent',
+                                                    padding: placement.labelPadding ? `${placement.labelPadding}px` : 0,
+                                                    width: placement.labelWidth ? `${placement.labelWidth}mm` : '100%',
+                                                    justifyContent: placement.labelAlign === 'center' ? 'center' : (placement.labelAlign === 'right' ? 'flex-end' : 'flex-start'),
+                                                    alignSelf: placement.labelWidth && placement.labelAlign === 'center' ? 'center' : (placement.labelWidth && placement.labelAlign === 'right' ? 'flex-end' : 'flex-start')
+                                                }}
+                                            >
+                                                <span className="truncate uppercase" style={{
+                                                    fontSize: `${placement.labelFontSize || ((placement.fontSize || 10) * 0.8)}pt`,
+                                                }}>
+                                                    {placement.customLabel || field?.label || placement.fieldId}
+                                                </span>
                                             </div>
                                         )}
-                                        <div
-                                            className="font-medium truncate"
+                                        <div className="flex-grow w-full flex items-center overflow-hidden"
                                             style={{
-                                                fontSize: `${placement.fontSize || 10}pt`,
-                                                fontFamily: placement.fontFamily || 'Inter',
-                                                fontWeight: placement.fontWeight || 'normal',
-                                                color: placement.color || '#000000',
-                                                textAlign: placement.textAlign || 'left'
+                                                justifyContent: placement.textAlign === 'center' ? 'center' : (placement.textAlign === 'right' ? 'flex-end' : 'flex-start')
                                             }}
                                         >
-                                            {displayValue}
+                                            <span
+                                                className="truncate"
+                                                style={{
+                                                    fontSize: `${placement.fontSize || 10}pt`,
+                                                    fontFamily: placement.fontFamily || 'Inter',
+                                                    fontWeight: placement.fontWeight || 'normal',
+                                                    color: placement.color || '#000000',
+                                                    lineHeight: 1.2
+                                                }}
+                                            >
+                                                {displayValue}
+                                            </span>
                                         </div>
                                     </div>
                                 );

@@ -348,7 +348,7 @@ export function DesignCanvas({
         if (dragElementIdRef.current && dragElementTypeRef.current) {
             const dx = (e.clientX - dragStartRef.current.x) / (MM_TO_PX * zoom);
             const dy = (e.clientY - dragStartRef.current.y) / (MM_TO_PX * zoom);
-            
+
             // Threshold: solo iniciar drag si se movió más de 2 píxeles
             const distance = Math.sqrt(dx * dx + dy * dy);
             if (distance > 2) {
@@ -357,7 +357,7 @@ export function DesignCanvas({
                     setIsDragging(true);
                     document.body.style.cursor = 'grabbing';
                 }
-                
+
                 const newX = snapValue(dragStartRef.current.initialX + dx);
                 const newY = snapValue(dragStartRef.current.initialY + dy);
 
@@ -383,7 +383,7 @@ export function DesignCanvas({
         dragElementTypeRef.current = null;
         setIsDragging(false);
         setIsResizing(false);
-        
+
         // Restaurar cursor
         document.body.style.cursor = '';
     }, [drawingState, finalizeCreation]);
@@ -452,13 +452,12 @@ export function DesignCanvas({
                     data-shape-id={shape.id}
                     ref={isSelected && elementPage === currentPage ? selectedElementRef : null}
                     onMouseDown={(e) => handleShapeMouseDown(e, shape)}
-                    className={`absolute select-none transition-all duration-200 ${
-                        shape.isLocked 
-                            ? 'cursor-not-allowed opacity-60' 
+                    className={`absolute select-none transition-all duration-200 ${shape.isLocked
+                            ? 'cursor-not-allowed opacity-60'
                             : isDragging && selectedShapeId === shape.id
                                 ? 'cursor-grabbing scale-105'
                                 : 'cursor-grab hover:scale-[1.02]'
-                    } ${isSelected ? 'ring-2 ring-emerald-500 ring-offset-2 z-50 shadow-xl' : 'hover:ring-1 hover:ring-emerald-300'}`}
+                        } ${isSelected ? 'ring-2 ring-emerald-500 ring-offset-2 z-50 shadow-xl' : 'hover:ring-1 hover:ring-emerald-300'}`}
                     style={{
                         left: x,
                         top: y,
@@ -501,13 +500,12 @@ export function DesignCanvas({
                     data-placement-id={placement.id}
                     ref={isSelected && elementPage === currentPage ? selectedElementRef : null}
                     onMouseDown={(e) => handlePlacementMouseDown(e, placement)}
-                    className={`absolute select-none transition-all duration-200 ${
-                        placement.isLocked 
-                            ? 'cursor-not-allowed opacity-60' 
+                    className={`absolute select-none transition-all duration-200 ${placement.isLocked
+                            ? 'cursor-not-allowed opacity-60'
                             : isDragging && selectedPlacementId === placement.id
                                 ? 'cursor-grabbing scale-105'
                                 : 'cursor-grab hover:scale-[1.02]'
-                    } ${isSelected ? 'ring-2 ring-emerald-500 ring-offset-2 z-50 shadow-xl' : 'hover:ring-1 hover:ring-emerald-300'}`}
+                        } ${isSelected ? 'ring-2 ring-emerald-500 ring-offset-2 z-50 shadow-xl' : 'hover:ring-1 hover:ring-emerald-300'}`}
                     style={{
                         left: x,
                         top: y,
@@ -517,22 +515,48 @@ export function DesignCanvas({
                         backgroundColor: placement.backgroundColor || 'rgba(255,255,255,0.9)',
                         borderRadius: placement.borderRadius ? `${placement.borderRadius}px` : 0,
                         padding: placement.padding ? `${placement.padding}px` : '4px',
-                        border: '1px solid #e5e7eb',
+                        border: placement.borderWidth
+                            ? `${placement.borderWidth * zoom}px solid ${placement.borderColor || '#e5e7eb'}`
+                            : '1px solid #e5e7eb',
                         pointerEvents: (placement.isLocked || (isHeader && currentPage !== elementPage)) ? 'none' : 'auto',
+                        display: 'flex',
+                        flexDirection: 'column',
                     }}
                 >
                     {placement.showLabel && (
-                        <div className="text-[8px] text-gray-400 font-medium mb-1 truncate">
-                            {placement.customLabel || `Campo ${placement.fieldId}`}
+                        <div
+                            className="flex-shrink-0 mb-0.5 flex items-center overflow-hidden"
+                            style={{
+                                fontWeight: placement.labelFontWeight || 'bold',
+                                color: placement.labelColor || '#6B7280',
+                                backgroundColor: placement.labelBackgroundColor || 'transparent',
+                                padding: placement.labelPadding ? `${placement.labelPadding}px` : 0,
+                                width: placement.labelWidth ? `${placement.labelWidth * MM_TO_PX * zoom}px` : '100%',
+                                justifyContent: placement.labelAlign === 'center' ? 'center' : (placement.labelAlign === 'right' ? 'flex-end' : 'flex-start'),
+                                alignSelf: placement.labelWidth && placement.labelAlign === 'center' ? 'center' : (placement.labelWidth && placement.labelAlign === 'right' ? 'flex-end' : 'flex-start')
+                            }}
+                        >
+                            <span className="truncate uppercase" style={{
+                                fontSize: `${(placement.labelFontSize || ((placement.fontSize || 10) * 0.8)) * zoom}px`,
+                            }}>
+                                {placement.customLabel || placement.fieldId}
+                            </span>
                         </div>
                     )}
-                    <div className="font-medium truncate" style={{
-                        fontSize: `${(placement.fontSize || 10) * zoom}px`,
-                        fontFamily: placement.fontFamily || 'Arial',
-                        color: placement.color || '#000',
-                        textAlign: placement.textAlign || 'left'
-                    }}>
-                        {`{{${placement.fieldId}}}`}
+                    <div className="flex-grow w-full flex items-center overflow-hidden"
+                        style={{
+                            justifyContent: placement.textAlign === 'center' ? 'center' : (placement.textAlign === 'right' ? 'flex-end' : 'flex-start')
+                        }}
+                    >
+                        <span className="truncate" style={{
+                            fontSize: `${(placement.fontSize || 10) * zoom}px`,
+                            fontFamily: placement.fontFamily || 'Arial',
+                            fontWeight: placement.fontWeight || 'normal',
+                            color: placement.color || '#000',
+                            lineHeight: 1.2
+                        }}>
+                            {`{{${placement.fieldId}}}`}
+                        </span>
                     </div>
                     {isHeader && (
                         <div className="absolute -top-4 left-0 bg-primary text-white text-[8px] px-1 rounded uppercase font-bold">Encabezado</div>
