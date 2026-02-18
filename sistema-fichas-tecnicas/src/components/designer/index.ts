@@ -13,3 +13,4 @@ export { DesignPreview } from './DesignPreview';
 export { ResizeHandle } from './ResizeHandle';
 export * from './ImagesPanel';
 export { LayersPanel } from './LayersPanel';
+export { StylePicker } from './StylePicker';

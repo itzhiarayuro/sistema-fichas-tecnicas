@@ -8,6 +8,7 @@
 import type { FichaDesignVersion, FieldPlacement, ShapeElement } from '@/types/fichaDesign';
 import { AVAILABLE_FIELDS } from '@/types/fichaDesign';
 import { useDesignStore } from '@/stores/designStore';
+import { StylePicker } from './StylePicker';
 
 interface PropertiesPanelProps {
     version: FichaDesignVersion | null;
@@ -55,6 +56,14 @@ export function PropertiesPanel({ version, selectedPlacementId, selectedShapeId 
         }
     };
 
+    const handleApplyStyle = (style: any) => {
+        if (placement) {
+            handleUpdatePlacement(style);
+        } else if (shape) {
+            handleUpdateShape(style);
+        }
+    };
+
     // Render para SHAPES
     if (shape) {
         return (
@@ -77,6 +86,14 @@ export function PropertiesPanel({ version, selectedPlacementId, selectedShapeId 
                 </div>
 
                 <div className="p-4 space-y-6">
+                    {/* Style Picker */}
+                    <StylePicker
+                        version={version}
+                        selectedPlacementId={selectedPlacementId}
+                        selectedShapeId={selectedShapeId}
+                        onApplyStyle={handleApplyStyle}
+                    />
+
                     {/* Geometría */}
                     <section className="space-y-3">
                         <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Geometría (mm)</h3>
@@ -297,6 +314,14 @@ export function PropertiesPanel({ version, selectedPlacementId, selectedShapeId 
             </div>
 
             <div className="p-4 space-y-6">
+                {/* Style Picker */}
+                <StylePicker
+                    version={version}
+                    selectedPlacementId={selectedPlacementId}
+                    selectedShapeId={selectedShapeId}
+                    onApplyStyle={handleApplyStyle}
+                />
+
                 {/* Geometría */}
                 <section className="space-y-3">
                     <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Geometría (mm)</h3>

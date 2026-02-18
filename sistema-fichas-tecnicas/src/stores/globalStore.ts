@@ -256,11 +256,13 @@ export const useGlobalStore = create<GlobalState>()(
         photos.forEach((photo) => {
           photosMap.set(photo.id, photo);
 
-          // Actualizar caché de búsqueda
-          if (photo.filename) {
-            const code = photo.filename.split('-')[0].toUpperCase();
+          // Actualizar caché de búsqueda usando la fuente de verdad (idPozo)
+          if (photo.idPozo) {
+            const code = photo.idPozo.toUpperCase();
             const existing = cache.get(code) || [];
-            cache.set(code, [...existing, photo.id]);
+            if (!existing.includes(photo.id)) {
+              cache.set(code, [...existing, photo.id]);
+            }
           }
         });
 
@@ -273,10 +275,10 @@ export const useGlobalStore = create<GlobalState>()(
         const newPhotos = new Map(state.photos);
         newPhotos.set(photo.id, photo);
 
-        // Actualizar caché
+        // Actualizar caché usando idPozo
         const newCache = new Map(state.photosByCodeCache);
-        if (photo.filename) {
-          const code = photo.filename.split('-')[0].toUpperCase();
+        if (photo.idPozo) {
+          const code = photo.idPozo.toUpperCase();
           const existing = newCache.get(code) || [];
           if (!existing.includes(photo.id)) {
             newCache.set(code, [...existing, photo.id]);
@@ -292,8 +294,8 @@ export const useGlobalStore = create<GlobalState>()(
 
         newPhotosList.forEach(photo => {
           newPhotos.set(photo.id, photo);
-          if (photo.filename) {
-            const code = photo.filename.split('-')[0].toUpperCase();
+          if (photo.idPozo) {
+            const code = photo.idPozo.toUpperCase();
             const existing = newCache.get(code) || [];
             if (!existing.includes(photo.id)) {
               existing.push(photo.id);

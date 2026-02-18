@@ -149,15 +149,6 @@ export async function generatePdfFromDesign(
 
         console.log('📋 Total de elementos a renderizar:', allElements.length);
 
-        // DEBUG: Ver todas las fotos disponibles
-        console.log('📸 Fotos disponibles en el pozo:', pozo.fotos?.fotos?.map(f => ({
-            filename: f.filename,
-            subcategoria: f.subcategoria,
-            tipo: f.tipo,
-            descripcion: f.descripcion,
-            blobId: f.blobId
-        })));
-
         // 2. Determinar cuántas páginas necesitamos
         // Calculamos basándonos en la categoría que tenga más elementos pendientes vs el diseño
         const getPageCount = () => {
