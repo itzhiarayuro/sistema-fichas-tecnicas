@@ -1,6 +1,6 @@
 /**
- * DesignPreview - Preview funcional del diseño con datos reales de un pozo
- * Muestra cómo se verá la ficha impresa con datos reales
+ * DesignPreview - Preview WYSIWYG del diseño
+ * Muestra exactamente lo que se está diseñando en el canvas, pixel por pixel
  */
 
 'use client';
@@ -16,9 +16,12 @@ interface DesignPreviewProps {
     onClose: () => void;
 }
 
+type PreviewMode = 'design' | 'data';
+
 export function DesignPreview({ version, isOpen, onClose }: DesignPreviewProps) {
     const pozos = useGlobalStore((state) => state.pozos);
     const [selectedPozoId, setSelectedPozoId] = useState<string | null>(null);
+    const [previewMode, setPreviewMode] = useState<PreviewMode>('design');
 
     const MM_TO_PX = 3.78;
 
@@ -67,43 +70,72 @@ export function DesignPreview({ version, isOpen, onClose }: DesignPreviewProps) 
                             </svg>
                             Preview: {version.name}
                         </h2>
-                        <p className="text-sm text-gray-500 mt-1">Vista previa con datos reales</p>
+                        <p className="text-sm text-gray-500 mt-1">
+                            {previewMode === 'design' ? 'Vista del diseño (WYSIWYG)' : 'Vista con datos reales'}
+                        </p>
                     </div>
 
-                    {/* Selector de Pozo */}
-                    {pozos.size > 0 && (
-                        <select
-                            value={selectedPozoId || ''}
-                            onChange={(e) => setSelectedPozoId(e.target.value)}
-                            className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
-                        >
-                            {Array.from(pozos.entries()).map(([id, pozo]) => (
-                                <option key={id} value={id}>
-                                    {pozo.identificacion?.idPozo?.value || id}
-                                </option>
-                            ))}
-                        </select>
-                    )}
+                    <div className="flex items-center gap-3">
+                        {/* Toggle de modo */}
+                        <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
+                            <button
+                                onClick={() => setPreviewMode('design')}
+                                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                                    previewMode === 'design'
+                                        ? 'bg-white text-primary shadow-sm'
+                                        : 'text-gray-600 hover:text-gray-800'
+                                }`}
+                            >
+                                Diseño
+                            </button>
+                            <button
+                                onClick={() => setPreviewMode('data')}
+                                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                                    previewMode === 'data'
+                                        ? 'bg-white text-primary shadow-sm'
+                                        : 'text-gray-600 hover:text-gray-800'
+                                }`}
+                                disabled={pozos.size === 0}
+                            >
+                                Con Datos
+                            </button>
+                        </div>
 
-                    <button
-                        onClick={onClose}
-                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                    >
-                        <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    </button>
+                        {/* Selector de Pozo (solo en modo data) */}
+                        {previewMode === 'data' && pozos.size > 0 && (
+                            <select
+                                value={selectedPozoId || ''}
+                                onChange={(e) => setSelectedPozoId(e.target.value)}
+                                className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                            >
+                                {Array.from(pozos.entries()).map(([id, pozo]) => (
+                                    <option key={id} value={id}>
+                                        {pozo.identificacion?.idPozo?.value || id}
+                                    </option>
+                                ))}
+                            </select>
+                        )}
+
+                        <button
+                            onClick={onClose}
+                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                            <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
                 </div>
 
                 {/* Preview Content */}
                 <div className="flex-1 overflow-auto p-8 bg-gray-100">
-                    {pozos.size === 0 ? (
+                    {previewMode === 'data' && pozos.size === 0 ? (
                         <div className="text-center py-16">
                             <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                             </svg>
                             <p className="text-gray-500 font-medium">No hay pozos cargados</p>
-                            <p className="text-sm text-gray-400 mt-1">Importa datos desde Excel para ver el preview</p>
+                            <p className="text-sm text-gray-400 mt-1">Importa datos desde Excel para ver el preview con datos</p>
                         </div>
                     ) : (
                         <div
@@ -262,7 +294,12 @@ export function DesignPreview({ version, isOpen, onClose }: DesignPreviewProps) 
                             {/* Render Field Placements */}
                             {version.placements.map((placement) => {
                                 const field = AVAILABLE_FIELDS.find(f => f.id === placement.fieldId);
-                                const value = field ? getFieldValue(field.fieldPath) : '[Campo no encontrado]';
+                                
+                                // En modo diseño, mostrar el nombre del campo
+                                // En modo data, mostrar el valor real
+                                const displayValue = previewMode === 'design'
+                                    ? (placement.customLabel || field?.label || placement.fieldId)
+                                    : (field ? getFieldValue(field.fieldPath) : '[Campo no encontrado]');
 
                                 return (
                                     <div
@@ -276,10 +313,11 @@ export function DesignPreview({ version, isOpen, onClose }: DesignPreviewProps) 
                                             zIndex: placement.zIndex,
                                             backgroundColor: placement.backgroundColor || 'transparent',
                                             borderRadius: placement.borderRadius ? `${placement.borderRadius}px` : 0,
-                                            padding: placement.padding ? `${placement.padding}px` : '2px'
+                                            padding: placement.padding ? `${placement.padding}px` : '2px',
+                                            border: previewMode === 'design' ? '1px dashed rgba(99, 102, 241, 0.3)' : 'none'
                                         }}
                                     >
-                                        {placement.showLabel && (
+                                        {placement.showLabel && previewMode === 'data' && (
                                             <div className="text-[7px] text-gray-400 font-medium mb-0.5 truncate">
                                                 {placement.customLabel || field?.label}
                                             </div>
@@ -294,7 +332,7 @@ export function DesignPreview({ version, isOpen, onClose }: DesignPreviewProps) 
                                                 textAlign: placement.textAlign || 'left'
                                             }}
                                         >
-                                            {value}
+                                            {displayValue}
                                         </div>
                                     </div>
                                 );
@@ -307,6 +345,9 @@ export function DesignPreview({ version, isOpen, onClose }: DesignPreviewProps) 
                 <div className="p-4 border-t border-gray-200 bg-gray-50 flex items-center justify-between">
                     <div className="text-xs text-gray-500">
                         {version.placements.length} campos • {version.shapes?.length || 0} figuras
+                        {previewMode === 'design' && (
+                            <span className="ml-2 text-primary font-medium">• Vista WYSIWYG</span>
+                        )}
                     </div>
                     <div className="flex gap-2">
                         <button
@@ -315,35 +356,37 @@ export function DesignPreview({ version, isOpen, onClose }: DesignPreviewProps) 
                         >
                             Cerrar
                         </button>
-                        <button
-                            onClick={async () => {
-                                if (!version || !selectedPozo) return;
-                                try {
-                                    const { generatePdfFromDesign } = await import('@/lib/pdf/designBasedPdfGenerator');
-                                    const result = await generatePdfFromDesign(version, selectedPozo);
-                                    if (result.success && result.blob) {
-                                        const url = URL.createObjectURL(result.blob);
-                                        const link = document.createElement('a');
-                                        link.href = url;
-                                        link.download = `ficha_${selectedPozo.idPozo?.value || selectedPozo.identificacion.idPozo.value}_${version.name}.pdf`;
-                                        link.click();
-                                        URL.revokeObjectURL(url);
-                                    } else {
-                                        alert('Error al generar PDF: ' + result.error);
+                        {previewMode === 'data' && selectedPozo && (
+                            <button
+                                onClick={async () => {
+                                    if (!version || !selectedPozo) return;
+                                    try {
+                                        const { generatePdfFromDesign } = await import('@/lib/pdf/designBasedPdfGenerator');
+                                        const result = await generatePdfFromDesign(version, selectedPozo);
+                                        if (result.success && result.blob) {
+                                            const url = URL.createObjectURL(result.blob);
+                                            const link = document.createElement('a');
+                                            link.href = url;
+                                            link.download = `ficha_${selectedPozo.idPozo?.value || selectedPozo.identificacion.idPozo.value}_${version.name}.pdf`;
+                                            link.click();
+                                            URL.revokeObjectURL(url);
+                                        } else {
+                                            alert('Error al generar PDF: ' + result.error);
+                                        }
+                                    } catch (e) {
+                                        console.error(e);
+                                        alert('Error inesperado al generar PDF');
                                     }
-                                } catch (e) {
-                                    console.error(e);
-                                    alert('Error inesperado al generar PDF');
-                                }
-                            }}
-                            className="px-4 py-2 bg-primary text-white rounded-lg font-medium hover:bg-primary-600 transition-colors flex items-center gap-2"
-                            title="Generar PDF"
-                        >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                            </svg>
-                            Generar PDF
-                        </button>
+                                }}
+                                className="px-4 py-2 bg-primary text-white rounded-lg font-medium hover:bg-primary-600 transition-colors flex items-center gap-2"
+                                title="Generar PDF"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                Generar PDF
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>
