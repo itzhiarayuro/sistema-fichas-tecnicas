@@ -188,24 +188,29 @@ export async function generatePdfFromDesign(
                         const targetCode = codeMap[placement.fieldId];
                         const typeKey = placement.fieldId.replace('foto_', '');
                         if (targetCode) {
+                            const upperTarget = targetCode.toUpperCase();
                             // Buscar foto con múltiples criterios (Lógica robusta por prioridades)
+                            // 1. Prioridad: Subcategoría exacta (La fuente de verdad más fiable)
                             let found = pozo.fotos?.fotos?.find(f =>
-                                String(f.subcategoria || '').toUpperCase() === targetCode
+                                String(f.subcategoria || '').toUpperCase() === upperTarget
                             );
 
+                            // 2. Prioridad: Nombre de archivo con delimitadores exactos (evita que M001-I coincida con M001-I2)
                             if (!found) {
                                 found = pozo.fotos?.fotos?.find(f => {
                                     const filename = String(f.filename || '').toUpperCase();
-                                    return filename.includes(`-${targetCode}.`) ||
-                                        filename.includes(`_${targetCode}.`) ||
-                                        filename.endsWith(`-${targetCode}`);
+                                    return filename.includes(`-${upperTarget}.`) ||
+                                        filename.includes(`_${upperTarget}.`) ||
+                                        filename.endsWith(`-${upperTarget}`) ||
+                                        filename.endsWith(`_${upperTarget}`);
                                 });
                             }
 
+                            // 3. Prioridad: Fallback por tipo o inclusión de código
                             if (!found) {
                                 found = pozo.fotos?.fotos?.find(f =>
                                     String(f.tipo || '').toUpperCase() === typeKey.toUpperCase() ||
-                                    String(f.subcategoria || '').toUpperCase().includes(targetCode)
+                                    (f.subcategoria && String(f.subcategoria).toUpperCase().includes(upperTarget))
                                 );
                             }
 
