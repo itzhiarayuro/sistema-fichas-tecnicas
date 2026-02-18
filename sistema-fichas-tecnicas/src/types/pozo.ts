@@ -356,6 +356,7 @@ export interface PozoMetadata {
   createdAt: number;
   updatedAt: number;
   source: 'excel' | 'manual';
+  tipoFicha?: 'POZO' | 'DESCARGA';
   version: number;
 }
 

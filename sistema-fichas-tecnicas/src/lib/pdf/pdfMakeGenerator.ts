@@ -157,9 +157,12 @@ export class PDFMakeGenerator {
                 pageSize: 'A4',
                 pageMargins: [40, 60, 40, 60],
                 header: (currentPage: number) => {
+                    const tipoFicha = pozo.metadata?.tipoFicha || 'POZO';
+                    const titulo = tipoFicha === 'DESCARGA' ? 'FICHA TÉCNICA DE DESCARGA' : 'FICHA TÉCNICA DE POZO DE INSPECCIÓN';
+
                     if (currentPage === 1) return null;
                     return {
-                        text: 'FICHA TÉCNICA DE POZO DE INSPECCIÓN',
+                        text: titulo,
                         alignment: 'center',
                         margin: [0, 20, 0, 0],
                         fontSize: 10,
@@ -361,9 +364,13 @@ export class PDFMakeGenerator {
                     [
                         {
                             stack: [
-                                { text: 'FICHA TÉCNICA DE POZO DE INSPECCIÓN', style: 'header', alignment: 'center' },
                                 {
-                                    text: `Pozo: ${pozo.idPozo?.value || pozo.identificacion?.idPozo?.value || 'N/A'}`,
+                                    text: (pozo.metadata?.tipoFicha === 'DESCARGA' ? 'FICHA TÉCNICA DE DESCARGA' : 'FICHA TÉCNICA DE POZO DE INSPECCIÓN'),
+                                    style: 'header',
+                                    alignment: 'center'
+                                },
+                                {
+                                    text: `${pozo.metadata?.tipoFicha === 'DESCARGA' ? 'Descarga' : 'Pozo'}: ${pozo.idPozo?.value || pozo.identificacion?.idPozo?.value || 'N/A'}`,
                                     alignment: 'center',
                                     color: customization.colors.headerText
                                 }
@@ -392,7 +399,8 @@ export class PDFMakeGenerator {
                 try {
                     switch (section.type) {
                         case 'identificacion':
-                            content.push(this.buildGenericSection(section, pozo, 'IDENTIFICACIÓN Y UBICACIÓN', customization));
+                            const sectionTitle = pozo.metadata?.tipoFicha === 'DESCARGA' ? 'IDENTIFICACIÓN Y UBICACIÓN' : 'IDENTIFICACIÓN Y UBICACIÓN DE POZO';
+                            content.push(this.buildGenericSection(section, pozo, sectionTitle, customization));
                             break;
                         case 'estructura':
                             content.push(this.buildEstructuraSection(section, pozo, customization));
@@ -1013,16 +1021,20 @@ export class PDFMakeGenerator {
                 // =====================================
                 // HEADER PRINCIPAL (SOLO PARA MODO ESTÁNDAR)
                 // =====================================
+                const tipoFicha = pozo.metadata?.tipoFicha || 'POZO';
+                const tituloPrincipal = tipoFicha === 'DESCARGA' ? 'FICHA TÉCNICA DE DESCARGA' : 'FICHA TÉCNICA DE POZO DE INSPECCIÓN';
+                const labelId = tipoFicha === 'DESCARGA' ? 'Descarga' : 'Pozo';
+
                 doc.setFillColor(...colors.headerBg);
                 doc.rect(0, 0, pageWidth, 25, 'F');
                 doc.setTextColor(...colors.headerText);
                 doc.setFontSize(fonts.title);
                 doc.setFont('helvetica', 'bold');
-                doc.text('FICHA TÉCNICA DE POZO DE INSPECCIÓN', pageWidth / 2, 12, { align: 'center' });
+                doc.text(tituloPrincipal, pageWidth / 2, 12, { align: 'center' });
 
                 doc.setFontSize(fonts.value);
                 doc.setFont('helvetica', 'normal');
-                doc.text(`Pozo: ${idPozo}`, pageWidth / 2, 19, { align: 'center' });
+                doc.text(`${labelId}: ${idPozo}`, pageWidth / 2, 19, { align: 'center' });
 
                 // =====================================
                 // RENDERIZADO DINÁMICO POR SECCIONES (ESTÁNDAR)
@@ -1046,7 +1058,8 @@ export class PDFMakeGenerator {
 
                     switch (section.type) {
                         case 'identificacion':
-                            addSectionHeader('IDENTIFICACIÓN Y UBICACIÓN');
+                            const sectionTitle = pozo.metadata?.tipoFicha === 'DESCARGA' ? 'IDENTIFICACIÓN Y UBICACIÓN' : 'IDENTIFICACIÓN Y UBICACIÓN DE POZO';
+                            addSectionHeader(sectionTitle);
                             const identFields = [
                                 { label: 'Código', value: idPozo },
                                 { label: 'Dirección', value: pozo.direccion?.value || pozo.ubicacion?.direccion?.value || '-' },

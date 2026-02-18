@@ -52,8 +52,10 @@ export interface ExcelParseResult {
 const COLUMN_MAPPING: Record<string, string> = {
   // IDENTIFICACIÓN
   'id_pozo': 'idPozo',
+  'id_descarga': 'idPozo',
   'codigo': 'idPozo',
   'pozo': 'idPozo',
+  'descarga': 'idPozo',
   'coordenada_x': 'coordenadaX',
   'x': 'coordenadaX',
   'longitud': 'longitud',
@@ -210,11 +212,12 @@ function normalizeColumnName(name: string): string {
 /**
  * Crea metadata con valores por defecto
  */
-function createDefaultMetadata() {
+function createDefaultMetadata(tipo?: 'POZO' | 'DESCARGA') {
   return {
     createdAt: Date.now(),
     updatedAt: Date.now(),
     source: 'excel' as const,
+    tipoFicha: tipo || 'POZO',
     version: 1,
   };
 }
@@ -530,7 +533,7 @@ function parseChildSheet<T>(
  * - Ignora columnas desconocidas (Req 1.8)
  * - Usa valores por defecto para campos faltantes (Req 1.9)
  */
-export function parseExcelData(data: unknown): ExcelParseResult {
+export function parseExcelData(data: unknown, tipoFicha?: 'POZO' | 'DESCARGA'): ExcelParseResult {
   const result = createEmptyResult();
 
   // Validación de entrada - fail-safe
@@ -593,7 +596,7 @@ export function parseExcelData(data: unknown): ExcelParseResult {
   // Procesar cada fila
   (data as Record<string, unknown>[]).forEach((row, index) => {
     try {
-      const pozo = parseRow(row, columnMapping, index, result);
+      const pozo = parseRow(row, columnMapping, index, result, tipoFicha);
       if (pozo) {
         result.pozos.push(pozo);
         result.stats.validRows++;
@@ -637,7 +640,8 @@ function parseRow(
   row: Record<string, unknown>,
   columnMapping: Record<string, string>,
   index: number,
-  result: ExcelParseResult
+  result: ExcelParseResult,
+  tipoFicha?: 'POZO' | 'DESCARGA'
 ): Pozo | null {
   if (!row || typeof row !== 'object') {
     return null;
@@ -940,7 +944,7 @@ function parseRow(
     tuberias: { tuberias: [] },
     sumideros: { sumideros: [] },
     fotos: { fotos: [] },
-    metadata: createDefaultMetadata(),
+    metadata: createDefaultMetadata(tipoFicha),
   };
 
   return pozo;
@@ -976,35 +980,45 @@ export async function parseExcelFileContent(workbook: any): Promise<ExcelParseRe
     const findSheet = (keywords: string[]) =>
       workbook.SheetNames.find((name: string) => keywords.some(k => name.toLowerCase().includes(k)));
 
-    const pozosSheetName = findSheet(['pozo', 'fichas', 'general']) || workbook.SheetNames[0];
-    const tuberiasSheetName = findSheet(['tuberia', 'tubería', 'conducto']);
-    const sumiderosSheetName = findSheet(['sumidero', 'sifón', 'sifon']);
-    const fotosSheetName = findSheet(['foto', 'imagen', 'img']);
+    const mainSheetNames = workbook.SheetNames.filter((name: string) =>
+      ['pozo', 'ficha', 'general', 'descarga'].some(k => name.toLowerCase().includes(k))
+    );
 
-    // 2. Parsear POZOS (Main)
-    const pozosWorksheet = workbook.Sheets[pozosSheetName];
-    if (!pozosWorksheet) {
-      result.errors.push('No se encontró la hoja de POZOS');
-      return result;
+    // Si no encontró ninguna por nombre, usar la primera
+    if (mainSheetNames.length === 0) {
+      mainSheetNames.push(workbook.SheetNames[0]);
     }
 
-    let pozosData = XLSX.utils.sheet_to_json(pozosWorksheet, { defval: '', raw: false }) as any[];
+    // Procesar cada hoja principal
+    for (const sheetName of mainSheetNames) {
+      const worksheet = workbook.Sheets[sheetName];
+      if (!worksheet) continue;
 
-    // Robustez: Si la primera fila no parece tener las columnas correctas,
-    // buscamos en las primeras 10 filas cuál contiene las cabeceras.
-    const headerRowOffset = findHeaderRow(pozosData);
-    if (headerRowOffset > 0) {
-      pozosData = XLSX.utils.sheet_to_json(pozosWorksheet, { range: headerRowOffset, defval: '', raw: false });
+      let sheetData = XLSX.utils.sheet_to_json(worksheet, { defval: '', raw: false }) as any[];
+      const offset = findHeaderRow(sheetData);
+      if (offset > 0) {
+        sheetData = XLSX.utils.sheet_to_json(worksheet, { range: offset, defval: '', raw: false });
+      }
+
+      const tipoFicha: 'POZO' | 'DESCARGA' = sheetName.toLowerCase().includes('descarga') ? 'DESCARGA' : 'POZO';
+      const partialResult = parseExcelData(sheetData, tipoFicha);
+
+      // Merge results
+      result.pozos.push(...partialResult.pozos);
+      result.warnings.push(...partialResult.warnings.map(w => `[Hoja ${sheetName}] ${w}`));
+      result.errors.push(...partialResult.errors.map(e => `[Hoja ${sheetName}] ${e}`));
+      result.parseErrors.push(...partialResult.parseErrors.map(pe => ({ ...pe, userMessage: `[Hoja ${sheetName}] ${pe.userMessage}` })));
+
+      // Acumular estadísticas
+      result.stats.totalRows += partialResult.stats.totalRows;
+      result.stats.validRows += partialResult.stats.validRows;
+      result.stats.skippedRows += partialResult.stats.skippedRows;
+
+      // Combinar listas de columnas (sin duplicados)
+      partialResult.stats.columnsFound.forEach(c => {
+        if (!result.stats.columnsFound.includes(c)) result.stats.columnsFound.push(c);
+      });
     }
-
-    const partialResult = parseExcelData(pozosData);
-
-    // Merge results
-    result.pozos = partialResult.pozos;
-    result.warnings.push(...partialResult.warnings);
-    result.errors.push(...partialResult.errors);
-    result.parseErrors.push(...partialResult.parseErrors);
-    result.stats = partialResult.stats;
 
     const pozosMap = new Map<string, Pozo>();
     result.pozos.forEach(p => pozosMap.set(p.identificacion.idPozo.value, p));

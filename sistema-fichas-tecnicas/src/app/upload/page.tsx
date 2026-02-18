@@ -208,7 +208,7 @@ export default function UploadPage() {
       // Crear objeto FotoInfo estructural (LIVIANO)
       const fotoInfo: FotoInfo = {
         id: generateFileId(),
-        idPozo: '', // Se asociará después o se infiere del nombre
+        idPozo: nomenclatura.pozoId, // Extraído del nombre del archivo (soporta Pozos y Descargas)
         tipo: nomenclatura.tipo || 'otro',
         categoria: nomenclatura.categoria,
         subcategoria: nomenclatura.subcategoria,
