@@ -202,16 +202,24 @@ export const AVAILABLE_FIELDS: AvailableField[] = [
     { id: 'tub_1_diametro', label: 'Tub 1 Ø', fieldPath: 'tuberias.tuberias[0].diametro.value', category: 'tuberias', isRepeatable: true, defaultWidth: 35, defaultHeight: 10 },
     { id: 'tub_1_material', label: 'Tub 1 Mat', fieldPath: 'tuberias.tuberias[0].material.value', category: 'tuberias', isRepeatable: true, defaultWidth: 45, defaultHeight: 10 },
     { id: 'tub_1_estado', label: 'Tub 1 Est', fieldPath: 'tuberias.tuberias[0].estado.value', category: 'tuberias', isRepeatable: true, defaultWidth: 45, defaultHeight: 10 },
+    { id: 'tub_1_orden', label: 'Tub 1 Ord', fieldPath: 'tuberias.tuberias[0].orden.value', category: 'tuberias', isRepeatable: true, defaultWidth: 25, defaultHeight: 10 },
+    { id: 'tub_1_batea', label: 'Tub 1 Bat', fieldPath: 'tuberias.tuberias[0].batea.value', category: 'tuberias', isRepeatable: true, defaultWidth: 35, defaultHeight: 10 },
 
     { id: 'tub_2_diametro', label: 'Tub 2 Ø', fieldPath: 'tuberias.tuberias[1].diametro.value', category: 'tuberias', isRepeatable: true, defaultWidth: 35, defaultHeight: 10 },
     { id: 'tub_2_material', label: 'Tub 2 Mat', fieldPath: 'tuberias.tuberias[1].material.value', category: 'tuberias', isRepeatable: true, defaultWidth: 45, defaultHeight: 10 },
     { id: 'tub_2_estado', label: 'Tub 2 Est', fieldPath: 'tuberias.tuberias[1].estado.value', category: 'tuberias', isRepeatable: true, defaultWidth: 45, defaultHeight: 10 },
+    { id: 'tub_2_orden', label: 'Tub 2 Ord', fieldPath: 'tuberias.tuberias[1].orden.value', category: 'tuberias', isRepeatable: true, defaultWidth: 25, defaultHeight: 10 },
+    { id: 'tub_2_batea', label: 'Tub 2 Bat', fieldPath: 'tuberias.tuberias[1].batea.value', category: 'tuberias', isRepeatable: true, defaultWidth: 35, defaultHeight: 10 },
 
     { id: 'tub_3_diametro', label: 'Tub 3 Ø', fieldPath: 'tuberias.tuberias[2].diametro.value', category: 'tuberias', isRepeatable: true, defaultWidth: 35, defaultHeight: 10 },
     { id: 'tub_3_material', label: 'Tub 3 Mat', fieldPath: 'tuberias.tuberias[2].material.value', category: 'tuberias', isRepeatable: true, defaultWidth: 45, defaultHeight: 10 },
+    { id: 'tub_3_orden', label: 'Tub 3 Ord', fieldPath: 'tuberias.tuberias[2].orden.value', category: 'tuberias', isRepeatable: true, defaultWidth: 25, defaultHeight: 10 },
+    { id: 'tub_3_batea', label: 'Tub 3 Bat', fieldPath: 'tuberias.tuberias[2].batea.value', category: 'tuberias', isRepeatable: true, defaultWidth: 35, defaultHeight: 10 },
 
     { id: 'tub_4_diametro', label: 'Tub 4 Ø', fieldPath: 'tuberias.tuberias[3].diametro.value', category: 'tuberias', isRepeatable: true, defaultWidth: 35, defaultHeight: 10 },
     { id: 'tub_4_material', label: 'Tub 4 Mat', fieldPath: 'tuberias.tuberias[3].material.value', category: 'tuberias', isRepeatable: true, defaultWidth: 45, defaultHeight: 10 },
+    { id: 'tub_4_orden', label: 'Tub 4 Ord', fieldPath: 'tuberias.tuberias[3].orden.value', category: 'tuberias', isRepeatable: true, defaultWidth: 25, defaultHeight: 10 },
+    { id: 'tub_4_batea', label: 'Tub 4 Bat', fieldPath: 'tuberias.tuberias[3].batea.value', category: 'tuberias', isRepeatable: true, defaultWidth: 35, defaultHeight: 10 },
 
     // SUMIDEROS (Hasta 4 slots)
     { id: 'sum_1_tipo', label: 'Sum 1 Tipo', fieldPath: 'sumideros.sumideros[0].tipoSumidero.value', category: 'sumideros', isRepeatable: true, defaultWidth: 50, defaultHeight: 10 },

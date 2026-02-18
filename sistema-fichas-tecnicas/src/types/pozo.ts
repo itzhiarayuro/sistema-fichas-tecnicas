@@ -234,11 +234,15 @@ export interface TuberiaInfo {
   tipoTuberia: FieldValue; // Tipo: entrada o salida
 
   // 🔴 Obligatorio - Debe ser > 0
-  diametro: FieldValue; // Diámetro en milímetros (mm)
-  diametroMm?: FieldValue; // Alias para alineación exacta con Excel 'ø (mm)'
+  diametro: FieldValue; // Diámetro
+  diametroMm?: FieldValue; // Alias para ø (mm)
+  diametroPulgadas?: FieldValue; // Alias para ø (pulgadas)
 
   // 🔴 Obligatorio
   material: FieldValue; // Material de la tubería
+
+  // 🔴 Obligatorio
+  orden: FieldValue; // Orden de la tubería
 
   // 🟠 Importante
   cota: FieldValue; // Cota o profundidad (Z)
@@ -246,6 +250,9 @@ export interface TuberiaInfo {
 
   // 🟠 Importante
   estado: FieldValue; // Estado de la tubería
+
+  // 🟠 Importante
+  batea: FieldValue; // Batea
 
   // 🟢 Opcional
   emboquillado: FieldValue; // ¿Tiene emboquillado? (Sí/No)

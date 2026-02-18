@@ -131,12 +131,15 @@ const TUBERIA_MAPPING: Record<string, string> = {
   'tuberia': 'idTuberia',
   'tipo': 'tipoTuberia',
   'tipo_tuberia': 'tipoTuberia',
+  'orden': 'orden',
   'diametro': 'diametro',
+  'o_pulgadas': 'diametro',
   'material': 'material',
   'cota': 'cota',
   'z': 'cota',
   'estado': 'estado',
   'emboquillado': 'emboquillado',
+  'batea': 'batea',
   'longitud': 'longitud',
 };
 
@@ -984,6 +987,9 @@ export async function parseExcelFileContent(workbook: any): Promise<ExcelParseRe
       ['pozo', 'ficha', 'general', 'descarga'].some(k => name.toLowerCase().includes(k))
     );
 
+    const sumiderosSheetName = findSheet(['sumidero', 'sifón', 'sifon']);
+    const fotosSheetName = findSheet(['foto', 'imagen', 'img']);
+
     // Si no encontró ninguna por nombre, usar la primera
     if (mainSheetNames.length === 0) {
       mainSheetNames.push(workbook.SheetNames[0]);
@@ -1098,11 +1104,13 @@ export function parseTuberiaRow(row: Record<string, unknown>, map: Record<string
     idTuberia: { value: getValue('idTuberia') || `TUB-${index}`, source: 'excel' },
     idPozo: { value: idPozo, source: 'excel' },
     tipoTuberia: { value: getValue('tipoTuberia'), source: 'excel' },
+    orden: { value: getValue('orden'), source: 'excel' },
     diametro: { value: getValue('diametro'), source: 'excel' },
     material: { value: getValue('material'), source: 'excel' },
     cota: { value: getValue('cota'), source: 'excel' },
     estado: { value: getValue('estado'), source: 'excel' },
     emboquillado: { value: getValue('emboquillado'), source: 'excel' },
+    batea: { value: getValue('batea'), source: 'excel' },
     longitud: { value: getValue('longitud'), source: 'excel' },
   };
 }
