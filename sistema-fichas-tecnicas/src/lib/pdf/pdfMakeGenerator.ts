@@ -1342,7 +1342,10 @@ export class PDFMakeGenerator {
 
             if (shape.fillColor) doc.setFillColor(...hexToRgb(shape.fillColor));
             if (shape.strokeColor) doc.setDrawColor(...hexToRgb(shape.strokeColor));
-            if (shape.strokeWidth) doc.setLineWidth(shape.strokeWidth * 0.264);
+            // CAMBIO: Usar strokeWidth directamente sin multiplicar por 0.264
+            // Antes: if (shape.strokeWidth) doc.setLineWidth(shape.strokeWidth * 0.264);
+            // Razón: El strokeWidth ya está en mm (no en px), así que no necesita conversión
+            if (shape.strokeWidth) doc.setLineWidth(shape.strokeWidth);
 
             switch (shape.type) {
                 case 'rectangle':

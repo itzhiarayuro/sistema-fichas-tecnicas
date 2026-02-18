@@ -239,6 +239,10 @@ export async function generatePdfFromDesign(
     }
 }
 
+/**
+ * Renderiza elementos gráficos (rectángulos, círculos, líneas, imágenes y texto libre)
+ * NOTA: El centrado de texto y el manejo de Object-Fit en imágenes son críticos para WYSIWYG.
+ */
 async function renderShape(doc: jsPDF, shape: ShapeElement) {
     if (shape.type === 'rectangle' || shape.type === 'circle' || shape.type === 'triangle') {
         const style = (shape.fillColor && shape.fillColor !== 'transparent' && shape.strokeColor && shape.strokeColor !== 'transparent') ? 'FD' :
@@ -281,7 +285,7 @@ async function renderShape(doc: jsPDF, shape: ShapeElement) {
         doc.setFontSize(fontSize);
         doc.setTextColor(shape.color || '#000000');
         const font = getSafeFont(shape.fontFamily);
-        const fontStyle = (shape.fontWeight === 'bold' || shape.fontWeight === 700) ? 'bold' : 'normal';
+        const fontStyle = (shape.fontWeight === 'bold') ? 'bold' : 'normal';
         doc.setFont(font, fontStyle);
 
         const align = shape.textAlign || 'left';
@@ -335,6 +339,10 @@ async function renderShape(doc: jsPDF, shape: ShapeElement) {
     }
 }
 
+/**
+ * Renderiza campos de datos (Placements) con soporte para labels complejos y widgets.
+ * Proceso: 1. Caja contenedora -> 2. Label (si existe) -> 3. Valor (centrado en espacio restante)
+ */
 async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, value: any) {
     const isPhoto = placement.fieldId.startsWith('foto_');
     const isWidget = placement.fieldId.startsWith('widget_');
@@ -485,39 +493,41 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
     const content = String(value ?? '');
     const fontSize = placement.fontSize || 10;
     const font = getSafeFont(placement.fontFamily);
-    const valueStyle = (placement.fontWeight === 'bold' || placement.fontWeight === 700) ? 'bold' : 'normal';
+    const valueStyle = (placement.fontWeight === 'bold') ? 'bold' : 'normal';
 
     let availableValueHeight = placement.height;
     let labelAreaHeight = 0;
 
-    // A. DIBUJAR LABEL (SI EXISTE) - Soporte completo para fondos y alineación
+    // A. DIBUJAR LABEL (SI EXISTE) - Soporte completo para fondos, anchos fijos y alineación
     if (placement.showLabel && (placement.customLabel || placement.fieldId)) {
         const labelText = sanitizeTextForPDF(placement.customLabel || placement.fieldId);
         const labelFontSize = placement.labelFontSize || (fontSize * 0.8);
         const labelPadding = placement.labelPadding || 0.5;
         const labelAlign = placement.labelAlign || 'left';
 
-        // Área del label: Se asume que ocupa una franja superior por defecto como en la web
-        // jaPDF text height approx = fontSize * 0.3527 mm
+        // Área del label: Altura estimada basada en fuente + padding
         labelAreaHeight = (labelFontSize * 0.4) + (labelPadding * 2);
 
-        // Fondo del label
+        // Ancho del label: Si no hay labelWidth, usa el ancho total del placement (100%)
+        const labelWidthMM = placement.labelWidth || placement.width;
+
+        // Fondo del label (respeta labelWidth)
         if (placement.labelBackgroundColor && placement.labelBackgroundColor !== 'transparent') {
             doc.setFillColor(placement.labelBackgroundColor);
-            doc.rect(placement.x, placement.y, placement.width, labelAreaHeight, 'F');
+            doc.rect(placement.x, placement.y, labelWidthMM, labelAreaHeight, 'F');
         }
 
         doc.setFontSize(labelFontSize);
-        doc.setFont(font, (placement.labelFontWeight === 'bold' || placement.labelFontWeight === 700) ? 'bold' : 'normal');
-        doc.setTextColor(placement.labelColor || '#666666');
+        doc.setFont(font, (placement.labelFontWeight === 'bold') ? 'bold' : 'normal');
+        doc.setTextColor(placement.labelColor || '#6B7280');
 
         let labelX = placement.x + labelPadding;
-        if (labelAlign === 'center') labelX = placement.x + (placement.width / 2);
-        if (labelAlign === 'right') labelX = placement.x + placement.width - labelPadding;
+        if (labelAlign === 'center') labelX = placement.x + (labelWidthMM / 2);
+        if (labelAlign === 'right') labelX = placement.x + labelWidthMM - labelPadding;
 
         doc.text(labelText, labelX, placement.y + labelPadding + (labelFontSize * 0.3), {
             align: labelAlign,
-            maxWidth: placement.width - (labelPadding * 2)
+            maxWidth: labelWidthMM - (labelPadding * 2)
         });
 
         availableValueHeight -= labelAreaHeight;
