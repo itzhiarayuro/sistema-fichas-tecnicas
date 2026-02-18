@@ -222,11 +222,19 @@ export const AVAILABLE_FIELDS: AvailableField[] = [
     { id: 'tub_4_batea', label: 'Tub 4 Bat', fieldPath: 'tuberias.tuberias[3].batea.value', category: 'tuberias', isRepeatable: true, defaultWidth: 35, defaultHeight: 10 },
 
     // SUMIDEROS (Hasta 4 slots)
-    { id: 'sum_1_tipo', label: 'Sum 1 Tipo', fieldPath: 'sumideros.sumideros[0].tipoSumidero.value', category: 'sumideros', isRepeatable: true, defaultWidth: 50, defaultHeight: 10 },
-    { id: 'sum_1_material', label: 'Sum 1 Mat', fieldPath: 'sumideros.sumideros[0].materialTuberia.value', category: 'sumideros', isRepeatable: true, defaultWidth: 50, defaultHeight: 10 },
+    { id: 'sum_1_tipo', label: 'Sum 1 Tipo', fieldPath: 'sumideros.sumideros[0].tipoSumidero.value', category: 'sumideros', isRepeatable: true, defaultWidth: 40, defaultHeight: 10 },
+    { id: 'sum_1_material', label: 'Sum 1 Mat', fieldPath: 'sumideros.sumideros[0].materialTuberia.value', category: 'sumideros', isRepeatable: true, defaultWidth: 40, defaultHeight: 10 },
+    { id: 'sum_1_esquema', label: 'Sum 1 Esq', fieldPath: 'sumideros.sumideros[0].numeroEsquema.value', category: 'sumideros', isRepeatable: true, defaultWidth: 25, defaultHeight: 10 },
+    { id: 'sum_1_diametro', label: 'Sum 1 Ø', fieldPath: 'sumideros.sumideros[0].diametro.value', category: 'sumideros', isRepeatable: true, defaultWidth: 25, defaultHeight: 10 },
+    { id: 'sum_1_hSalida', label: 'Sum 1 H Sal', fieldPath: 'sumideros.sumideros[0].alturaSalida.value', category: 'sumideros', isRepeatable: true, defaultWidth: 30, defaultHeight: 10 },
+    { id: 'sum_1_hLlegada', label: 'Sum 1 H Lleg', fieldPath: 'sumideros.sumideros[0].alturaLlegada.value', category: 'sumideros', isRepeatable: true, defaultWidth: 30, defaultHeight: 10 },
 
-    { id: 'sum_2_tipo', label: 'Sum 2 Tipo', fieldPath: 'sumideros.sumideros[1].tipoSumidero.value', category: 'sumideros', isRepeatable: true, defaultWidth: 50, defaultHeight: 10 },
-    { id: 'sum_2_material', label: 'Sum 2 Mat', fieldPath: 'sumideros.sumideros[1].materialTuberia.value', category: 'sumideros', isRepeatable: true, defaultWidth: 50, defaultHeight: 10 },
+    { id: 'sum_2_tipo', label: 'Sum 2 Tipo', fieldPath: 'sumideros.sumideros[1].tipoSumidero.value', category: 'sumideros', isRepeatable: true, defaultWidth: 40, defaultHeight: 10 },
+    { id: 'sum_2_material', label: 'Sum 2 Mat', fieldPath: 'sumideros.sumideros[1].materialTuberia.value', category: 'sumideros', isRepeatable: true, defaultWidth: 40, defaultHeight: 10 },
+    { id: 'sum_2_esquema', label: 'Sum 2 Esq', fieldPath: 'sumideros.sumideros[1].numeroEsquema.value', category: 'sumideros', isRepeatable: true, defaultWidth: 25, defaultHeight: 10 },
+    { id: 'sum_2_diametro', label: 'Sum 2 Ø', fieldPath: 'sumideros.sumideros[1].diametro.value', category: 'sumideros', isRepeatable: true, defaultWidth: 25, defaultHeight: 10 },
+    { id: 'sum_2_hSalida', label: 'Sum 2 H Sal', fieldPath: 'sumideros.sumideros[1].alturaSalida.value', category: 'sumideros', isRepeatable: true, defaultWidth: 30, defaultHeight: 10 },
+    { id: 'sum_2_hLlegada', label: 'Sum 2 H Lleg', fieldPath: 'sumideros.sumideros[1].alturaLlegada.value', category: 'sumideros', isRepeatable: true, defaultWidth: 30, defaultHeight: 10 },
 
     // FOTOS ESPECÍFICAS (Por Nomenclatura)
     { id: 'foto_panoramica', label: 'Foto Panorámica (P)', fieldPath: 'fotos.fotos[P]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },

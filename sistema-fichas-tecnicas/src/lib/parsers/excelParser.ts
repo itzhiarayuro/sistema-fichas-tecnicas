@@ -152,6 +152,7 @@ const SUMIDERO_MAPPING: Record<string, string> = {
   'tipo_sumidero': 'tipoSumidero',
   'numero_esquema': 'numeroEsquema',
   'esquema': 'numeroEsquema',
+  '_esquema': 'numeroEsquema',
   'o_pulg': 'diametro',
   'diametro': 'diametro',
   'material_tuberia': 'materialTuberia',
