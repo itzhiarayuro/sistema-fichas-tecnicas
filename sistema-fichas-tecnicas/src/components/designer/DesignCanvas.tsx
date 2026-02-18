@@ -274,6 +274,7 @@ export function DesignCanvas({
     // Drag de placements existentes
     const handlePlacementMouseDown = useCallback((e: React.MouseEvent, placement: FieldPlacement) => {
         e.stopPropagation();
+        console.log('🟡 handlePlacementMouseDown - placement:', placement.id);
         if (placement.isLocked) return;
 
         // Seleccionar SIEMPRE cuando se hace clic
@@ -289,6 +290,7 @@ export function DesignCanvas({
             initialX: placement.x,
             initialY: placement.y,
         };
+        console.log('🟡 Drag preparado - dragStartRef:', dragStartRef.current);
     }, [onSelectPlacement, onSelectShape]);
 
     // Drag de shapes existentes
@@ -353,6 +355,7 @@ export function DesignCanvas({
             const distance = Math.sqrt(dx * dx + dy * dy);
             if (distance > 2) {
                 if (!isDraggingRef.current) {
+                    console.log('🟡 Iniciando drag - distance:', distance);
                     isDraggingRef.current = true;
                     setIsDragging(true);
                     document.body.style.cursor = 'grabbing';
@@ -411,15 +414,15 @@ export function DesignCanvas({
     }, [onSelectPlacement, onSelectShape]);
 
     useEffect(() => {
-        if (isDragging || isResizing || drawingState?.active) {
-            window.addEventListener('mousemove', handleMouseMove);
-            window.addEventListener('mouseup', handleMouseUp);
-            return () => {
-                window.removeEventListener('mousemove', handleMouseMove);
-                window.removeEventListener('mouseup', handleMouseUp);
-            };
-        }
-    }, [isDragging, isResizing, drawingState?.active, handleMouseMove, handleMouseUp]);
+        // Agregar listeners SIEMPRE para que funcione el drag
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+        
+        return () => {
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, [handleMouseMove, handleMouseUp]);
 
     if (!version) return null;
 
