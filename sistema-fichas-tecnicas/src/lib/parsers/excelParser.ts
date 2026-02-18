@@ -859,15 +859,21 @@ function parseRow(
   // Generar ID único para el pozo
   const uniqueId = `pozo-${idPozo}-${Date.now()}-${index}`;
 
+  // Preparar enlace de mapas (Autogenerar si no existe)
+  let finalEnlace = enlace;
+  if (!finalEnlace && latitud && longitud && latitud !== '-' && longitud !== '-') {
+    finalEnlace = `https://www.google.com/maps?q=${latitud},${longitud}`;
+  }
+
   const pozo: Pozo = {
     id: uniqueId,
     // --- CAPA PLANA (Poblada directamente) ---
     idPozo: { value: idPozo, source: 'excel' },
-    coordenadaX: { value: coordenadaX, source: 'excel', link: enlace },
-    coordenadaY: { value: coordenadaY, source: 'excel', link: enlace },
-    latitud: { value: latitud, source: 'excel', link: enlace },
-    longitud: { value: longitud, source: 'excel', link: enlace },
-    enlace: { value: enlace, source: 'excel' },
+    coordenadaX: { value: coordenadaX, source: 'excel', link: finalEnlace },
+    coordenadaY: { value: coordenadaY, source: 'excel', link: finalEnlace },
+    latitud: { value: latitud, source: 'excel', link: finalEnlace },
+    longitud: { value: longitud, source: 'excel', link: finalEnlace },
+    enlace: { value: finalEnlace, source: 'excel' },
     fecha: { value: fechaNormalizada, source: 'excel' },
     levanto: { value: levanto, source: 'excel' },
     estado: { value: estado, source: 'excel' },
@@ -905,11 +911,11 @@ function parseRow(
     // --- CAPA JERÁRQUICA (Mantener para compatibilidad) ---
     identificacion: {
       idPozo: { value: idPozo, source: 'excel' },
-      coordenadaX: { value: coordenadaX, source: 'excel', link: enlace },
-      coordenadaY: { value: coordenadaY, source: 'excel', link: enlace },
-      latitud: { value: latitud, source: 'excel', link: enlace },
-      longitud: { value: longitud, source: 'excel', link: enlace },
-      enlace: { value: enlace, source: 'excel' },
+      coordenadaX: { value: coordenadaX, source: 'excel', link: finalEnlace },
+      coordenadaY: { value: coordenadaY, source: 'excel', link: finalEnlace },
+      latitud: { value: latitud, source: 'excel', link: finalEnlace },
+      longitud: { value: longitud, source: 'excel', link: finalEnlace },
+      enlace: { value: finalEnlace, source: 'excel' },
       fecha: { value: fechaNormalizada, source: 'excel' },
       levanto: { value: levanto, source: 'excel' },
       estado: { value: estado, source: 'excel' },

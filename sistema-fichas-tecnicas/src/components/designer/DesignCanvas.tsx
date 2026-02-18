@@ -54,12 +54,99 @@ export function DesignCanvas({
         }
     }, [selectedPlacementId, selectedShapeId]);
 
+    // Estado para copiar/pegar
+    const [copiedElement, setCopiedElement] = useState<{ type: 'placement' | 'shape', data: any } | null>(null);
+
     // Keyboard Shortcuts
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             // No actuar si está escribiendo en un input
             if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
             if (!version) return;
+
+            // COPIAR con Ctrl+C o Cmd+C
+            if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+                e.preventDefault();
+                if (selectedPlacementId) {
+                    const p = version.placements.find(item => item.id === selectedPlacementId);
+                    if (p) {
+                        setCopiedElement({ type: 'placement', data: p });
+                        console.log('✅ Campo copiado:', p.fieldId);
+                    }
+                } else if (selectedShapeId) {
+                    const s = version.shapes.find(item => item.id === selectedShapeId);
+                    if (s) {
+                        setCopiedElement({ type: 'shape', data: s });
+                        console.log('✅ Figura copiada:', s.type);
+                    }
+                }
+            }
+
+            // PEGAR con Ctrl+V o Cmd+V
+            if ((e.ctrlKey || e.metaKey) && e.key === 'v' && copiedElement) {
+                e.preventDefault();
+                const offset = 5; // 5mm de offset
+
+                if (copiedElement.type === 'placement') {
+                    const original = copiedElement.data as FieldPlacement;
+                    const newPlacement: Omit<FieldPlacement, 'id'> = {
+                        ...original,
+                        x: original.x + offset,
+                        y: original.y + offset,
+                        zIndex: version.placements.length + (version.shapes?.length || 0) + 1,
+                    };
+                    const newId = addPlacement(version.id, newPlacement);
+                    onSelectPlacement(newId);
+                    onSelectShape(null);
+                    console.log('✅ Campo pegado con offset');
+                } else if (copiedElement.type === 'shape') {
+                    const original = copiedElement.data as ShapeElement;
+                    const newShape: Omit<ShapeElement, 'id'> = {
+                        ...original,
+                        x: original.x + offset,
+                        y: original.y + offset,
+                        zIndex: version.placements.length + (version.shapes?.length || 0) + 1,
+                    };
+                    const newId = addShape(version.id, newShape);
+                    onSelectShape(newId);
+                    onSelectPlacement(null);
+                    console.log('✅ Figura pegada con offset');
+                }
+            }
+
+            // DUPLICAR con Ctrl+D o Cmd+D (atajo rápido)
+            if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+                e.preventDefault();
+                const offset = 5; // 5mm de offset
+
+                if (selectedPlacementId) {
+                    const p = version.placements.find(item => item.id === selectedPlacementId);
+                    if (p) {
+                        const newPlacement: Omit<FieldPlacement, 'id'> = {
+                            ...p,
+                            x: p.x + offset,
+                            y: p.y + offset,
+                            zIndex: version.placements.length + (version.shapes?.length || 0) + 1,
+                        };
+                        const newId = addPlacement(version.id, newPlacement);
+                        onSelectPlacement(newId);
+                        console.log('✅ Campo duplicado');
+                    }
+                } else if (selectedShapeId) {
+                    const s = version.shapes.find(item => item.id === selectedShapeId);
+                    if (s) {
+                        const newShape: Omit<ShapeElement, 'id'> = {
+                            ...s,
+                            x: s.x + offset,
+                            y: s.y + offset,
+                            zIndex: version.placements.length + (version.shapes?.length || 0) + 1,
+                        };
+                        const newId = addShape(version.id, newShape);
+                        onSelectShape(newId);
+                        console.log('✅ Figura duplicada');
+                    }
+                }
+            }
 
             // ELIMINAR con Delete o Backspace
             if (e.key === 'Delete') {
@@ -93,7 +180,7 @@ export function DesignCanvas({
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [version, selectedPlacementId, selectedShapeId, removePlacement, removeShape, onSelectPlacement, onSelectShape, updatePlacement, updateShape]);
+    }, [version, selectedPlacementId, selectedShapeId, copiedElement, removePlacement, removeShape, onSelectPlacement, onSelectShape, updatePlacement, updateShape, addPlacement, addShape]);
 
 
     // Refs para evitar lag de re-renderizado durante drag

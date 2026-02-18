@@ -5,7 +5,7 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { FichaDesignVersion, FieldPlacement, DesignState, ShapeElement } from '@/types/fichaDesign';
+import type { FichaDesignVersion, FieldPlacement, DesignState, ShapeElement, GroupElement } from '@/types/fichaDesign';
 
 export const generateId = () => {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -24,6 +24,7 @@ const createEmptyVersion = (name: string, description?: string): Omit<FichaDesig
     unit: 'mm',
     placements: [],
     shapes: [],
+    groups: [],
     version: '1.0.0',
     numPages: 1
 });
@@ -286,6 +287,7 @@ export const useDesignStore = create<DesignState>()(
                         future: { ...state.future, [versionId]: [] }
                     };
                 });
+                return placementId;
             },
 
             updatePlacement: (versionId, placementId, updates) => {
@@ -350,6 +352,7 @@ export const useDesignStore = create<DesignState>()(
                         future: { ...state.future, [versionId]: [] }
                     };
                 });
+                return shapeId;
             },
 
             updateShape: (versionId, shapeId, updates) => {
@@ -385,6 +388,198 @@ export const useDesignStore = create<DesignState>()(
                             v.id === versionId ? {
                                 ...v,
                                 shapes: (v.shapes || []).filter((s) => s.id !== shapeId),
+                                updatedAt: Date.now()
+                            } : v
+                        ),
+                        past: { ...state.past, [versionId]: newPast },
+                        future: { ...state.future, [versionId]: [] }
+                    };
+                });
+            },
+
+            // Gestión de grupos
+            createGroup: (versionId, elementIds, name) => {
+                const groupId = generateId();
+                set((state) => {
+                    const version = state.versions.find(v => v.id === versionId);
+                    if (!version) return state;
+                    
+                    // Calcular bounding box de los elementos
+                    const elements = [
+                        ...version.placements.filter(p => elementIds.includes(p.id)),
+                        ...version.shapes.filter(s => elementIds.includes(s.id))
+                    ];
+                    
+                    if (elements.length === 0) return state;
+                    
+                    const minX = Math.min(...elements.map(e => e.x));
+                    const minY = Math.min(...elements.map(e => e.y));
+                    const maxX = Math.max(...elements.map(e => e.x + e.width));
+                    const maxY = Math.max(...elements.map(e => e.y + e.height));
+                    
+                    const newGroup = {
+                        id: groupId,
+                        type: 'group' as const,
+                        name: name || `Grupo ${(version.groups?.length || 0) + 1}`,
+                        x: minX,
+                        y: minY,
+                        width: maxX - minX,
+                        height: maxY - minY,
+                        zIndex: Math.max(...elements.map(e => e.zIndex)) + 1,
+                        childIds: elementIds,
+                        isVisible: true,
+                        isLocked: false
+                    };
+                    
+                    const newPast = [...(state.past[versionId] || []), version].slice(-20);
+
+                    return {
+                        versions: state.versions.map((v) =>
+                            v.id === versionId ? {
+                                ...v,
+                                groups: [...(v.groups || []), newGroup],
+                                placements: v.placements.map(p => 
+                                    elementIds.includes(p.id) ? { ...p, groupId } : p
+                                ),
+                                shapes: v.shapes.map(s => 
+                                    elementIds.includes(s.id) ? { ...s, groupId } : s
+                                ),
+                                updatedAt: Date.now()
+                            } : v
+                        ),
+                        past: { ...state.past, [versionId]: newPast },
+                        future: { ...state.future, [versionId]: [] }
+                    };
+                });
+                return groupId;
+            },
+
+            updateGroup: (versionId, groupId, updates) => {
+                set((state) => {
+                    const version = state.versions.find(v => v.id === versionId);
+                    if (!version) return state;
+                    const newPast = [...(state.past[versionId] || []), version].slice(-20);
+
+                    return {
+                        versions: state.versions.map((v) =>
+                            v.id === versionId ? {
+                                ...v,
+                                groups: (v.groups || []).map((g) =>
+                                    g.id === groupId ? { ...g, ...updates } : g
+                                ),
+                                updatedAt: Date.now()
+                            } : v
+                        ),
+                        past: { ...state.past, [versionId]: newPast },
+                        future: { ...state.future, [versionId]: [] }
+                    };
+                });
+            },
+
+            removeGroup: (versionId, groupId) => {
+                set((state) => {
+                    const version = state.versions.find(v => v.id === versionId);
+                    if (!version) return state;
+                    const group = version.groups?.find(g => g.id === groupId);
+                    if (!group) return state;
+                    
+                    const newPast = [...(state.past[versionId] || []), version].slice(-20);
+
+                    return {
+                        versions: state.versions.map((v) =>
+                            v.id === versionId ? {
+                                ...v,
+                                groups: (v.groups || []).filter((g) => g.id !== groupId),
+                                placements: v.placements.filter(p => !group.childIds.includes(p.id)),
+                                shapes: v.shapes.filter(s => !group.childIds.includes(s.id)),
+                                updatedAt: Date.now()
+                            } : v
+                        ),
+                        past: { ...state.past, [versionId]: newPast },
+                        future: { ...state.future, [versionId]: [] }
+                    };
+                });
+            },
+
+            ungroupElements: (versionId, groupId) => {
+                set((state) => {
+                    const version = state.versions.find(v => v.id === versionId);
+                    if (!version) return state;
+                    const newPast = [...(state.past[versionId] || []), version].slice(-20);
+
+                    return {
+                        versions: state.versions.map((v) =>
+                            v.id === versionId ? {
+                                ...v,
+                                groups: (v.groups || []).filter((g) => g.id !== groupId),
+                                placements: v.placements.map(p => 
+                                    p.groupId === groupId ? { ...p, groupId: undefined } : p
+                                ),
+                                shapes: v.shapes.map(s => 
+                                    s.groupId === groupId ? { ...s, groupId: undefined } : s
+                                ),
+                                updatedAt: Date.now()
+                            } : v
+                        ),
+                        past: { ...state.past, [versionId]: newPast },
+                        future: { ...state.future, [versionId]: [] }
+                    };
+                });
+            },
+
+            addToGroup: (versionId, groupId, elementIds) => {
+                set((state) => {
+                    const version = state.versions.find(v => v.id === versionId);
+                    if (!version) return state;
+                    const group = version.groups?.find(g => g.id === groupId);
+                    if (!group) return state;
+                    
+                    const newPast = [...(state.past[versionId] || []), version].slice(-20);
+
+                    return {
+                        versions: state.versions.map((v) =>
+                            v.id === versionId ? {
+                                ...v,
+                                groups: (v.groups || []).map(g => 
+                                    g.id === groupId ? { ...g, childIds: [...g.childIds, ...elementIds] } : g
+                                ),
+                                placements: v.placements.map(p => 
+                                    elementIds.includes(p.id) ? { ...p, groupId } : p
+                                ),
+                                shapes: v.shapes.map(s => 
+                                    elementIds.includes(s.id) ? { ...s, groupId } : s
+                                ),
+                                updatedAt: Date.now()
+                            } : v
+                        ),
+                        past: { ...state.past, [versionId]: newPast },
+                        future: { ...state.future, [versionId]: [] }
+                    };
+                });
+            },
+
+            removeFromGroup: (versionId, groupId, elementIds) => {
+                set((state) => {
+                    const version = state.versions.find(v => v.id === versionId);
+                    if (!version) return state;
+                    const group = version.groups?.find(g => g.id === groupId);
+                    if (!group) return state;
+                    
+                    const newPast = [...(state.past[versionId] || []), version].slice(-20);
+
+                    return {
+                        versions: state.versions.map((v) =>
+                            v.id === versionId ? {
+                                ...v,
+                                groups: (v.groups || []).map(g => 
+                                    g.id === groupId ? { ...g, childIds: g.childIds.filter(id => !elementIds.includes(id)) } : g
+                                ),
+                                placements: v.placements.map(p => 
+                                    elementIds.includes(p.id) ? { ...p, groupId: undefined } : p
+                                ),
+                                shapes: v.shapes.map(s => 
+                                    elementIds.includes(s.id) ? { ...s, groupId: undefined } : s
+                                ),
                                 updatedAt: Date.now()
                             } : v
                         ),

@@ -213,28 +213,28 @@ export async function generatePdfFromDesign(
                     const placement = el as FieldPlacement;
                     console.log('📍 Renderizando placement:', placement.fieldId);
 
-                    // LÓGICA DE RESOLUCIÓN DE VALOR (FOTOS O CAMPOS)
                     let value: any = '-';
+                    let link: string | undefined = undefined;
 
                     // Caso foto inteligente (Nomenclatura P, T, I, etc.)
                     if (placement.fieldId.startsWith('foto_') && !/^\d+$/.test(placement.fieldId.split('_')[1])) {
+                        // ... existing photo logic ...
                         const codeMap: Record<string, string> = {
                             'foto_panoramica': 'P', 'foto_tapa': 'T', 'foto_interior': 'I',
                             'foto_acceso': 'A', 'foto_fondo': 'F', 'foto_medicion': 'M',
-                            'foto_entrada_1': 'E1', 'foto_salida_1': 'S1', 'foto_sumidero_1': 'SUM1',
+                            'foto_entrada_1': 'E1', 'foto_entrada_2': 'E2', 'foto_entrada_3': 'E3', 'foto_entrada_4': 'E4', 'foto_entrada_5': 'E5', 'foto_entrada_6': 'E6',
+                            'foto_salida_1': 'S1', 'foto_salida_2': 'S2', 'foto_salida_3': 'S3', 'foto_salida_4': 'S4', 'foto_salida_5': 'S5', 'foto_salida_6': 'S6',
+                            'foto_sumidero_1': 'SUM1', 'foto_sumidero_2': 'SUM2', 'foto_sumidero_3': 'SUM3', 'foto_sumidero_4': 'SUM4', 'foto_sumidero_5': 'SUM5', 'foto_sumidero_6': 'SUM6',
                             'foto_esquema': 'L', 'foto_shape': 'L'
                         };
                         const targetCode = codeMap[placement.fieldId];
                         const typeKey = placement.fieldId.replace('foto_', '');
                         if (targetCode) {
                             const upperTarget = targetCode.toUpperCase();
-                            // Buscar foto con múltiples criterios (Lógica robusta por prioridades)
-                            // 1. Prioridad: Subcategoría exacta (La fuente de verdad más fiable)
                             let found = pozo.fotos?.fotos?.find(f =>
                                 String(f.subcategoria || '').toUpperCase() === upperTarget
                             );
 
-                            // 2. Prioridad: Nombre de archivo con delimitadores exactos
                             if (!found) {
                                 found = pozo.fotos?.fotos?.find(f => {
                                     const filename = String(f.filename || '').toUpperCase();
@@ -243,7 +243,6 @@ export async function generatePdfFromDesign(
                                         filename.endsWith(`-${upperTarget}`) ||
                                         filename.endsWith(`_${upperTarget}`);
 
-                                    // Caso especial: ARGIS mapea a L
                                     if (upperTarget === 'L') {
                                         return matchSimple || filename.includes('_ARGIS');
                                     }
@@ -251,7 +250,6 @@ export async function generatePdfFromDesign(
                                 });
                             }
 
-                            // 3. Prioridad: Fallback por tipo o inclusión de código
                             if (!found) {
                                 found = pozo.fotos?.fotos?.find(f =>
                                     String(f.tipo || '').toUpperCase() === typeKey.toUpperCase() ||
@@ -260,24 +258,43 @@ export async function generatePdfFromDesign(
                             }
 
                             if (found) {
-                                console.log(`✅ Foto encontrada para ${placement.fieldId}:`, found.filename);
                                 if (found.blobId) {
                                     value = blobStore.getUrl(found.blobId);
                                 } else if ((found as any).dataUrl) {
                                     value = (found as any).dataUrl;
                                 }
-                            } else {
-                                console.warn(`❌ No se encontró foto para ${placement.fieldId} con código ${targetCode}`);
                             }
                         }
                     }
                     else {
                         // Campo normal
                         const path = FIELD_PATHS[placement.fieldId];
-                        value = path ? getValueByPath(pozo, path) : '-';
+                        if (path) {
+                            // Obtener el objeto completo para buscar el link
+                            const basePath = path.endsWith('.value') ? path.substring(0, path.length - 6) : path;
+                            const fieldObj = getValueByPath(pozo, basePath);
+
+                            if (fieldObj && typeof fieldObj === 'object') {
+                                value = fieldObj.value ?? '-';
+                                link = fieldObj.link;
+                            } else {
+                                value = fieldObj ?? '-';
+                            }
+
+                            // FALLBACK: Si es un campo de coordenadas y no tiene link, generarlo automáticamente si hay lat/long
+                            if (!link && (placement.fieldId.includes('latitud') || placement.fieldId.includes('longitud') || placement.fieldId.includes('coord') || placement.fieldId.includes('enlace'))) {
+                                const lat = getValueByPath(pozo, 'identificacion.latitud.value');
+                                const lon = getValueByPath(pozo, 'identificacion.longitud.value');
+                                if (lat && lon && lat !== '-' && lon !== '-') {
+                                    link = `https://www.google.com/maps?q=${lat},${lon}`;
+                                }
+                            }
+                        } else {
+                            value = '-';
+                        }
                     }
 
-                    await renderField(doc, placement, pozo, value);
+                    await renderField(doc, placement, pozo, value, link);
                 }
             }
         }
@@ -399,7 +416,7 @@ async function renderShape(doc: jsPDF, shape: ShapeElement) {
  * Renderiza campos de datos (Placements) con soporte para labels complejos y widgets.
  * Proceso: 1. Caja contenedora -> 2. Label (si existe) -> 3. Valor (centrado en espacio restante)
  */
-async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, value: any) {
+async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, value: any, link?: string) {
     const isPhoto = placement.fieldId.startsWith('foto_');
     const isWidget = placement.fieldId.startsWith('widget_');
 
@@ -603,7 +620,13 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
 
     doc.setFontSize(fontSize);
     doc.setFont(font, valueStyle);
-    doc.setTextColor(placement.color || '#000000');
+
+    // Si hay link, forzar azul y subrayado (estilo web estándar)
+    if (link) {
+        doc.setTextColor('#0000FF');
+    } else {
+        doc.setTextColor(placement.color || '#000000');
+    }
 
     const padding = placement.padding || 1;
     const align = placement.textAlign || 'left';
@@ -616,15 +639,28 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
     const lineHeightMM = fontSize * 0.3527;
     const textY = placement.y + labelAreaHeight + (availableContentHeight / 2) + (lineHeightMM / 2.5);
 
-    doc.text(
+    (doc as any).text(
         sanitizeTextForPDF(content),
         textX,
         textY,
         {
             maxWidth: placement.width - (padding * 2),
-            align: align
-        }
+            align: align,
+            link: link ? { url: link } : undefined
+        } as any
     );
+
+    // Si hay link, dibujar línea de subrayado manual (jsPDF no lo hace bien con link)
+    if (link && content && content !== '-') {
+        const textWidth = doc.getTextWidth(content);
+        let lineX = textX;
+        if (align === 'center') lineX = textX - (textWidth / 2);
+        if (align === 'right') lineX = textX - textWidth;
+
+        doc.setDrawColor('#0000FF');
+        doc.setLineWidth(0.1);
+        doc.line(lineX, textY + 0.5, lineX + Math.min(textWidth, placement.width - (padding * 2)), textY + 0.5);
+    }
 }
 
 

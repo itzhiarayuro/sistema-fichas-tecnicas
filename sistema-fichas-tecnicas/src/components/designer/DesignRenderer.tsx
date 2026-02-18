@@ -7,6 +7,7 @@
 import { FichaDesignVersion } from '@/types/fichaDesign';
 import { Pozo } from '@/types/pozo';
 import { blobStore } from '@/lib/storage/blobStore';
+import { FIELD_PATHS } from '@/constants/fieldMapping';
 
 interface DesignRendererProps {
     design: FichaDesignVersion;
@@ -34,114 +35,47 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
         }
     };
 
-    const fieldMapping: Record<string, string> = {
-        // POZO - Identificación
-        'pozo_id': 'identificacion.idPozo.value',
-        'pozo_fecha': 'identificacion.fecha.value',
-        'pozo_coordX': 'identificacion.coordenadaX.value',
-        'pozo_coordY': 'identificacion.coordenadaY.value',
-        'pozo_latitud': 'identificacion.latitud.value',
-        'pozo_longitud': 'identificacion.longitud.value',
-        'pozo_enlace': 'identificacion.enlace.value',
-        'pozo_levanto': 'identificacion.levanto.value',
-        'pozo_estado': 'identificacion.estado.value',
-
-        // POZO - Ubicación
-        'pozo_direccion': 'ubicacion.direccion.value',
-        'pozo_barrio': 'ubicacion.barrio.value',
-        'pozo_localidad': 'ubicacion.localidad.value',
-        'pozo_upz': 'ubicacion.upz.value',
-        'pozo_profundidad': 'ubicacion.profundidad.value',
-        'pozo_elevacion': 'ubicacion.elevacion.value',
-
-        // POZO - Componentes
-        'pozo_materialTapa': 'componentes.materialTapa.value',
-        'pozo_diametroTapa': 'componentes.diametroTapa.value',
-        'pozo_estadoTapa': 'componentes.estadoTapa.value',
-        'pozo_materialCilindro': 'componentes.materialCilindro.value',
-        'pozo_diametroCilindro': 'componentes.diametroCilindro.value',
-        'pozo_estadoCilindro': 'componentes.estadoCilindro.value',
-        'pozo_materialCono': 'componentes.materialCono.value',
-        'pozo_estadoCono': 'componentes.estadoCono.value',
-        'pozo_materialCanuela': 'componentes.materialCanuela.value',
-        'pozo_estadoCanuela': 'componentes.estadoCanuela.value',
-        'pozo_numPeldanos': 'componentes.numeroPeldanos.value',
-        'pozo_materialPeldanos': 'componentes.materialPeldanos.value',
-        'pozo_estadoPeldanos': 'componentes.estadoPeldanos.value',
-
-        // POZO - Observaciones
-        'pozo_observaciones': 'observaciones.observaciones.value',
-
-        // TUBERIAS (Mapeo genérico, idealmente debería ser dinámico)
-        'tub_entrada_diametro': 'tuberias.tuberias[0].diametro.value',
-        'tub_entrada_material': 'tuberias.tuberias[0].material.value',
-        'tub_entrada_estado': 'tuberias.tuberias[0].estado.value',
-        'tub_salida_diametro': 'tuberias.tuberias[1].diametro.value',
-        'tub_salida_material': 'tuberias.tuberias[1].material.value',
-        'tub_salida_estado': 'tuberias.tuberias[1].estado.value',
-
-        // SUMIDEROS
-        'sum_tipo': 'sumideros.sumideros[0].tipoSumidero.value',
-        'sum_material': 'sumideros.sumideros[0].materialTuberia.value',
-        'sum_estado': 'sumideros.sumideros[0].tipoSumidero.value', // SumideroInfo no tiene estado explícito?
-
-        // FOTOS (Usando la estructura fotos.fotos[x])
-        'foto_1': 'fotos.fotos[0].blobId',
-        'foto_2': 'fotos.fotos[1].blobId',
-        'foto_3': 'fotos.fotos[2].blobId',
-        'foto_4': 'fotos.fotos[3].blobId',
-        'foto_5': 'fotos.fotos[4].blobId',
-        'foto_6': 'fotos.fotos[5].blobId',
-    };
-
     // Helper para obtener valor de campo con fallback
     const getFieldValue = (fieldId: string) => {
         // CASO ESPECIAL: Fotos específicas por nomenclatura
-        if (fieldId.startsWith('foto_') && !/^\d+$/.test(fieldId.split('_')[1])) {
+        if (fieldId.startsWith('foto_') && !/^\d+/.test(fieldId.split('_')[1])) {
+            // ... existing photo logic ...
             const codeMap: Record<string, string> = {
-                'panoramica': 'P',
-                'tapa': 'T',
-                'interior': 'I',
-                'acceso': 'A',
-                'fondo': 'F',
-                'medicion': 'M',
-                'entrada_1': 'E1',
-                'salida_1': 'S1',
-                'sumidero_1': 'SUM1',
-                'esquema': 'L',
-                'shape': 'L'
+                'panoramica': 'P', 'tapa': 'T', 'interior': 'I',
+                'acceso': 'A', 'fondo': 'F', 'medicion': 'M',
+                'entrada_1': 'E1', 'entrada_2': 'E2', 'entrada_3': 'E3', 'entrada_4': 'E4', 'entrada_5': 'E5', 'entrada_6': 'E6',
+                'salida_1': 'S1', 'salida_2': 'S2', 'salida_3': 'S3', 'salida_4': 'S4', 'salida_5': 'S5', 'salida_6': 'S6',
+                'sumidero_1': 'SUM1', 'sumidero_2': 'SUM2', 'sumidero_3': 'SUM3', 'sumidero_4': 'SUM4', 'sumidero_5': 'SUM5', 'sumidero_6': 'SUM6',
+                'esquema': 'L', 'shape': 'L'
             };
             const typeKey = fieldId.replace('foto_', '');
             const targetCode = codeMap[typeKey];
 
             if (targetCode) {
-                // Prioridad 1: Coincidencia exacta de subcategoría
+                const upperTarget = targetCode.toUpperCase();
                 let found = pozo.fotos?.fotos?.find(f =>
-                    String(f.subcategoria || '').toUpperCase() === targetCode
+                    String(f.subcategoria || '').toUpperCase() === upperTarget
                 );
 
-                // Prioridad 2: Coincidencia en el nombre de archivo (por si viene de Excel con nomenclatura en nombre)
                 if (!found) {
                     found = pozo.fotos?.fotos?.find(f => {
                         const filename = String(f.filename || '').toUpperCase();
-                        const matchSimple = filename.includes(`-${targetCode}.`) ||
-                            filename.includes(`_${targetCode}.`) ||
-                            filename.endsWith(`-${targetCode}`) ||
-                            filename.endsWith(`_${targetCode}`);
+                        const matchSimple = filename.includes(`-${upperTarget}.`) ||
+                            filename.includes(`_${upperTarget}.`) ||
+                            filename.endsWith(`-${upperTarget}`) ||
+                            filename.endsWith(`_${upperTarget}`);
 
-                        // Caso especial: ARGIS mapea a L
-                        if (targetCode === 'L') {
+                        if (upperTarget === 'L') {
                             return matchSimple || filename.includes('_ARGIS');
                         }
                         return matchSimple;
                     });
                 }
 
-                // Prioridad 3: Coincidencia en Tipo o Categoría (fallback)
                 if (!found) {
                     found = pozo.fotos?.fotos?.find(f =>
                         String(f.tipo || '').toUpperCase() === typeKey.toUpperCase() ||
-                        String(f.subcategoria || '').toUpperCase().includes(targetCode)
+                        String(f.subcategoria || '').toUpperCase().includes(upperTarget)
                     );
                 }
 
@@ -149,12 +83,31 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
             }
         }
 
-        const path = fieldMapping[fieldId];
+        const path = FIELD_PATHS[fieldId];
         if (!path) return '-';
 
         const value = getValueByPath(pozo, path);
         if (value === undefined || value === null) return '-';
         return value;
+    };
+
+    // Helper para obtener enlace de campo
+    const getFieldLink = (fieldId: string) => {
+        const path = FIELD_PATHS[fieldId];
+        if (!path) return undefined;
+
+        const linkPath = path.replace('.value', '.link');
+        let link = getValueByPath(pozo, linkPath);
+
+        // FALLBACK: Si es un campo de coordenadas y no tiene link, generarlo automáticamente si hay lat/long
+        if (!link && (fieldId.includes('latitud') || fieldId.includes('longitud') || fieldId.includes('coord') || fieldId.includes('enlace'))) {
+            const lat = getValueByPath(pozo, 'identificacion.latitud.value');
+            const lon = getValueByPath(pozo, 'identificacion.longitud.value');
+            if (lat && lon && lat !== '-' && lon !== '-') {
+                link = `https://www.google.com/maps?q=${lat},${lon}`;
+            }
+        }
+        return link;
     };
 
     const MM_TO_PX = 3.78 * zoom;
@@ -312,16 +265,16 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
                                     justifyContent: placement.textAlign === 'center' ? 'center' : (placement.textAlign === 'right' ? 'flex-end' : 'flex-start')
                                 }}
                             >
-                                <span className={`block truncate ${placement.fieldId && getValueByPath(pozo, fieldMapping[placement.fieldId]?.replace('.value', '.link')) ? 'text-blue-600 underline cursor-pointer' : ''}`} style={{
+                                <span className={`block truncate ${getFieldLink(placement.fieldId) ? 'text-blue-600 underline cursor-pointer hover:text-blue-800' : ''}`} style={{
                                     fontSize: `${(placement.fontSize || 10) * zoom}pt`,
                                     fontFamily: placement.fontFamily || 'Inter',
                                     fontWeight: placement.fontWeight || 'normal',
-                                    color: (placement.fieldId && getValueByPath(pozo, fieldMapping[placement.fieldId]?.replace('.value', '.link'))) ? undefined : (placement.color || '#000'),
+                                    color: getFieldLink(placement.fieldId) ? undefined : (placement.color || '#000'),
                                     lineHeight: 1.2,
                                     maxWidth: '100%'
                                 }}
                                     onClick={() => {
-                                        const link = placement.fieldId && getValueByPath(pozo, fieldMapping[placement.fieldId]?.replace('.value', '.link'));
+                                        const link = getFieldLink(placement.fieldId);
                                         if (link) window.open(link, '_blank');
                                     }}>
                                     {String(value || '-')}

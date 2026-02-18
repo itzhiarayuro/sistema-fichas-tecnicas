@@ -15,7 +15,28 @@ export interface AvailableField {
     defaultHeight: number; // en mm
 }
 
-export type ShapeType = 'rectangle' | 'circle' | 'line' | 'triangle' | 'text' | 'image' | 'table';
+export type ShapeType = 'rectangle' | 'circle' | 'line' | 'triangle' | 'text' | 'image' | 'table' | 'group';
+
+export interface GroupElement {
+    id: string;
+    type: 'group';
+    name?: string; // Nombre opcional del grupo
+    x: number; // mm - posición del grupo
+    y: number; // mm
+    width: number; // mm - calculado del bounding box
+    height: number; // mm
+    zIndex: number;
+    pageNumber?: number; // 1-5
+    
+    // IDs de los elementos que contiene
+    childIds: string[]; // IDs de FieldPlacement o ShapeElement
+    
+    // Estado del grupo
+    isVisible?: boolean;
+    isLocked?: boolean;
+    isCollapsed?: boolean; // Si está colapsado en el panel de capas
+    repeatOnEveryPage?: boolean;
+}
 
 export interface ShapeElement {
     id: string;
@@ -49,16 +70,21 @@ export interface ShapeElement {
     isVisible?: boolean;
     isLocked?: boolean;
     repeatOnEveryPage?: boolean;
+    groupId?: string; // ID del grupo al que pertenece (si está agrupado)
 }
 
-export type DesignElement = FieldPlacement | ShapeElement;
+export type DesignElement = FieldPlacement | ShapeElement | GroupElement;
 
 export function isFieldPlacement(element: DesignElement): element is FieldPlacement {
     return 'fieldId' in element;
 }
 
 export function isShapeElement(element: DesignElement): element is ShapeElement {
-    return 'type' in element && ['rectangle', 'circle', 'line', 'triangle', 'text', 'image'].includes((element as ShapeElement).type);
+    return 'type' in element && ['rectangle', 'circle', 'line', 'triangle', 'text', 'image', 'table'].includes((element as ShapeElement).type);
+}
+
+export function isGroupElement(element: DesignElement): element is GroupElement {
+    return 'type' in element && (element as GroupElement).type === 'group';
 }
 
 export interface FieldPlacement {
@@ -101,6 +127,7 @@ export interface FieldPlacement {
     isVisible?: boolean;
     isLocked?: boolean;
     repeatOnEveryPage?: boolean;
+    groupId?: string; // ID del grupo al que pertenece (si está agrupado)
 }
 
 export interface FichaDesignVersion {
@@ -117,9 +144,10 @@ export interface FichaDesignVersion {
     orientation: 'portrait' | 'landscape';
     unit: 'mm' | 'px';
 
-    // Elementos del diseño (campos + shapes)
+    // Elementos del diseño (campos + shapes + grupos)
     placements: FieldPlacement[];
     shapes: ShapeElement[];
+    groups: GroupElement[];
 
     // Metadata
     version: string;
@@ -149,14 +177,22 @@ export interface DesignState {
     exportVersion: (id: string) => string | null;
 
     // Gestión de placements
-    addPlacement: (versionId: string, placement: Omit<FieldPlacement, 'id'>) => void;
+    addPlacement: (versionId: string, placement: Omit<FieldPlacement, 'id'>) => string;
     updatePlacement: (versionId: string, placementId: string, updates: Partial<FieldPlacement>) => void;
     removePlacement: (versionId: string, placementId: string) => void;
 
     // Gestión de shapes
-    addShape: (versionId: string, shape: Omit<ShapeElement, 'id'>) => void;
+    addShape: (versionId: string, shape: Omit<ShapeElement, 'id'>) => string;
     updateShape: (versionId: string, shapeId: string, updates: Partial<ShapeElement>) => void;
     removeShape: (versionId: string, shapeId: string) => void;
+
+    // Gestión de grupos
+    createGroup: (versionId: string, elementIds: string[], name?: string) => string;
+    updateGroup: (versionId: string, groupId: string, updates: Partial<GroupElement>) => void;
+    removeGroup: (versionId: string, groupId: string) => void;
+    ungroupElements: (versionId: string, groupId: string) => void;
+    addToGroup: (versionId: string, groupId: string, elementIds: string[]) => void;
+    removeFromGroup: (versionId: string, groupId: string, elementIds: string[]) => void;
 
     // Getters
     getCurrentVersion: () => FichaDesignVersion | null;

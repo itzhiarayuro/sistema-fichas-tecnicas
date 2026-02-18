@@ -39,14 +39,14 @@ export interface NomenclaturaResult {
  * Cada patrón captura: [1] pozoId, [2] tipo, [3] subtipo (opcional)
  */
 const PATTERNS = {
-  // Fotos principales: M680-P (Panorámica), M680-I (Interna), M680-T (Tapa), M680-A (Acceso), M680-F (Fondo), M680-M (Medición)
-  PRINCIPAL: /^(.+)-([PITAFM])$/i,
-  // Entradas con número: M680-E1-T, M680-E2-T, etc. (solo T, sin Z)
-  ENTRADA: /^(.+)-(E\d+)-T$/i,
-  // Salidas con número opcional: M680-S-T, M680-S1-T, M680-S2-T, etc. (solo T, sin Z)
-  SALIDA_CON_NUMERO: /^(.+)-(S\d+)-T$/i,
-  SALIDA_SIN_NUMERO: /^(.+)-(S)-T$/i,
-  // Sumideros: M680-SUM1, M680-SUM2
+  // Fotos principales: M680-P (Panorámica), M680-I (Interna), M680-T (Tapa), M680-A/AT (Acceso), M680-F (Fondo), M680-M (Medición)
+  PRINCIPAL: /^(.+)-([PITAFM]|AT)$/i,
+  // Entradas con número: M680-E1, M680-E1-T, M680-E1-Z (Tubería o Zoom)
+  ENTRADA: /^(.+)-(E\d+)(?:-[TZ])?$/i,
+  // Salidas con número opcional: M680-S, M680-S1, M680-S1-T, etc.
+  SALIDA_CON_NUMERO: /^(.+)-(S\d+)(?:-[TZ])?$/i,
+  SALIDA_SIN_NUMERO: /^(.+)-(S)(?:-[TZ])?$/i,
+  // Sumideros: M680-SUM1, M680-SUM2...
   SUMIDERO: /^(.+)-(SUM\d+)$/i,
   // Esquema de localización: M680_ARGIS
   ARGIS: /^(.+)_ARGIS$/i,
@@ -84,7 +84,8 @@ export function parseNomenclatura(filename: string): NomenclaturaResult {
   // Intentar patrón PRINCIPAL
   let match = nameWithoutExt.match(PATTERNS.PRINCIPAL);
   if (match) {
-    const tipoCode = match[2].toUpperCase();
+    let tipoCode = match[2].toUpperCase();
+    if (tipoCode === 'AT') tipoCode = 'A'; // Normalizar Acceso Tapa -> Acceso
     return {
       pozoId: match[1].toUpperCase(),
       categoria: 'PRINCIPAL',
@@ -101,7 +102,7 @@ export function parseNomenclatura(filename: string): NomenclaturaResult {
     return {
       pozoId: match[1].toUpperCase(),
       categoria: 'ENTRADA',
-      subcategoria: `${entradaNum}-T`,
+      subcategoria: entradaNum, // Limpio: E1, E2...
       tipo: `Entrada ${entradaNum.slice(1)} - Tubería`,
       isValid: true,
     };
@@ -114,7 +115,7 @@ export function parseNomenclatura(filename: string): NomenclaturaResult {
     return {
       pozoId: match[1].toUpperCase(),
       categoria: 'SALIDA',
-      subcategoria: `${salidaNum}-T`,
+      subcategoria: salidaNum, // Limpio: S1, S2...
       tipo: `Salida ${salidaNum.slice(1)} - Tubería`,
       isValid: true,
     };
@@ -126,8 +127,8 @@ export function parseNomenclatura(filename: string): NomenclaturaResult {
     return {
       pozoId: match[1].toUpperCase(),
       categoria: 'SALIDA',
-      subcategoria: `S-T`,
-      tipo: `Salida - Tubería`,
+      subcategoria: `S1`, // Mapear S -> S1 automáticamente
+      tipo: `Salida 1 - Tubería`,
       isValid: true,
     };
   }
