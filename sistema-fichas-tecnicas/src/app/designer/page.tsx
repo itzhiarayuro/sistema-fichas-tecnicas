@@ -122,7 +122,10 @@ export default function DesignerPage() {
         setPendingShape(null);
         setPendingField(null);
         
-        // NO abrir propiedades desde canvas - solo señalar en capas
+        // Abrir panel de capas si hay selección y no está abierto
+        if (id && !designerPanels.showLayers) {
+            toggleDesignerPanel('layers');
+        }
     };
 
     const handleSelectShape = (id: string | null) => {
@@ -131,7 +134,10 @@ export default function DesignerPage() {
         setPendingShape(null);
         setPendingField(null);
         
-        // NO abrir propiedades desde canvas - solo señalar en capas
+        // Abrir panel de capas si hay selección y no está abierto
+        if (id && !designerPanels.showLayers) {
+            toggleDesignerPanel('layers');
+        }
     };
 
     // Handlers para selección desde el panel de capas (SÍ abre propiedades)

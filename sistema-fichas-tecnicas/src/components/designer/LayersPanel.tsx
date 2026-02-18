@@ -31,11 +31,14 @@ export function LayersPanel({
     // Scroll automático cuando se selecciona un elemento
     useEffect(() => {
         if (selectedItemRef.current) {
-            selectedItemRef.current.scrollIntoView({
-                behavior: 'smooth',
-                block: 'nearest',
-                inline: 'nearest'
-            });
+            // Pequeño delay para asegurar que el DOM está actualizado
+            setTimeout(() => {
+                selectedItemRef.current?.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center',
+                    inline: 'nearest'
+                });
+            }, 100);
         }
     }, [selectedPlacementId, selectedShapeId]);
 
