@@ -167,9 +167,9 @@ export interface DesignState {
     redo: () => void;
 }
 
-// 56 Campos disponibles del sistema
+// 70 Campos disponibles del sistema
 export const AVAILABLE_FIELDS: AvailableField[] = [
-    // POZO (33 campos)
+    // POZO (47 campos)
     { id: 'pozo_id', label: 'ID Pozo', fieldPath: 'identificacion.idPozo.value', category: 'pozo', isRepeatable: false, defaultWidth: 60, defaultHeight: 10 },
     { id: 'pozo_fecha', label: 'Fecha', fieldPath: 'identificacion.fecha.value', category: 'pozo', isRepeatable: false, defaultWidth: 40, defaultHeight: 10 },
     { id: 'pozo_coordX', label: 'Coordenada X', fieldPath: 'identificacion.coordenadaX.value', category: 'pozo', isRepeatable: false, defaultWidth: 40, defaultHeight: 10 },
@@ -184,16 +184,30 @@ export const AVAILABLE_FIELDS: AvailableField[] = [
     { id: 'pozo_barrio', label: 'Barrio', fieldPath: 'ubicacion.barrio.value', category: 'pozo', isRepeatable: false, defaultWidth: 60, defaultHeight: 10 },
     { id: 'pozo_localidad', label: 'Localidad', fieldPath: 'ubicacion.localidad.value', category: 'pozo', isRepeatable: false, defaultWidth: 60, defaultHeight: 10 },
     { id: 'pozo_upz', label: 'UPZ', fieldPath: 'ubicacion.upz.value', category: 'pozo', isRepeatable: false, defaultWidth: 50, defaultHeight: 10 },
-    { id: 'pozo_elevacion', label: 'Elevación (m)', fieldPath: 'ubicacion.elevacion.value', category: 'pozo', isRepeatable: false, defaultWidth: 40, defaultHeight: 10 },
     { id: 'pozo_profundidad', label: 'Profundidad (m)', fieldPath: 'ubicacion.profundidad.value', category: 'pozo', isRepeatable: false, defaultWidth: 40, defaultHeight: 10 },
 
-    { id: 'pozo_materialTapa', label: 'Mat. Tapa', fieldPath: 'componentes.materialTapa.value', category: 'pozo', isRepeatable: false, defaultWidth: 50, defaultHeight: 10 },
+    { id: 'pozo_sistema', label: 'Sistema', fieldPath: 'componentes.sistema.value', category: 'pozo', isRepeatable: false, defaultWidth: 60, defaultHeight: 10 },
+    { id: 'pozo_tipoCamara', label: 'Tipo de Cámara', fieldPath: 'componentes.tipoCamara.value', category: 'pozo', isRepeatable: false, defaultWidth: 70, defaultHeight: 10 },
+    { id: 'pozo_estructuraPavimento', label: 'Estructura de Pavimento', fieldPath: 'componentes.estructuraPavimento.value', category: 'pozo', isRepeatable: false, defaultWidth: 80, defaultHeight: 10 },
+    { id: 'pozo_materialRasante', label: 'Material Rasante', fieldPath: 'componentes.materialRasante.value', category: 'pozo', isRepeatable: false, defaultWidth: 60, defaultHeight: 10 },
+    { id: 'pozo_estadoRasante', label: 'Estado Rasante', fieldPath: 'componentes.estadoRasante.value', category: 'pozo', isRepeatable: false, defaultWidth: 60, defaultHeight: 10 },
+    { id: 'pozo_existeTapa', label: 'Existe Tapa', fieldPath: 'componentes.existeTapa.value', category: 'pozo', isRepeatable: false, defaultWidth: 40, defaultHeight: 10 },
+    { id: 'pozo_materialTapa', label: 'Material Tapa', fieldPath: 'componentes.materialTapa.value', category: 'pozo', isRepeatable: false, defaultWidth: 50, defaultHeight: 10 },
     { id: 'pozo_estadoTapa', label: 'Estado Tapa', fieldPath: 'componentes.estadoTapa.value', category: 'pozo', isRepeatable: false, defaultWidth: 50, defaultHeight: 10 },
+    { id: 'pozo_existeCono', label: 'Existe Cono', fieldPath: 'componentes.existeCono.value', category: 'pozo', isRepeatable: false, defaultWidth: 40, defaultHeight: 10 },
+    { id: 'pozo_tipoCono', label: 'Tipo Cono', fieldPath: 'componentes.tipoCono.value', category: 'pozo', isRepeatable: false, defaultWidth: 50, defaultHeight: 10 },
+    { id: 'pozo_materialCono', label: 'Material Cono', fieldPath: 'componentes.materialCono.value', category: 'pozo', isRepeatable: false, defaultWidth: 50, defaultHeight: 10 },
+    { id: 'pozo_estadoCono', label: 'Estado Cono', fieldPath: 'componentes.estadoCono.value', category: 'pozo', isRepeatable: false, defaultWidth: 50, defaultHeight: 10 },
+    { id: 'pozo_existeCilindro', label: 'Existe Cilindro', fieldPath: 'componentes.existeCilindro.value', category: 'pozo', isRepeatable: false, defaultWidth: 50, defaultHeight: 10 },
     { id: 'pozo_diametroCilindro', label: 'Ø Cilindro (m)', fieldPath: 'componentes.diametroCilindro.value', category: 'pozo', isRepeatable: false, defaultWidth: 40, defaultHeight: 10 },
-    { id: 'pozo_materialCilindro', label: 'Mat. Cilindro', fieldPath: 'componentes.materialCilindro.value', category: 'pozo', isRepeatable: false, defaultWidth: 50, defaultHeight: 10 },
+    { id: 'pozo_materialCilindro', label: 'Material Cilindro', fieldPath: 'componentes.materialCilindro.value', category: 'pozo', isRepeatable: false, defaultWidth: 60, defaultHeight: 10 },
     { id: 'pozo_estadoCilindro', label: 'Estado Cilindro', fieldPath: 'componentes.estadoCilindro.value', category: 'pozo', isRepeatable: false, defaultWidth: 50, defaultHeight: 10 },
-    { id: 'pozo_numPeldanos', label: 'Nº Peldaños', fieldPath: 'componentes.numeroPeldanos.value', category: 'pozo', isRepeatable: false, defaultWidth: 40, defaultHeight: 10 },
-    { id: 'pozo_materialPeldanos', label: 'Mat. Peldaños', fieldPath: 'componentes.materialPeldanos.value', category: 'pozo', isRepeatable: false, defaultWidth: 50, defaultHeight: 10 },
+    { id: 'pozo_existeCanuela', label: 'Existe Cañuela', fieldPath: 'componentes.existeCanuela.value', category: 'pozo', isRepeatable: false, defaultWidth: 50, defaultHeight: 10 },
+    { id: 'pozo_materialCanuela', label: 'Material Cañuela', fieldPath: 'componentes.materialCanuela.value', category: 'pozo', isRepeatable: false, defaultWidth: 60, defaultHeight: 10 },
+    { id: 'pozo_estadoCanuela', label: 'Estado Cañuela', fieldPath: 'componentes.estadoCanuela.value', category: 'pozo', isRepeatable: false, defaultWidth: 50, defaultHeight: 10 },
+    { id: 'pozo_existePeldanos', label: 'Existe Peldaños', fieldPath: 'componentes.existePeldanos.value', category: 'pozo', isRepeatable: false, defaultWidth: 50, defaultHeight: 10 },
+    { id: 'pozo_materialPeldanos', label: 'Material Peldaños', fieldPath: 'componentes.materialPeldanos.value', category: 'pozo', isRepeatable: false, defaultWidth: 60, defaultHeight: 10 },
+    { id: 'pozo_numPeldanos', label: 'Número Peldaños', fieldPath: 'componentes.numeroPeldanos.value', category: 'pozo', isRepeatable: false, defaultWidth: 50, defaultHeight: 10 },
     { id: 'pozo_estadoPeldanos', label: 'Estado Peldaños', fieldPath: 'componentes.estadoPeldanos.value', category: 'pozo', isRepeatable: false, defaultWidth: 50, defaultHeight: 10 },
 
     { id: 'pozo_observaciones', label: 'Observaciones', fieldPath: 'observaciones.observaciones.value', category: 'pozo', isRepeatable: false, defaultWidth: 150, defaultHeight: 20 },

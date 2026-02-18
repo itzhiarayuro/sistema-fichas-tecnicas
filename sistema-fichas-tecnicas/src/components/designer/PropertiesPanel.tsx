@@ -122,22 +122,83 @@ export function PropertiesPanel({ version, selectedPlacementId, selectedShapeId 
                         <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Colores</h3>
                         <div>
                             <label className="text-[10px] text-gray-600 mb-1 block font-medium">Relleno</label>
-                            <div className="flex gap-2">
-                                <input type="color" value={shape.fillColor || '#E5E7EB'} onChange={(e) => handleUpdateShape({ fillColor: e.target.value })} className="w-10 h-8 border border-gray-200 rounded cursor-pointer" />
-                                <input type="text" value={shape.fillColor || '#E5E7EB'} onChange={(e) => handleUpdateShape({ fillColor: e.target.value })} className="flex-1 bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 text-[10px] font-mono outline-none" />
+                            <div className="flex items-center gap-1">
+                                {shape.fillColor && shape.fillColor !== 'transparent' ? (
+                                    <>
+                                        <input
+                                            type="color"
+                                            value={shape.fillColor}
+                                            onChange={(e) => handleUpdateShape({ fillColor: e.target.value })}
+                                            className="w-6 h-6 border border-gray-200 rounded cursor-pointer p-0"
+                                        />
+                                        <input
+                                            type="text"
+                                            value={shape.fillColor}
+                                            onChange={(e) => handleUpdateShape({ fillColor: e.target.value })}
+                                            className="flex-1 bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 text-[10px] font-mono outline-none"
+                                        />
+                                        <button
+                                            onClick={() => handleUpdateShape({ fillColor: 'transparent' })}
+                                            className="text-[10px] text-red-500 hover:bg-red-50 px-1 rounded ml-1"
+                                        >
+                                            Quitar
+                                        </button>
+                                    </>
+                                ) : (
+                                    <button
+                                        onClick={() => handleUpdateShape({ fillColor: '#E5E7EB' })}
+                                        className="w-full text-[10px] bg-gray-100 border border-dashed border-gray-300 rounded py-1.5 text-gray-500 hover:bg-gray-200 transition"
+                                    >
+                                        Transparente (Click para color)
+                                    </button>
+                                )}
                             </div>
                         </div>
                         <div>
                             <label className="text-[10px] text-gray-600 mb-1 block font-medium">Borde</label>
-                            <div className="flex gap-2">
-                                <input type="color" value={shape.strokeColor || '#374151'} onChange={(e) => handleUpdateShape({ strokeColor: e.target.value })} className="w-10 h-8 border border-gray-200 rounded cursor-pointer" />
-                                <input type="text" value={shape.strokeColor || '#374151'} onChange={(e) => handleUpdateShape({ strokeColor: e.target.value })} className="flex-1 bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 text-[10px] font-mono outline-none" />
+                            <div className="flex items-center gap-1">
+                                {shape.strokeColor && shape.strokeColor !== 'transparent' ? (
+                                    <>
+                                        <input
+                                            type="color"
+                                            value={shape.strokeColor}
+                                            onChange={(e) => handleUpdateShape({ strokeColor: e.target.value })}
+                                            className="w-6 h-6 border border-gray-200 rounded cursor-pointer p-0"
+                                        />
+                                        <input
+                                            type="text"
+                                            value={shape.strokeColor}
+                                            onChange={(e) => handleUpdateShape({ strokeColor: e.target.value })}
+                                            className="flex-1 bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 text-[10px] font-mono outline-none"
+                                        />
+                                        <button
+                                            onClick={() => handleUpdateShape({ strokeColor: 'transparent', strokeWidth: 0 })}
+                                            className="text-[10px] text-red-500 hover:bg-red-50 px-1 rounded ml-1"
+                                        >
+                                            Quitar
+                                        </button>
+                                    </>
+                                ) : (
+                                    <button
+                                        onClick={() => handleUpdateShape({ strokeColor: '#000000', strokeWidth: 1 })}
+                                        className="w-full text-[10px] bg-gray-100 border border-dashed border-gray-300 rounded py-1.5 text-gray-500 hover:bg-gray-200 transition"
+                                    >
+                                        Sin Borde (Click para color)
+                                    </button>
+                                )}
                             </div>
                         </div>
-                        <div>
-                            <label className="text-[10px] text-gray-600 mb-1 block font-medium">Grosor Borde</label>
-                            <input type="number" value={shape.strokeWidth || 1} onChange={(e) => handleUpdateShape({ strokeWidth: parseInt(e.target.value) || 1 })} className="w-full bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" />
-                        </div>
+                        {shape.strokeColor && shape.strokeColor !== 'transparent' && (
+                            <div>
+                                <label className="text-[10px] text-gray-600 mb-1 block font-medium">Grosor Borde</label>
+                                <input
+                                    type="number"
+                                    value={shape.strokeWidth || 1}
+                                    onChange={(e) => handleUpdateShape({ strokeWidth: parseFloat(e.target.value) || 0 })}
+                                    className="w-full bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                                />
+                            </div>
+                        )}
                     </section>
 
                     {/* Texto (solo para type='text') */}
@@ -149,11 +210,47 @@ export function PropertiesPanel({ version, selectedPlacementId, selectedShapeId 
                                 <textarea value={shape.content || ''} onChange={(e) => handleUpdateShape({ content: e.target.value })} rows={3} className="w-full bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" />
                             </div>
                             <div>
-                                <label className="text-[10px] text-gray-600 mb-1 block font-medium">Tamaño (pt)</label>
-                                <input type="number" value={shape.fontSize || 12} onChange={(e) => handleUpdateShape({ fontSize: parseInt(e.target.value) || 12 })} className="w-full bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" />
+                                <label className="text-[10px] text-gray-600 mb-1 block font-medium">Alineación</label>
+                                <div className="flex bg-gray-50 rounded-md p-1 gap-1">
+                                    {(['left', 'center', 'right'] as const).map((align) => (
+                                        <button
+                                            key={align}
+                                            onClick={() => handleUpdateShape({ textAlign: align })}
+                                            className={`flex-1 p-1.5 rounded transition-all ${(shape.textAlign || 'left') === align
+                                                ? 'bg-white shadow-sm text-blue-600'
+                                                : 'text-gray-400 hover:text-gray-600'
+                                                }`}
+                                        >
+                                            <svg className="w-4 h-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={
+                                                    align === 'left' ? 'M4 6h16M4 12h10M4 18h16' :
+                                                        align === 'center' ? 'M4 6h16M7 12h10M4 18h16' :
+                                                            'M4 6h16M10 12h10M4 18h16'
+                                                } />
+                                            </svg>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="text-[10px] text-gray-600 mb-1 block font-medium">Tamaño (pt)</label>
+                                    <input type="number" value={shape.fontSize || 12} onChange={(e) => handleUpdateShape({ fontSize: parseInt(e.target.value) || 12 })} className="w-full bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none" />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] text-gray-600 mb-1 block font-medium">Peso</label>
+                                    <select
+                                        value={shape.fontWeight || 'normal'}
+                                        onChange={(e) => handleUpdateShape({ fontWeight: e.target.value as 'normal' | 'bold' })}
+                                        className="w-full bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 text-xs focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none"
+                                    >
+                                        <option value="normal">Normal</option>
+                                        <option value="bold">Negrita</option>
+                                    </select>
+                                </div>
                             </div>
                             <div>
-                                <label className="text-[10px] text-gray-600 mb-1 block font-medium">Color</label>
+                                <label className="text-[10px] text-gray-600 mb-1 block font-medium">Color Texto</label>
                                 <div className="flex gap-2">
                                     <input type="color" value={shape.color || '#000000'} onChange={(e) => handleUpdateShape({ color: e.target.value })} className="w-10 h-8 border border-gray-200 rounded cursor-pointer" />
                                     <input type="text" value={shape.color || '#000000'} onChange={(e) => handleUpdateShape({ color: e.target.value })} className="flex-1 bg-gray-50 border border-gray-200 rounded-md px-2 py-1.5 text-[10px] font-mono outline-none" />
@@ -639,8 +736,8 @@ export function PropertiesPanel({ version, selectedPlacementId, selectedShapeId 
                                             key={align}
                                             onClick={() => handleUpdate({ labelAlign: align })}
                                             className={`flex-1 p-1 rounded transition-all ${(placement.labelAlign || 'left') === align
-                                                    ? 'bg-white shadow text-primary'
-                                                    : 'text-gray-400 hover:text-gray-600'
+                                                ? 'bg-white shadow text-primary'
+                                                : 'text-gray-400 hover:text-gray-600'
                                                 }`}
                                         >
                                             <svg className="w-3 h-3 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">

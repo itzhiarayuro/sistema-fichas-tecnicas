@@ -346,9 +346,9 @@ async function renderShape(doc: jsPDF, shape: ShapeElement) {
         if (align === 'center') x = shape.x + (shape.width / 2);
         if (align === 'right') x = shape.x + shape.width;
 
-        // Centrado vertical exacto
-        const textHeightMM = fontSize * 0.3527;
-        const y = shape.y + (shape.height / 2) + (textHeightMM / 2.5); // 2.5 para centrado visual baseline
+        // Centrado vertical preciso usando altura de línea (aprox 1.15)
+        const lineHeight = fontSize * 0.3527; // pt to mm
+        const y = shape.y + (shape.height / 2) + (lineHeight / 2) - 0.2; // -0.2 para ajuste visual baseline
 
         doc.text(sanitizeTextForPDF(shape.content), x, y, {
             maxWidth: shape.width,
@@ -462,7 +462,10 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
         if (labelAlign === 'center') labelX = placement.x + (labelWidthMM / 2);
         if (labelAlign === 'right') labelX = placement.x + labelWidthMM - labelPadding;
 
-        doc.text(labelText, labelX, placement.y + labelPadding + (labelFontSize * 0.3), {
+        // Centrado vertical del texto dentro de labelAreaHeight
+        const labelBaselineY = placement.y + labelPadding + (labelFontSize * 0.28);
+
+        doc.text(labelText, labelX, labelBaselineY, {
             align: labelAlign,
             maxWidth: labelWidthMM - (labelPadding * 2)
         });
@@ -609,8 +612,9 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
     if (align === 'center') textX = placement.x + (placement.width / 2);
     if (align === 'right') textX = placement.x + placement.width - padding;
 
-    // Calcular Y para centrado vertical en el área restante
-    const textY = placement.y + labelAreaHeight + (availableContentHeight / 2) + (fontSize * 0.15);
+    // Calcular Y para centrado vertical en el área restante (mejorado)
+    const lineHeightMM = fontSize * 0.3527;
+    const textY = placement.y + labelAreaHeight + (availableContentHeight / 2) + (lineHeightMM / 2.5);
 
     doc.text(
         sanitizeTextForPDF(content),

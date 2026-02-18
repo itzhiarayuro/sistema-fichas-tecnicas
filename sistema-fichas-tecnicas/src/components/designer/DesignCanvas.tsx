@@ -118,6 +118,9 @@ export function DesignCanvas({
     const [isDragging, setIsDragging] = useState(false);
     const [isResizing, setIsResizing] = useState(false);
 
+    // Conversión de unidades: 1mm = 3.78px (a 96 DPI)
+    // IMPORTANTE: Las coordenadas se guardan SIEMPRE en mm, sin zoom
+    // El zoom solo afecta la visualización en el canvas
     const MM_TO_PX = 3.78;
 
     const canvasWidth = version ? (version.pageSize === 'A4' ? 210 : 215.9) * MM_TO_PX * zoom : 0;
@@ -137,6 +140,9 @@ export function DesignCanvas({
             const fieldData: AvailableField = JSON.parse(e.dataTransfer.getData('application/json'));
             const rect = e.currentTarget.getBoundingClientRect();
 
+            // IMPORTANTE: Convertir píxeles a milímetros
+            // Fórmula: mm = (píxeles) / (MM_TO_PX * zoom)
+            // El zoom NO afecta las coordenadas guardadas, solo la visualización
             const x = snapValue((e.clientX - rect.left) / (MM_TO_PX * zoom));
             const y = snapValue((e.clientY - rect.top) / (MM_TO_PX * zoom));
             const pageNo = (e as any)._pageNumber || 1;
@@ -482,7 +488,8 @@ export function DesignCanvas({
                             fontSize: `${(shape.fontSize || 12) * zoom}px`,
                             fontFamily: shape.fontFamily || 'Arial',
                             color: shape.color || '#000',
-                            textAlign: shape.textAlign || 'left'
+                            textAlign: shape.textAlign || 'left',
+                            fontWeight: shape.fontWeight || 'normal'
                         }}>
                             {shape.content}
                         </div>
