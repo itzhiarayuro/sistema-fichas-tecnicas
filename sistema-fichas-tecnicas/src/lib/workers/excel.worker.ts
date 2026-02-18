@@ -12,11 +12,11 @@ import { parseExcelFileContent } from '../parsers/excelParser';
  * Escucha mensajes del hilo principal
  */
 self.onmessage = async (e: MessageEvent) => {
-    const { buffer, options } = e.data;
+    const { id, buffer, options } = e.data;
 
     try {
         // Notificar inicio
-        self.postMessage({ type: 'PROGRESS', progress: 10, message: 'Parseando estructura del libro...' });
+        self.postMessage({ type: 'PROGRESS', id, progress: 10, message: 'Parseando estructura del libro...' });
 
         // Procesamiento pesado (XLSX.read suele ser síncrono y bloqueante)
         const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array' });
@@ -30,11 +30,12 @@ self.onmessage = async (e: MessageEvent) => {
         self.postMessage({ type: 'PROGRESS', progress: 90, message: 'Validando resultados...' });
 
         // Retornar resultado
-        self.postMessage({ type: 'SUCCESS', result });
+        self.postMessage({ type: 'SUCCESS', id, result });
 
     } catch (error) {
         self.postMessage({
             type: 'ERROR',
+            id,
             error: error instanceof Error ? error.message : 'Error desconocido en el worker de Excel'
         });
     }

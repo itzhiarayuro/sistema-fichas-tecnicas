@@ -9,6 +9,7 @@ import { resourceManager } from '../managers/resourceManager';
 
 export interface WorkerResponse<T> {
     type: 'SUCCESS' | 'ERROR' | 'PROGRESS';
+    id?: string; // ID para identificar la tarea en entornos concurrentes
     result?: T;
     error?: string;
     progress?: number;
@@ -30,11 +31,13 @@ class WorkerRegistry {
     }
 
     public async runExcelTask<T>(buffer: ArrayBuffer, onProgress?: (p: number, m: string) => void): Promise<T> {
+        const taskId = `excel-${Math.random().toString(36).substring(7)}`;
         return this.executeInWorker<T>(
             'excel',
-            { buffer },
+            { id: taskId, buffer },
             [buffer],
-            onProgress
+            onProgress,
+            taskId
         );
     }
 
@@ -46,11 +49,13 @@ class WorkerRegistry {
         options: { maxWidth?: number; maxHeight?: number; quality?: number; generateHash?: boolean },
         onProgress?: (p: number, m: string) => void
     ): Promise<T> {
+        const taskId = `photo-${Math.random().toString(36).substring(7)}`;
         return this.executeInWorker<T>(
             'photo',
-            { id: Math.random().toString(36).substring(7), file, options },
+            { id: taskId, file, options },
             [], // No transferibles por ahora para evitar problemas con File
-            onProgress
+            onProgress,
+            taskId
         );
     }
 
@@ -61,7 +66,8 @@ class WorkerRegistry {
         type: 'excel' | 'photo',
         payload: any,
         transferables: Transferable[] = [],
-        onProgress?: (p: number, m: string) => void
+        onProgress?: (p: number, m: string) => void,
+        taskId?: string
     ): Promise<T> {
         return new Promise((resolve, reject) => {
             try {
@@ -85,6 +91,11 @@ class WorkerRegistry {
 
                 const handler = (e: MessageEvent<WorkerResponse<T>>) => {
                     const response = e.data;
+
+                    // Si la respuesta tiene ID, validar que sea el nuestro
+                    if (taskId && response.id && response.id !== taskId) {
+                        return; // No es para nosotros, ignorar
+                    }
 
                     switch (response.type) {
                         case 'PROGRESS':

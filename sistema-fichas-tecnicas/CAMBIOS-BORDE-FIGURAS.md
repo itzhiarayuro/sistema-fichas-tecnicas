@@ -1,7 +1,12 @@
 # Cambios: Reducción de Grosor de Bordes en Figuras
 
 ## Problema
-Las figuras (shapes) en el canvas tenían bordes muy gruesos, especialmente cuando se hacía zoom. El borde se multiplicaba por el factor de zoom, haciendo que se viera desproporcionado. Además, el generador de PDF legacy (`pdfMakeGenerator`) estaba multiplicando el strokeWidth por 0.264, lo que causaba inconsistencias.
+Las figuras (shapes) en el canvas tenían bordes muy gruesos, especialmente cuando se hacía zoom. El borde se multiplicaba por el factor de zoom, haciendo que se viera desproporcionado. Además, había inconsistencia entre el PDF generado desde el diseñador (que se veía bien) y el PDF generado desde la página de pozos (que se veía grueso).
+
+## Causa Raíz
+- El `pdfMakeGenerator` estaba multiplicando el strokeWidth por 0.264
+- La página de pozos usaba `highFidelityGenerator` para diseños personalizados, que tenía diferentes calibraciones
+- El diseñador usaba `designBasedPdfGenerator`, que generaba bordes más delgados
 
 ## Solución Implementada
 
@@ -27,19 +32,26 @@ Las figuras (shapes) en el canvas tenían bordes muy gruesos, especialmente cuan
 **Archivo:** `src/lib/pdf/pdfMakeGenerator.ts` (línea ~1345)
 - **Antes:** `if (shape.strokeWidth) doc.setLineWidth(shape.strokeWidth * 0.264);`
 - **Después:** `if (shape.strokeWidth) doc.setLineWidth(shape.strokeWidth);`
-- **Razón:** El strokeWidth ya está en mm (no en px), así que no necesita multiplicarse por 0.264. Esto causaba que los bordes fueran demasiado delgados en el PDF.
+- **Razón:** El strokeWidth ya está en mm (no en px), así que no necesita multiplicarse por 0.264.
+
+### 5. Usar designBasedPdfGenerator consistentemente
+**Archivo:** `src/app/pozos/page.tsx` (línea ~183)
+- **Antes:** Usaba `highFidelityGenerator` para diseños personalizados
+- **Después:** Usa `designBasedPdfGenerator` para todos los diseños personalizados
+- **Razón:** `designBasedPdfGenerator` genera bordes más consistentes y delgados, igual que el diseñador
 
 ## Impacto
 - ✅ Los bordes de las figuras ahora son más delgados y proporcionales
 - ✅ El zoom no afecta el grosor del borde
-- ✅ El PDF replica automáticamente estos cambios (usa el mismo strokeWidth)
-- ✅ Consistencia entre el canvas y el PDF (tanto highFidelity como legacy)
+- ✅ Consistencia entre el PDF del diseñador y el PDF de la página de pozos
+- ✅ El PDF replica automáticamente los cambios del canvas
 - ✅ La experiencia visual es más profesional
 
 ## Cómo Revertir
 Si necesitas volver a los valores anteriores, busca los comentarios `// CAMBIO:` en:
 - `DesignCanvas.tsx` (3 cambios)
 - `pdfMakeGenerator.ts` (1 cambio)
+- `pozos/page.tsx` (1 cambio)
 
 Y restaura los valores originales indicados en los comentarios.
 
@@ -47,6 +59,7 @@ Y restaura los valores originales indicados en los comentarios.
 1. Crear una nueva figura (rectángulo, círculo, etc.) en el designer
 2. Verificar que el borde sea delgado en el canvas
 3. Hacer zoom in/out y verificar que el borde NO cambie de grosor
-4. Generar un PDF desde el Preview y verificar que el borde sea consistente
-5. Generar un PDF desde la página principal de pozos y verificar que el borde sea consistente
+4. Generar un PDF desde el Preview del diseñador y verificar que el borde sea consistente
+5. Generar un PDF desde la página principal de pozos y verificar que el borde sea idéntico al del diseñador
+
 

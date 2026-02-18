@@ -179,30 +179,15 @@ export default function PozosPage() {
         if (isCustom && customDesign) {
           // GENERACIÓN CON DISEÑO PERSONALIZADO
 
-          // Detectar si usar generador de alta fidelidad
-          const useHighFidelity = customDesign.name !== 'standard' && customDesign.placements && customDesign.placements.length > 0;
-
-          if (useHighFidelity) {
-            console.log('🎯 Usando generador de ALTA FIDELIDAD para:', customDesign.name);
-            const { generateHighFidelityPDF } = await import('@/lib/pdf/highFidelityGenerator');
-            const result = await generateHighFidelityPDF(customDesign, enrichedPozo);
-            if (result.success && result.blob) {
-              pdfBlobs.push({ name: pozoName, blob: result.blob });
-            } else {
-              console.warn('⚠️ Alta fidelidad falló, usando generador legacy');
-              const { generatePdfFromDesign } = await import('@/lib/pdf/designBasedPdfGenerator');
-              const fallbackResult = await generatePdfFromDesign(customDesign, enrichedPozo);
-              if (fallbackResult.success && fallbackResult.blob) {
-                pdfBlobs.push({ name: pozoName, blob: fallbackResult.blob });
-              }
-            }
+          // CAMBIO: Usar siempre designBasedPdfGenerator para consistencia
+          // Antes: Usaba highFidelityGenerator para diseños personalizados
+          // Razón: designBasedPdfGenerator genera bordes más consistentes y delgados
+          const { generatePdfFromDesign } = await import('@/lib/pdf/designBasedPdfGenerator');
+          const result = await generatePdfFromDesign(customDesign, enrichedPozo);
+          if (result.success && result.blob) {
+            pdfBlobs.push({ name: pozoName, blob: result.blob });
           } else {
-            // Usar generador legacy para compatibilidad
-            const { generatePdfFromDesign } = await import('@/lib/pdf/designBasedPdfGenerator');
-            const result = await generatePdfFromDesign(customDesign, enrichedPozo);
-            if (result.success && result.blob) {
-              pdfBlobs.push({ name: pozoName, blob: result.blob });
-            }
+            console.warn('⚠️ designBasedPdfGenerator falló');
           }
         } else {
           // GENERACIÓN CON DISEÑO ESTÁNDAR
