@@ -225,7 +225,9 @@ export function DesignCanvas({
                 zIndex: version.placements.length + (version.shapes?.length || 0) + 1,
                 fillColor: pendingShape === 'text' ? 'transparent' : '#E5E7EB',
                 strokeColor: '#374151',
-                strokeWidth: 1,
+                // CAMBIO: Reducir strokeWidth de 1 a 0.5 para que el borde sea más delgado
+                // Antes: strokeWidth: 1,
+                strokeWidth: 0.5,
                 content: pendingShape === 'text' ? 'Texto' : undefined,
                 fontSize: pendingShape === 'text' ? 12 : undefined,
                 fontFamily: pendingShape === 'text' ? 'Arial' : undefined,
@@ -417,7 +419,7 @@ export function DesignCanvas({
         // Agregar listeners SIEMPRE para que funcione el drag
         window.addEventListener('mousemove', handleMouseMove);
         window.addEventListener('mouseup', handleMouseUp);
-        
+
         return () => {
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
@@ -455,11 +457,11 @@ export function DesignCanvas({
                     data-shape-id={shape.id}
                     ref={isSelected && elementPage === currentPage ? selectedElementRef : null}
                     onMouseDown={(e) => handleShapeMouseDown(e, shape)}
-                    className={`absolute select-none transition-all duration-200 ${shape.isLocked
-                            ? 'cursor-not-allowed opacity-60'
-                            : isDragging && selectedShapeId === shape.id
-                                ? 'cursor-grabbing scale-105'
-                                : 'cursor-grab hover:scale-[1.02]'
+                    className={`absolute select-none transition-all duration-200 group ${shape.isLocked
+                        ? 'cursor-not-allowed opacity-60'
+                        : isDragging && selectedShapeId === shape.id
+                            ? 'cursor-grabbing scale-105'
+                            : 'cursor-grab hover:scale-[1.02]'
                         } ${isSelected ? 'ring-2 ring-emerald-500 ring-offset-2 z-50 shadow-xl' : 'hover:ring-1 hover:ring-emerald-300'}`}
                     style={{
                         left: x,
@@ -467,7 +469,9 @@ export function DesignCanvas({
                         width,
                         height,
                         backgroundColor: shape.fillColor || 'transparent',
-                        border: shape.strokeColor ? `${(shape.strokeWidth || 1) * zoom}px solid ${shape.strokeColor}` : 'none',
+                        // CAMBIO: Remover multiplicación por zoom para que el borde sea consistente
+                        // Antes: border: shape.strokeColor ? `${(shape.strokeWidth || 1) * zoom}px solid ${shape.strokeColor}` : 'none',
+                        border: shape.strokeColor ? `${shape.strokeWidth || 0.5}px solid ${shape.strokeColor}` : 'none',
                         borderRadius: shape.type === 'circle' ? '50%' : (shape.borderRadius ? `${shape.borderRadius}px` : 0),
                         opacity: shape.opacity ?? 1,
                         zIndex: shape.zIndex,
@@ -488,7 +492,9 @@ export function DesignCanvas({
                         <img src={shape.imageUrl} alt="" className="w-full h-full object-contain" />
                     )}
                     {isHeader && (
-                        <div className="absolute -top-4 left-0 bg-blue-500 text-white text-[8px] px-1 rounded uppercase font-bold">Encabezado</div>
+                        <div className="absolute -top-4 left-0 bg-blue-500 text-white text-[8px] px-1 rounded uppercase font-bold opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-[60]">
+                            Encabezado
+                        </div>
                     )}
                     {isSelected && !shape.isLocked && elementPage === currentPage && (
                         <div onMouseDown={(e) => handleResizeMouseDown(e, shape)} className="absolute bottom-0 right-0 w-3 h-3 bg-blue-500 rounded-tl cursor-nwse-resize" />
@@ -503,11 +509,11 @@ export function DesignCanvas({
                     data-placement-id={placement.id}
                     ref={isSelected && elementPage === currentPage ? selectedElementRef : null}
                     onMouseDown={(e) => handlePlacementMouseDown(e, placement)}
-                    className={`absolute select-none transition-all duration-200 ${placement.isLocked
-                            ? 'cursor-not-allowed opacity-60'
-                            : isDragging && selectedPlacementId === placement.id
-                                ? 'cursor-grabbing scale-105'
-                                : 'cursor-grab hover:scale-[1.02]'
+                    className={`absolute select-none transition-all duration-200 group ${placement.isLocked
+                        ? 'cursor-not-allowed opacity-60'
+                        : isDragging && selectedPlacementId === placement.id
+                            ? 'cursor-grabbing scale-105'
+                            : 'cursor-grab hover:scale-[1.02]'
                         } ${isSelected ? 'ring-2 ring-emerald-500 ring-offset-2 z-50 shadow-xl' : 'hover:ring-1 hover:ring-emerald-300'}`}
                     style={{
                         left: x,
@@ -518,8 +524,10 @@ export function DesignCanvas({
                         backgroundColor: placement.backgroundColor || 'rgba(255,255,255,0.9)',
                         borderRadius: placement.borderRadius ? `${placement.borderRadius}px` : 0,
                         padding: placement.padding ? `${placement.padding}px` : '4px',
+                        // CAMBIO: Remover multiplicación por zoom para que el borde sea consistente
+                        // Antes: border: placement.borderWidth ? `${placement.borderWidth * zoom}px solid ${placement.borderColor || '#e5e7eb'}` : '1px solid #e5e7eb',
                         border: placement.borderWidth
-                            ? `${placement.borderWidth * zoom}px solid ${placement.borderColor || '#e5e7eb'}`
+                            ? `${placement.borderWidth}px solid ${placement.borderColor || '#e5e7eb'}`
                             : '1px solid #e5e7eb',
                         pointerEvents: (placement.isLocked || (isHeader && currentPage !== elementPage)) ? 'none' : 'auto',
                         display: 'flex',
@@ -562,7 +570,9 @@ export function DesignCanvas({
                         </span>
                     </div>
                     {isHeader && (
-                        <div className="absolute -top-4 left-0 bg-primary text-white text-[8px] px-1 rounded uppercase font-bold">Encabezado</div>
+                        <div className="absolute -top-4 left-0 bg-primary text-white text-[8px] px-1 rounded uppercase font-bold opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-[60]">
+                            Encabezado
+                        </div>
                     )}
                     {isSelected && !placement.isLocked && elementPage === currentPage && (
                         <div onMouseDown={(e) => handleResizeMouseDown(e, placement)} className="absolute bottom-0 right-0 w-3 h-3 bg-blue-500 rounded-tl cursor-nwse-resize" />

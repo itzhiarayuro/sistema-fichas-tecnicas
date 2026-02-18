@@ -60,21 +60,22 @@ async function resolvePhotoValue(
         'foto_salida_1': 'S1',
         'foto_salida_2': 'S2',
         'foto_sumidero_1': 'SUM1',
-        'foto_sumidero_2': 'SUM2'
+        'foto_sumidero_2': 'SUM2',
+        'foto_esquema': 'L'
     };
-    
+
     const targetCode = codeMap[fieldId];
     if (!targetCode) return null;
-    
+
     // Buscar foto con criterios flexibles, excluyendo las ya usadas
     const found = pozo.fotos?.fotos?.find(f => {
         // Saltar si ya fue usada
         if (usedPhotoIds.has(f.id)) return false;
-        
+
         const subcat = String(f.subcategoria || '').toUpperCase();
         const filename = String(f.filename || '').toUpperCase();
         const tipo = String(f.tipo || '').toUpperCase();
-        
+
         return (
             subcat === targetCode ||
             subcat.includes(targetCode) ||
@@ -84,19 +85,19 @@ async function resolvePhotoValue(
             tipo === targetCode
         );
     });
-    
+
     if (!found) return null;
-    
+
     // Marcar como usada
     usedPhotoIds.add(found.id);
-    
+
     // Resolver blobId a dataUrl
     if (found.blobId) {
         return blobStore.getUrl(found.blobId);
     } else if ((found as any).dataUrl) {
         return (found as any).dataUrl;
     }
-    
+
     return null;
 }
 
@@ -109,13 +110,13 @@ async function renderShape(doc: jsPDF, shape: ShapeElement): Promise<void> {
         const hasFill = shape.fillColor && shape.fillColor !== 'transparent';
         const hasStroke = shape.strokeColor && shape.strokeColor !== 'transparent';
         const style = (hasFill && hasStroke) ? 'FD' : hasFill ? 'F' : 'S';
-        
+
         if (hasFill) doc.setFillColor(shape.fillColor!);
         if (hasStroke) {
             doc.setDrawColor(shape.strokeColor!);
             doc.setLineWidth(shape.strokeWidth || CALIBRATION.HAIRLINE_WIDTH);
         }
-        
+
         if (shape.type === 'circle') {
             const radius = Math.min(shape.width, shape.height) / 2;
             doc.ellipse(shape.x + radius, shape.y + radius, radius, radius, style);
@@ -130,28 +131,28 @@ async function renderShape(doc: jsPDF, shape: ShapeElement): Promise<void> {
             );
         }
     }
-    
+
     // Líneas
     if (shape.type === 'line') {
         doc.setDrawColor(shape.strokeColor || '#000000');
         doc.setLineWidth(shape.strokeWidth || CALIBRATION.STANDARD_BORDER);
         doc.line(shape.x, shape.y, shape.x + shape.width, shape.y + shape.height);
     }
-    
+
     // Texto
     if (shape.type === 'text' && shape.content) {
         const fontSize = shape.fontSize || 10;
         doc.setFontSize(fontSize);
         doc.setTextColor(shape.color || '#000000');
         doc.setFont('helvetica', shape.fontWeight === 'bold' ? 'bold' : 'normal');
-        
+
         const textY = shape.y + (fontSize * CALIBRATION.TEXT_BASELINE_OFFSET);
         doc.text(sanitizeText(shape.content), shape.x, textY, {
             maxWidth: shape.width,
             align: shape.textAlign || 'left'
         });
     }
-    
+
     // Imagen
     if (shape.type === 'image' && shape.imageUrl) {
         try {
@@ -182,11 +183,11 @@ async function renderPlacement(
     usedPhotoIds: Set<string>
 ): Promise<void> {
     const isPhoto = placement.fieldId.startsWith('foto_');
-    
+
     if (isPhoto) {
         // RENDERIZAR FOTO
         const imageData = await resolvePhotoValue(placement.fieldId, pozo, blobStore, usedPhotoIds);
-        
+
         if (imageData) {
             await renderPhotoCell(doc, {
                 x: placement.x,
@@ -206,13 +207,13 @@ async function renderPlacement(
             // Placeholder para foto no encontrada
             doc.setFillColor('#f9fafb');
             doc.rect(placement.x, placement.y, placement.width, placement.height, 'F');
-            
+
             if ((placement as any).borderWidth) {
                 doc.setDrawColor((placement as any).borderColor || '#d1d5db');
                 doc.setLineWidth((placement as any).borderWidth);
                 doc.rect(placement.x, placement.y, placement.width, placement.height, 'S');
             }
-            
+
             doc.setFontSize(8);
             doc.setTextColor('#9ca3af');
             doc.text(
@@ -227,7 +228,7 @@ async function renderPlacement(
         const path = FIELD_PATHS[placement.fieldId];
         const rawValue = path ? getValueByPath(pozo, path) : undefined;
         const displayValue = String(rawValue ?? '-');
-        
+
         const cell: LayeredCell = {
             box: {
                 x: placement.x,
@@ -253,7 +254,7 @@ async function renderPlacement(
                 fontWeight: placement.fontWeight
             }
         };
-        
+
         renderAtomicCell(doc, cell);
     }
 }
@@ -271,7 +272,7 @@ export async function generateHighFidelityPDF(
             placements: design.placements?.length || 0,
             shapes: design.shapes?.length || 0
         });
-        
+
         // Configurar documento
         const orientation = design.orientation === 'portrait' ? 'p' : 'l';
         const doc = new jsPDF({
@@ -279,36 +280,36 @@ export async function generateHighFidelityPDF(
             unit: 'mm',
             format: design.pageSize.toLowerCase() as any,
         });
-        
+
         // Importar blobStore
         const { blobStore } = await import('@/lib/storage/blobStore');
-        
+
         // Combinar y ordenar elementos por zIndex
         const allElements = [
             ...(design.shapes || []).map(s => ({ ...s, isShape: true })),
             ...(design.placements || []).map(p => ({ ...p, isShape: false }))
         ].sort((a, b) => (Number(a.zIndex) || 0) - (Number(b.zIndex) || 0));
-        
+
         console.log('📐 [HIGH FIDELITY] Elementos a renderizar:', allElements.length);
-        
+
         // TRACKING: Evitar que la misma foto se use múltiples veces
         const usedPhotoIds = new Set<string>();
-        
+
         // Renderizar cada página
         const numPages = design.numPages || 1;
-        
+
         for (let pageIdx = 1; pageIdx <= numPages; pageIdx++) {
             if (pageIdx > 1) doc.addPage();
-            
+
             for (const el of allElements) {
                 if (el.isVisible === false) continue;
-                
+
                 const isHeader = (el as any).repeatOnEveryPage;
                 const elementPage = (el as any).pageNumber || 1;
-                
+
                 // Solo renderizar si es header o si la página coincide
                 if (!isHeader && elementPage !== pageIdx) continue;
-                
+
                 // Manejar opacidad
                 const opacity = (el as any).opacity ?? 1;
                 if (opacity < 1) {
@@ -316,7 +317,7 @@ export async function generateHighFidelityPDF(
                 } else {
                     doc.setGState(new (doc as any).GState({ opacity: 1 }));
                 }
-                
+
                 if (el.isShape) {
                     await renderShape(doc, el as ShapeElement);
                 } else {
@@ -324,10 +325,10 @@ export async function generateHighFidelityPDF(
                 }
             }
         }
-        
+
         console.log('✅ [HIGH FIDELITY] PDF generado exitosamente');
         return { success: true, blob: doc.output('blob') };
-        
+
     } catch (error) {
         console.error('❌ [HIGH FIDELITY] Error:', error);
         return {

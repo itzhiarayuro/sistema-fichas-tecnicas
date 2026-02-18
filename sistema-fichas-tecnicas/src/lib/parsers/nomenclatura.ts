@@ -48,6 +48,8 @@ const PATTERNS = {
   SALIDA_SIN_NUMERO: /^(.+)-(S)-T$/i,
   // Sumideros: M680-SUM1, M680-SUM2
   SUMIDERO: /^(.+)-(SUM\d+)$/i,
+  // Esquema de localización: M680_ARGIS
+  ARGIS: /^(.+)_ARGIS$/i,
 };
 
 /** Descripciones legibles para tipos de fotos principales */
@@ -58,6 +60,7 @@ const TIPO_DESCRIPCION: Record<string, string> = {
   A: 'Acceso',
   F: 'Fondo',
   M: 'Medición',
+  L: 'Esquema Localización',
 };
 
 /** Descripciones para subtipos de entradas/salidas */
@@ -143,6 +146,18 @@ export function parseNomenclatura(filename: string): NomenclaturaResult {
     };
   }
 
+  // Intentar patrón ARGIS
+  match = nameWithoutExt.match(PATTERNS.ARGIS);
+  if (match) {
+    return {
+      pozoId: match[1].toUpperCase(),
+      categoria: 'PRINCIPAL',
+      subcategoria: 'L',
+      tipo: TIPO_DESCRIPCION['L'],
+      isValid: true,
+    };
+  }
+
   // No coincide con ningún patrón
   return createInvalidResult(filename, `Nomenclatura no reconocida: ${filename}`);
 }
@@ -174,6 +189,9 @@ export function buildNomenclatura(result: NomenclaturaResult): string {
 
   switch (result.categoria) {
     case 'PRINCIPAL':
+      if (result.subcategoria === 'L') {
+        return `${result.pozoId}_ARGIS`;
+      }
       return `${result.pozoId}-${result.subcategoria}`;
     case 'ENTRADA':
     case 'SALIDA':

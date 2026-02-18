@@ -243,6 +243,7 @@ export const AVAILABLE_FIELDS: AvailableField[] = [
     { id: 'foto_acceso', label: 'Foto Acceso (A)', fieldPath: 'fotos.fotos[A]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
     { id: 'foto_fondo', label: 'Foto Fondo (F)', fieldPath: 'fotos.fotos[F]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
     { id: 'foto_medicion', label: 'Foto Medición (M)', fieldPath: 'fotos.fotos[M]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+    { id: 'foto_esquema', label: 'Esquema Localización (L)', fieldPath: 'fotos.fotos[L]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
 
     // FOTOS DE COMPONENTES
     { id: 'foto_entrada_1', label: 'Foto Entrada 1', fieldPath: 'fotos.fotos[E1]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },

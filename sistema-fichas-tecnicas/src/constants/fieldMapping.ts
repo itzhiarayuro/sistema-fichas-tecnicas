@@ -111,6 +111,7 @@ export const FIELD_PATHS: Record<string, string> = {
     'foto_entrada_1': 'fotos.fotos[E1]',
     'foto_salida_1': 'fotos.fotos[S1]',
     'foto_sumidero_1': 'fotos.fotos[SUM1]',
+    'foto_esquema': 'fotos.fotos[L]',
 
     // FOTOS GENÉRICAS
     'foto_1': 'fotos.fotos[0].blobId',
@@ -168,4 +169,5 @@ export const AVAILABLE_DATA_FIELDS = [
     { id: 'foto_acceso', label: 'Foto Acceso (A)', category: 'Fotos' },
     { id: 'foto_fondo', label: 'Foto Fondo (F)', category: 'Fotos' },
     { id: 'foto_medicion', label: 'Foto Medición (M)', category: 'Fotos' },
+    { id: 'foto_esquema', label: 'Esquema Localización (L)', category: 'Fotos' },
 ];

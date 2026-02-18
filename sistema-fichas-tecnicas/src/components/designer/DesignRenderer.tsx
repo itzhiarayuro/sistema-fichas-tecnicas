@@ -105,20 +105,39 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
                 'acceso': 'A',
                 'fondo': 'F',
                 'medicion': 'M',
-                'entrada_1': 'E1-T',
-                'salida_1': 'S-T',
-                'sumidero_1': 'SUM1'
+                'entrada_1': 'E1',
+                'salida_1': 'S1',
+                'sumidero_1': 'SUM1',
+                'esquema': 'L'
             };
             const typeKey = fieldId.replace('foto_', '');
             const targetCode = codeMap[typeKey];
 
             if (targetCode) {
-                const found = pozo.fotos?.fotos?.find(f =>
-                    String(f.subcategoria || '').toUpperCase() === targetCode ||
-                    String(f.subcategoria || '').toUpperCase() === targetCode.split('-')[0] ||
-                    String(f.tipo || '').toUpperCase().includes(typeKey.toUpperCase()) ||
-                    String(f.filename || '').toUpperCase().includes(`-${targetCode}`)
+                // Prioridad 1: Coincidencia exacta de subcategoría
+                let found = pozo.fotos?.fotos?.find(f =>
+                    String(f.subcategoria || '').toUpperCase() === targetCode
                 );
+
+                // Prioridad 2: Coincidencia en el nombre de archivo (por si viene de Excel con nomenclatura en nombre)
+                if (!found) {
+                    found = pozo.fotos?.fotos?.find(f => {
+                        const filename = String(f.filename || '').toUpperCase();
+                        return filename.includes(`-${targetCode}.`) ||
+                            filename.includes(`_${targetCode}.`) ||
+                            filename.endsWith(`-${targetCode}`) ||
+                            filename.endsWith(`_${targetCode}`);
+                    });
+                }
+
+                // Prioridad 3: Coincidencia en Tipo o Categoría (fallback)
+                if (!found) {
+                    found = pozo.fotos?.fotos?.find(f =>
+                        String(f.tipo || '').toUpperCase() === typeKey.toUpperCase() ||
+                        String(f.subcategoria || '').toUpperCase().includes(targetCode)
+                    );
+                }
+
                 if (found) return found.blobId ? blobStore.getUrl(found.blobId) : (found as any).dataUrl || '-';
             }
         }
@@ -230,17 +249,21 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
                             )}
                         </div>
                     ) : isWidget ? (
-                        <div className="w-full h-full border border-gray-300 rounded overflow-hidden text-[6pt] bg-white">
-                            <div className="grid grid-cols-3 bg-gray-100 font-bold border-b border-gray-300 p-1">
-                                <span>Ø Diam</span>
+                        <div className="w-full h-full border border-gray-300 rounded overflow-hidden text-[5.5pt] bg-white">
+                            <div className="grid grid-cols-5 bg-gray-100 font-bold border-b border-gray-300 p-1">
+                                <span>#</span>
+                                <span>Ø (")</span>
                                 <span>Material</span>
                                 <span>Estado</span>
+                                <span>Batea</span>
                             </div>
-                            {(pozo.tuberias?.tuberias || []).slice(0, 8).map((t, idx) => (
-                                <div key={idx} className="grid grid-cols-3 border-b border-gray-200 p-1 last:border-0 bg-white">
-                                    <span>{t.diametro?.value || '-'}</span>
+                            {(pozo.tuberias?.tuberias || []).slice(0, 10).map((t, idx) => (
+                                <div key={idx} className="grid grid-cols-5 border-b border-gray-200 p-1 last:border-0 bg-white">
+                                    <span>{t.orden?.value || idx + 1}</span>
+                                    <span>{t.diametroPulgadas?.value || t.diametro?.value || '-'}</span>
                                     <span>{t.material?.value || '-'}</span>
                                     <span>{t.estado?.value || '-'}</span>
+                                    <span>{t.batea?.value || '-'}</span>
                                 </div>
                             ))}
                             {(pozo.tuberias?.tuberias?.length || 0) === 0 && <div className="p-2 text-center text-gray-400 italic">Sin tuberías</div>}

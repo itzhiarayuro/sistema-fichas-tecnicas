@@ -33,7 +33,7 @@ const createField = (
 });
 
 const createShape = (
-    type: 'rectangle' | 'line' | 'text' | 'circle',
+    type: 'rectangle' | 'line' | 'text' | 'circle' | 'image',
     x: number,
     y: number,
     width: number,
@@ -63,6 +63,7 @@ export const createStandardDesign = (): FichaDesignVersion => {
         orientation: 'portrait',
         unit: 'mm',
         version: '1.0.0',
+        numPages: 1,
         createdAt: now,
         updatedAt: now,
         shapes: [
@@ -106,6 +107,7 @@ export const createCompactDesign = (): FichaDesignVersion => {
         orientation: 'portrait',
         unit: 'mm',
         version: '1.0.0',
+        numPages: 1,
         createdAt: now,
         updatedAt: now,
         shapes: [
@@ -136,6 +138,7 @@ export const createEnvironmentalDesign = (): FichaDesignVersion => {
         orientation: 'portrait',
         unit: 'mm',
         version: '1.0.0',
+        numPages: 1,
         createdAt: now,
         updatedAt: now,
         shapes: [
@@ -151,7 +154,83 @@ export const createEnvironmentalDesign = (): FichaDesignVersion => {
     };
 };
 
+export const createOfficialMarinillaDesign = (): FichaDesignVersion => {
+    const now = Date.now();
+    const primaryColor = '#1e3a8a'; // Blue
+
+    return {
+        id: 'official_marinilla',
+        name: 'Formato Oficial Marinilla',
+        description: 'Réplica exacta del formato de la Secretaría de Obras Públicas',
+        isDefault: true,
+        pageSize: 'A4',
+        orientation: 'portrait',
+        unit: 'mm',
+        version: '1.2.0',
+        numPages: 1,
+        createdAt: now,
+        updatedAt: now,
+        shapes: [
+            // Borde exterior decorativo (opcional pero premium)
+            createShape('rectangle', 5, 5, 200, 287, { fillColor: 'transparent', strokeColor: '#e2e8f0', strokeWidth: 0.5, zIndex: 1 }),
+
+            // Encabezado - Contenedor principal
+            createShape('rectangle', 10, 10, 190, 25, { fillColor: 'transparent', strokeColor: '#000000', strokeWidth: 0.5, zIndex: 2, repeatOnEveryPage: true }),
+
+            // Logos (Representados por placeholders de imagen para que el usuario los reemplace)
+            createShape('image', 12, 12, 35, 21, { zIndex: 3, repeatOnEveryPage: true, opacity: 0.5 }), // Logo Izquierdo
+            createShape('image', 155, 12, 42, 21, { zIndex: 3, repeatOnEveryPage: true, opacity: 0.5 }), // Logo Derecho
+
+            // Texto Central del Encabezado
+            createShape('text', 48, 12, 105, 21, {
+                content: 'MUNICIPIO DE MARINILLA\nSECRETARIA DE OBRAS PUBLICAS\nFICHA TECNICA CAMARAS DE INSPECCION',
+                fontSize: 10,
+                fontWeight: 'bold',
+                textAlign: 'center',
+                zIndex: 3,
+                repeatOnEveryPage: true
+            }),
+
+            // Separadores de sección
+            createShape('rectangle', 10, 38, 190, 6, { fillColor: '#f3f4f6', strokeColor: '#000000', strokeWidth: 0.3, zIndex: 2 }),
+            createShape('text', 12, 39, 100, 4, { content: '1. INFORMACIÓN GENERAL Y LOCALIZACIÓN', fontSize: 8, fontWeight: 'bold' }),
+
+            createShape('rectangle', 10, 85, 190, 6, { fillColor: '#f3f4f6', strokeColor: '#000000', strokeWidth: 0.3, zIndex: 2 }),
+            createShape('text', 12, 86, 100, 4, { content: '2. CARACTERÍSTICAS TÉCNICAS', fontSize: 8, fontWeight: 'bold' }),
+        ],
+        placements: [
+            // Bloque 1: Identificación
+            createField('pozo_id', 10, 44, 40, 10, 'CÓDIGO POZO', '#000000', '#ffffff', 9),
+            createField('pozo_fecha', 50, 44, 40, 10, 'FECHA', '#000000', '#ffffff', 9),
+            createField('pozo_levanto', 90, 44, 110, 10, 'LEVANTÓ', '#000000', '#ffffff', 9),
+
+            // Bloque 2: Coordenadas
+            createField('pozo_coordX', 10, 54, 45, 10, 'ESTE (X)', '#000000', '#ffffff', 9),
+            createField('pozo_coordY', 55, 54, 45, 10, 'NORTE (Y)', '#000000', '#ffffff', 9),
+            createField('pozo_latitud', 100, 54, 50, 10, 'LATITUD', '#000000', '#ffffff', 8),
+            createField('pozo_longitud', 150, 54, 50, 10, 'LONGITUD', '#000000', '#ffffff', 8),
+
+            // Bloque 3: Ubicación
+            createField('pozo_direccion', 10, 64, 100, 10, 'DIRECCIÓN/UBICACIÓN', '#000000', '#ffffff', 9),
+            createField('pozo_barrio', 110, 64, 90, 10, 'BARRIO/SECTOR', '#000000', '#ffffff', 9),
+
+            // Bloque Esquema y Fotos
+            createField('foto_esquema', 10, 95, 90, 60, 'ESQUEMA DE LOCALIZACIÓN', '#000000', '#ffffff', 8),
+            createField('foto_panoramica', 110, 95, 90, 60, 'FOTO PANORÁMICA', '#000000', '#ffffff', 8),
+
+            // Tuberías Widget
+            createField('widget_tuberias', 10, 160, 190, 40, 'RESUMEN DE TUBERÍAS', '#000000', '#ffffff', 8),
+
+            // Fotos detalle
+            createField('foto_tapa', 10, 205, 60, 45, 'FOTO TAPA', '#000000', '#ffffff', 8),
+            createField('foto_interior', 75, 205, 60, 45, 'FOTO INTERIOR', '#000000', '#ffffff', 8),
+            createField('foto_medicion', 140, 205, 60, 45, 'FOTO MEDICIÓN', '#000000', '#ffffff', 8),
+        ]
+    };
+};
+
 export const getPresetDesigns = () => [
+    createOfficialMarinillaDesign(),
     createStandardDesign(),
     createCompactDesign(),
     createEnvironmentalDesign()

@@ -182,50 +182,46 @@ export async function generatePdfFromDesign(
                         const codeMap: Record<string, string> = {
                             'foto_panoramica': 'P', 'foto_tapa': 'T', 'foto_interior': 'I',
                             'foto_acceso': 'A', 'foto_fondo': 'F', 'foto_medicion': 'M',
-                            'foto_entrada_1': 'E1', 'foto_salida_1': 'S1', 'foto_sumidero_1': 'SUM1'
+                            'foto_entrada_1': 'E1', 'foto_salida_1': 'S1', 'foto_sumidero_1': 'SUM1',
+                            'foto_esquema': 'L'
                         };
                         const targetCode = codeMap[placement.fieldId];
+                        const typeKey = placement.fieldId.replace('foto_', '');
                         if (targetCode) {
-                            // Buscar foto con múltiples criterios
-                            const found = pozo.fotos?.fotos?.find(f => {
-                                const subcat = String(f.subcategoria || '').toUpperCase();
-                                const filename = String(f.filename || '').toUpperCase();
-                                const tipo = String(f.tipo || '').toUpperCase();
-                                const desc = String(f.descripcion || '').toUpperCase();
+                            // Buscar foto con múltiples criterios (Lógica robusta por prioridades)
+                            let found = pozo.fotos?.fotos?.find(f =>
+                                String(f.subcategoria || '').toUpperCase() === targetCode
+                            );
 
-                                // Criterios de búsqueda
-                                return (
-                                    subcat === targetCode ||
-                                    subcat.includes(targetCode) ||
-                                    filename.includes(`-${targetCode}.`) ||
-                                    filename.includes(`-${targetCode}-`) ||
-                                    filename.endsWith(`-${targetCode}`) ||
-                                    tipo === targetCode ||
-                                    desc.includes(targetCode)
+                            if (!found) {
+                                found = pozo.fotos?.fotos?.find(f => {
+                                    const filename = String(f.filename || '').toUpperCase();
+                                    return filename.includes(`-${targetCode}.`) ||
+                                        filename.includes(`_${targetCode}.`) ||
+                                        filename.endsWith(`-${targetCode}`);
+                                });
+                            }
+
+                            if (!found) {
+                                found = pozo.fotos?.fotos?.find(f =>
+                                    String(f.tipo || '').toUpperCase() === typeKey.toUpperCase() ||
+                                    String(f.subcategoria || '').toUpperCase().includes(targetCode)
                                 );
-                            });
+                            }
 
                             if (found) {
-                                console.log(`✅ Foto encontrada para ${placement.fieldId} (código ${targetCode}):`, {
-                                    filename: found.filename,
-                                    blobId: found.blobId,
-                                    subcategoria: found.subcategoria,
-                                    tipo: found.tipo
-                                });
-                                // Resolver blobId a dataUrl usando el blobStore importado
+                                console.log(`✅ Foto encontrada para ${placement.fieldId}:`, found.filename);
                                 if (found.blobId) {
                                     value = blobStore.getUrl(found.blobId);
-                                    console.log(`🔗 URL generada:`, value?.substring(0, 50) + '...');
                                 } else if ((found as any).dataUrl) {
                                     value = (found as any).dataUrl;
-                                } else {
-                                    value = found.id;
                                 }
                             } else {
                                 console.warn(`❌ No se encontró foto para ${placement.fieldId} con código ${targetCode}`);
                             }
                         }
-                    } else {
+                    }
+                    else {
                         // Campo normal
                         const path = FIELD_PATHS[placement.fieldId];
                         value = path ? getValueByPath(pozo, path) : '-';
@@ -258,7 +254,12 @@ async function renderShape(doc: jsPDF, shape: ShapeElement) {
             const radius = Math.min(shape.width, shape.height) / 2;
             doc.ellipse(shape.x + radius, shape.y + radius, radius, radius, style);
         } else if (shape.type === 'rectangle') {
-            doc.rect(shape.x, shape.y, shape.width, shape.height, style);
+            if (shape.borderRadius && shape.borderRadius > 0) {
+                const r = shape.borderRadius / 3.78; // px to mm approx
+                (doc as any).roundedRect(shape.x, shape.y, shape.width, shape.height, r, r, style);
+            } else {
+                doc.rect(shape.x, shape.y, shape.width, shape.height, style);
+            }
         } else if (shape.type === 'triangle') {
             doc.triangle(
                 shape.x + shape.width / 2, shape.y,
@@ -280,17 +281,54 @@ async function renderShape(doc: jsPDF, shape: ShapeElement) {
         doc.setFontSize(fontSize);
         doc.setTextColor(shape.color || '#000000');
         const font = getSafeFont(shape.fontFamily);
-        const fontStyle = shape.fontWeight === 'bold' ? 'bold' : 'normal';
+        const fontStyle = (shape.fontWeight === 'bold' || shape.fontWeight === 700) ? 'bold' : 'normal';
         doc.setFont(font, fontStyle);
-        doc.text(sanitizeTextForPDF(shape.content), shape.x, shape.y + (fontSize * 0.35), {
+
+        const align = shape.textAlign || 'left';
+        let x = shape.x;
+        if (align === 'center') x = shape.x + (shape.width / 2);
+        if (align === 'right') x = shape.x + shape.width;
+
+        // Centrado vertical exacto
+        const textHeightMM = fontSize * 0.3527;
+        const y = shape.y + (shape.height / 2) + (textHeightMM / 2.5); // 2.5 para centrado visual baseline
+
+        doc.text(sanitizeTextForPDF(shape.content), x, y, {
             maxWidth: shape.width,
-            align: shape.textAlign || 'left'
+            align: align
         });
     }
 
     if (shape.type === 'image' && shape.imageUrl) {
         try {
-            doc.addImage(shape.imageUrl, 'JPEG', shape.x, shape.y, shape.width, shape.height, undefined, 'FAST');
+            // Cargar imagen para obtener dimensiones y hacer Object-Fit: contain
+            const img = new Image();
+            img.src = shape.imageUrl;
+            await new Promise<void>((resolve) => {
+                img.onload = () => resolve();
+                img.onerror = () => resolve();
+                setTimeout(() => resolve(), 1000);
+            });
+
+            if (img.width > 0) {
+                const imgAspect = img.width / img.height;
+                const boxAspect = shape.width / shape.height;
+                let drawW = shape.width;
+                let drawH = shape.height;
+                let drawX = shape.x;
+                let drawY = shape.y;
+
+                if (imgAspect > boxAspect) {
+                    drawH = shape.width / imgAspect;
+                    drawY = shape.y + (shape.height - drawH) / 2;
+                } else {
+                    drawW = shape.height * imgAspect;
+                    drawX = shape.x + (shape.width - drawW) / 2;
+                }
+                doc.addImage(shape.imageUrl, 'JPEG', drawX, drawY, drawW, drawH, undefined, 'FAST');
+            } else {
+                doc.addImage(shape.imageUrl, 'JPEG', shape.x, shape.y, shape.width, shape.height, undefined, 'FAST');
+            }
         } catch (e) {
             console.warn('Could not add shape image to PDF', e);
         }
@@ -312,13 +350,17 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
         }
 
         if (placement.borderWidth && placement.borderWidth > 0) {
-            doc.setDrawColor(placement.borderColor || '#000000'); // Borde negro por defecto para grid
-            doc.setLineWidth(placement.borderWidth); // 0.1 o lo que venga del diseño
+            doc.setDrawColor(placement.borderColor || '#000000');
+            doc.setLineWidth(placement.borderWidth);
         }
 
-        // Solo dibujar rectángulo si hay estilo definido (evita bordes por defecto si no se quieren)
         if (style !== 'S' || (placement.borderWidth && placement.borderWidth > 0)) {
-            doc.rect(placement.x, placement.y, placement.width, placement.height, style);
+            if (placement.borderRadius && placement.borderRadius > 0) {
+                const r = placement.borderRadius / 3.78;
+                (doc as any).roundedRect(placement.x, placement.y, placement.width, placement.height, r, r, style);
+            } else {
+                doc.rect(placement.x, placement.y, placement.width, placement.height, style);
+            }
         }
     }
 
@@ -387,7 +429,7 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
         if (placement.fieldId === 'widget_tuberias') {
             // Renderizar tabla ocupando TODO el espacio de la caja diseñada
             const tuberias = (pozo.tuberias?.tuberias || []).slice(0, 10);
-            const headers = ['Ø (mm)', 'Material', 'Estado'];
+            const headers = ['#', 'Ø (")', 'Material', 'Estado', 'Batea'];
             const headerH = 5;
             const rowH = (placement.height - headerH) / Math.max(tuberias.length, 1);
 
@@ -400,19 +442,37 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
             doc.setFont('helvetica', 'bold');
             doc.setTextColor('#000000');
 
-            const colW = placement.width / 3;
+            // Anchos proporcionales para 5 columnas
+            const colWidths = [0.1, 0.15, 0.35, 0.2, 0.2].map(w => w * placement.width);
+            let currentX = placement.x;
+
             headers.forEach((h, i) => {
-                doc.text(h, placement.x + (i * colW) + 2, placement.y + 3.5);
+                doc.text(h, currentX + 1, placement.y + 3.5);
+                currentX += colWidths[i];
             });
 
             // Rows
             doc.setFont('helvetica', 'normal');
-            doc.setFontSize(6);
+            doc.setFontSize(5.5);
             tuberias.forEach((t, i) => {
                 const y = placement.y + headerH + (i * rowH);
-                doc.text(sanitizeTextForPDF(t.diametro?.value || '-'), placement.x + 2, y + (rowH / 2) + 1);
-                doc.text(sanitizeTextForPDF(t.material?.value || '-'), placement.x + colW + 2, y + (rowH / 2) + 1);
-                doc.text(sanitizeTextForPDF(t.estado?.value || '-'), placement.x + (colW * 2) + 2, y + (rowH / 2) + 1);
+                let curX = placement.x;
+
+                const rowData = [
+                    String(t.orden?.value || i + 1),
+                    String(t.diametroPulgadas?.value || t.diametro?.value || '-'),
+                    String(t.material?.value || '-'),
+                    String(t.estado?.value || '-'),
+                    String(t.batea?.value || '-')
+                ];
+
+                rowData.forEach((val, colIdx) => {
+                    doc.text(sanitizeTextForPDF(val), curX + 1, y + (rowH / 2) + 1, {
+                        maxWidth: colWidths[colIdx] - 1
+                    });
+                    curX += colWidths[colIdx];
+                });
+
                 // Línea divisoria
                 doc.setDrawColor('#eeeeee');
                 doc.line(placement.x, y + rowH, placement.x + placement.width, y + rowH);
@@ -421,52 +481,69 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
         return;
     }
 
-    // 4. RENDERIZAR CAMPOS DE TEXTO (Modo Grid)
+    // 4. RENDERIZAR CAMPOS DE TEXTO (Modo Grid Avanzado)
     const content = String(value ?? '');
     const fontSize = placement.fontSize || 10;
-
-    // Configurar fuente
     const font = getSafeFont(placement.fontFamily);
-    const style = placement.fontWeight === 'bold' ? 'bold' : 'normal';
-    doc.setFont(font, style);
-    doc.setTextColor(placement.color || '#000000');
+    const valueStyle = (placement.fontWeight === 'bold' || placement.fontWeight === 700) ? 'bold' : 'normal';
 
-    // A. DIBUJAR LABEL (SI EXISTE) - Estilo "Input Label" pequeño arriba
-    let valueY = placement.y + (placement.height / 2) + (fontSize * 0.35 / 2); // Centrado vertical por defecto
+    let availableValueHeight = placement.height;
+    let labelAreaHeight = 0;
 
-    if (placement.showLabel && placement.customLabel) {
-        const labelSize = 6; // Tamaño fijo pequeño para labels
-        doc.setFontSize(labelSize);
-        doc.setTextColor('#666666'); // Label gris
-        doc.text(
-            sanitizeTextForPDF(placement.customLabel),
-            placement.x + 1,
-            placement.y + 3 // Label pegado arriba
-        );
+    // A. DIBUJAR LABEL (SI EXISTE) - Soporte completo para fondos y alineación
+    if (placement.showLabel && (placement.customLabel || placement.fieldId)) {
+        const labelText = sanitizeTextForPDF(placement.customLabel || placement.fieldId);
+        const labelFontSize = placement.labelFontSize || (fontSize * 0.8);
+        const labelPadding = placement.labelPadding || 0.5;
+        const labelAlign = placement.labelAlign || 'left';
 
-        // Si hay label, bajamos un poco el valor para que no choque
-        valueY = placement.y + (placement.height) - 2;
+        // Área del label: Se asume que ocupa una franja superior por defecto como en la web
+        // jaPDF text height approx = fontSize * 0.3527 mm
+        labelAreaHeight = (labelFontSize * 0.4) + (labelPadding * 2);
 
-        // Restaurar color y fuente para el valor
-        doc.setTextColor(placement.color || '#000000');
-        doc.setFont(font, style);
+        // Fondo del label
+        if (placement.labelBackgroundColor && placement.labelBackgroundColor !== 'transparent') {
+            doc.setFillColor(placement.labelBackgroundColor);
+            doc.rect(placement.x, placement.y, placement.width, labelAreaHeight, 'F');
+        }
+
+        doc.setFontSize(labelFontSize);
+        doc.setFont(font, (placement.labelFontWeight === 'bold' || placement.labelFontWeight === 700) ? 'bold' : 'normal');
+        doc.setTextColor(placement.labelColor || '#666666');
+
+        let labelX = placement.x + labelPadding;
+        if (labelAlign === 'center') labelX = placement.x + (placement.width / 2);
+        if (labelAlign === 'right') labelX = placement.x + placement.width - labelPadding;
+
+        doc.text(labelText, labelX, placement.y + labelPadding + (labelFontSize * 0.3), {
+            align: labelAlign,
+            maxWidth: placement.width - (labelPadding * 2)
+        });
+
+        availableValueHeight -= labelAreaHeight;
     }
 
-    // B. DIBUJAR VALOR
+    // B. DIBUJAR VALOR - Centrado en el espacio restante
     doc.setFontSize(fontSize);
+    doc.setFont(font, valueStyle);
+    doc.setTextColor(placement.color || '#000000');
 
-    // Alineación
+    const padding = placement.padding || 1;
     const align = placement.textAlign || 'left';
-    let textX = placement.x + 1; // Padding izquierdo default
+
+    let textX = placement.x + padding;
     if (align === 'center') textX = placement.x + (placement.width / 2);
-    if (align === 'right') textX = placement.x + placement.width - 1;
+    if (align === 'right') textX = placement.x + placement.width - padding;
+
+    // Calcular Y para centrado vertical en el área restante
+    const textY = placement.y + labelAreaHeight + (availableValueHeight / 2) + (fontSize * 0.15);
 
     doc.text(
         sanitizeTextForPDF(content),
         textX,
-        valueY,
+        textY,
         {
-            maxWidth: placement.width - 2,
+            maxWidth: placement.width - (padding * 2),
             align: align
         }
     );
@@ -653,13 +730,13 @@ async function generateStandardLayout(doc: jsPDF, pozo: Pozo, design: FichaDesig
     }
 
     // 8. PIE DE PÁGINA (opcional)
-    const pageCount = doc.getNumberOfPages();
-    for (let i = 1; i <= pageCount; i++) {
+    const pageCountStandard = doc.getNumberOfPages();
+    for (let i = 1; i <= pageCountStandard; i++) {
         doc.setPage(i);
         doc.setFontSize(8);
         doc.setTextColor('#999999');
         doc.text(
-            `Página ${i} de ${pageCount}`,
+            `Página ${i} de ${pageCountStandard}`,
             pageWidth / 2,
             pageHeight - 10,
             { align: 'center' }
