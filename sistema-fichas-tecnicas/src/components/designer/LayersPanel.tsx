@@ -121,37 +121,41 @@ export function LayersPanel({
                             key={item.id}
                             ref={isSelected ? selectedItemRef : null}
                             onClick={() => item.isShape ? onSelectShape(item.id) : onSelectPlacement(item.id)}
-                            className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md cursor-pointer group border transition-all ${isSelected
-                                    ? 'bg-gradient-to-r from-emerald-50 to-green-50 border-emerald-300 shadow-md ring-2 ring-emerald-200'
+                            className={`flex items-center gap-1.5 px-3 py-2.5 rounded-lg cursor-pointer group border-2 transition-all ${isSelected
+                                    ? 'bg-gradient-to-r from-emerald-100 via-green-100 to-emerald-100 border-emerald-500 shadow-xl ring-4 ring-emerald-300 scale-105 animate-pulse'
                                     : 'bg-white border-transparent hover:bg-gray-50 hover:border-gray-200 hover:shadow-sm'
                                 }`}
                         >
                             {/* Icono Tipo */}
-                            <div className={`${isSelected ? 'text-emerald-600' : 'text-gray-400'}`}>
+                            <div className={`${isSelected ? 'text-emerald-700 scale-125' : 'text-gray-400'}`}>
                                 {item.isShape ? (
-                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5z" />
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5z" />
                                     </svg>
                                 ) : (
-                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
                                     </svg>
                                 )}
                             </div>
 
                             {/* Label con indicador de personalización */}
                             <div className="flex-1 min-w-0">
-                                <span className={`text-xs truncate block ${
+                                <span className={`text-sm truncate block ${
                                     isSelected 
-                                        ? 'font-bold text-emerald-800' 
+                                        ? 'font-extrabold text-emerald-900 text-base' 
                                         : (item as any).hasCustomLabel 
                                             ? 'font-semibold text-gray-800'
                                             : 'font-medium text-gray-600'
                                 }`}>
+                                    {isSelected && '👉 '}
                                     {item.label}
                                 </span>
                                 {(item as any).hasCustomLabel && !isSelected && (
                                     <span className="text-[8px] text-primary uppercase tracking-wide">Personalizado</span>
+                                )}
+                                {isSelected && (
+                                    <span className="text-[10px] text-emerald-700 font-bold uppercase tracking-wide">← SELECCIONADO</span>
                                 )}
                             </div>
 
