@@ -118,33 +118,31 @@ export default function DesignerPage() {
 
     const handleSelectPlacement = (id: string | null) => {
         console.log('🔵 handleSelectPlacement llamado con id:', id);
-        console.log('🔵 Panel de capas abierto:', designerPanels.showLayers);
         
         setSelectedPlacementId(id);
         setSelectedShapeId(null);
         setPendingShape(null);
         setPendingField(null);
         
-        // Abrir panel de capas si hay selección y no está abierto
-        if (id && !designerPanels.showLayers) {
-            console.log('🔵 Abriendo panel de capas...');
-            toggleDesignerPanel('layers');
+        // Abrir panel de propiedades si hay selección y no está abierto
+        if (id && !designerPanels.showProperties) {
+            console.log('🔵 Abriendo panel de propiedades...');
+            toggleDesignerPanel('properties');
         }
     };
 
     const handleSelectShape = (id: string | null) => {
         console.log('🟢 handleSelectShape llamado con id:', id);
-        console.log('🟢 Panel de capas abierto:', designerPanels.showLayers);
         
         setSelectedShapeId(id);
         setSelectedPlacementId(null);
         setPendingShape(null);
         setPendingField(null);
         
-        // Abrir panel de capas si hay selección y no está abierto
-        if (id && !designerPanels.showLayers) {
-            console.log('🟢 Abriendo panel de capas...');
-            toggleDesignerPanel('layers');
+        // Abrir panel de propiedades si hay selección y no está abierto
+        if (id && !designerPanels.showProperties) {
+            console.log('🟢 Abriendo panel de propiedades...');
+            toggleDesignerPanel('properties');
         }
     };
 
