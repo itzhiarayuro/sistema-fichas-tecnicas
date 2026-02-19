@@ -12,22 +12,24 @@ import { useEffect, useRef, useState } from 'react';
 
 interface LayersPanelProps {
     version: FichaDesignVersion | null;
-    selectedPlacementId: string | null;
-    selectedShapeId: string | null;
-    onSelectPlacement: (id: string | null) => void;
-    onSelectShape: (id: string | null) => void;
 }
 
 export function LayersPanel({
     version,
-    selectedPlacementId,
-    selectedShapeId,
-    onSelectPlacement,
-    onSelectShape
 }: LayersPanelProps) {
-    const { updatePlacement, updateShape, createGroup, ungroupElements, updateGroup } = useDesignStore();
+    const {
+        selectedPlacementId,
+        selectedShapeId,
+        setSelectedPlacementId,
+        setSelectedShapeId,
+        updatePlacement,
+        updateShape,
+        createGroup,
+        ungroupElements,
+        updateGroup
+    } = useDesignStore();
     const selectedItemRef = useRef<HTMLDivElement>(null);
-    
+
     // Estado para selección múltiple
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -71,18 +73,18 @@ export function LayersPanel({
 
     // Combinar y ordenar para mostrar (Mayor Z-Index arriba en la lista visualmente, user expectation)
     const allElements = [
-        ...safeShapes.map(s => ({ 
-            ...s, 
+        ...safeShapes.map(s => ({
+            ...s,
             isShape: true,
             isGroup: false,
-            label: s.type === 'text' && s.content 
+            label: s.type === 'text' && s.content
                 ? `Texto: ${s.content.substring(0, 20)}${s.content.length > 20 ? '...' : ''}`
-                : s.type === 'image' 
+                : s.type === 'image'
                     ? 'Imagen'
                     : `${s.type.charAt(0).toUpperCase() + s.type.slice(1)}`
         })),
-        ...safePlacements.map(p => ({ 
-            ...p, 
+        ...safePlacements.map(p => ({
+            ...p,
             isShape: false,
             isGroup: false,
             label: p.customLabel || `Campo ${p.fieldId}`,
@@ -151,11 +153,9 @@ export function LayersPanel({
         } else {
             // Selección simple
             if (item.isShape) {
-                onSelectShape(item.id);
-                onSelectPlacement(null);
+                setSelectedShapeId(item.id);
             } else {
-                onSelectPlacement(item.id);
-                onSelectShape(null);
+                setSelectedPlacementId(item.id);
             }
         }
     };
@@ -164,8 +164,8 @@ export function LayersPanel({
         if (selectedIds.length < 2) return;
         const groupId = createGroup(version.id, selectedIds, `Grupo ${(version.groups?.length || 0) + 1}`);
         setSelectedIds([]);
-        onSelectPlacement(null);
-        onSelectShape(null);
+        setSelectedPlacementId(null);
+        setSelectedShapeId(null);
     };
 
     const handleUngroup = (e: React.MouseEvent, groupId: string) => {
@@ -187,7 +187,7 @@ export function LayersPanel({
     };
 
     const renderElement = (item: any, isChild = false) => {
-        const isSelected = selectedIds.includes(item.id) || 
+        const isSelected = selectedIds.includes(item.id) ||
             (item.isShape ? selectedShapeId === item.id : selectedPlacementId === item.id);
 
         if (isSelected) {
@@ -196,7 +196,7 @@ export function LayersPanel({
 
         if (item.isGroup) {
             const isCollapsed = collapsedGroups.has(item.id);
-            const childElements = allElements.filter(el => 
+            const childElements = allElements.filter(el =>
                 !el.isGroup && (el as any).groupId === item.id
             );
 
@@ -205,11 +205,10 @@ export function LayersPanel({
                     <div
                         ref={isSelected ? selectedItemRef : null}
                         onClick={(e) => toggleGroupCollapse(e, item.id)}
-                        className={`flex items-center gap-1.5 px-3 py-2.5 rounded-lg cursor-pointer group border-2 transition-all ${
-                            isSelected
+                        className={`flex items-center gap-1.5 px-3 py-2.5 rounded-lg cursor-pointer group border-2 transition-all ${isSelected
                                 ? 'bg-gradient-to-r from-purple-100 via-indigo-100 to-purple-100 border-purple-500 shadow-xl ring-4 ring-purple-300'
                                 : 'bg-gradient-to-r from-purple-50 to-indigo-50 border-purple-200 hover:border-purple-300 hover:shadow-sm'
-                        }`}
+                            }`}
                     >
                         {/* Icono de grupo con expand/collapse */}
                         <button
@@ -293,19 +292,17 @@ export function LayersPanel({
                 key={item.id}
                 ref={isSelected ? selectedItemRef : null}
                 onClick={(e) => handleItemClick(e, item)}
-                className={`flex items-center gap-1.5 px-3 py-2.5 rounded-lg cursor-pointer group border-2 transition-all ${
-                    isChild ? 'ml-0' : ''
-                } ${
-                    isSelected
+                className={`flex items-center gap-1.5 px-3 py-2.5 rounded-lg cursor-pointer group border-2 transition-all ${isChild ? 'ml-0' : ''
+                    } ${isSelected
                         ? 'bg-gradient-to-r from-emerald-100 via-green-100 to-emerald-100 border-emerald-500 shadow-xl ring-4 ring-emerald-300 scale-105'
                         : 'bg-white border-transparent hover:bg-gray-50 hover:border-gray-200 hover:shadow-sm'
-                }`}
+                    }`}
             >
                 {/* Checkbox para selección múltiple */}
                 <input
                     type="checkbox"
                     checked={selectedIds.includes(item.id)}
-                    onChange={() => {}}
+                    onChange={() => { }}
                     className="w-3 h-3 text-emerald-600 rounded"
                     onClick={(e) => e.stopPropagation()}
                 />
@@ -325,13 +322,12 @@ export function LayersPanel({
 
                 {/* Label con indicador de personalización */}
                 <div className="flex-1 min-w-0">
-                    <span className={`text-sm truncate block ${
-                        isSelected 
-                            ? 'font-extrabold text-emerald-900 text-base' 
-                            : (item as any).hasCustomLabel 
+                    <span className={`text-sm truncate block ${isSelected
+                            ? 'font-extrabold text-emerald-900 text-base'
+                            : (item as any).hasCustomLabel
                                 ? 'font-semibold text-gray-800'
                                 : 'font-medium text-gray-600'
-                    }`}>
+                        }`}>
                         {isSelected && '👉 '}
                         {item.label}
                     </span>

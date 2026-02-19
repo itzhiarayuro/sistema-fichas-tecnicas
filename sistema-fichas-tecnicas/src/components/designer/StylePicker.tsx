@@ -5,8 +5,6 @@ import type { FieldPlacement, ShapeElement } from '@/types/fichaDesign';
 
 interface StylePickerProps {
     version: any;
-    selectedPlacementId: string | null;
-    selectedShapeId: string | null;
     onApplyStyle: (style: any) => void;
 }
 
@@ -32,7 +30,10 @@ interface CapturedStyle {
     labelAlign?: string;
 }
 
-export function StylePicker({ version, selectedPlacementId, selectedShapeId, onApplyStyle }: StylePickerProps) {
+import { useDesignStore } from '@/stores/designStore';
+
+export function StylePicker({ version, onApplyStyle }: StylePickerProps) {
+    const { selectedPlacementId, selectedShapeId } = useDesignStore();
     const [capturedStyle, setCapturedStyle] = useState<CapturedStyle | null>(null);
     const [copied, setCopied] = useState(false);
 

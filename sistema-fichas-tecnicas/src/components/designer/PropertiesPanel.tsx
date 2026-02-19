@@ -12,12 +12,21 @@ import { StylePicker } from './StylePicker';
 
 interface PropertiesPanelProps {
     version: FichaDesignVersion | null;
-    selectedPlacementId: string | null;
-    selectedShapeId: string | null;
 }
 
-export function PropertiesPanel({ version, selectedPlacementId, selectedShapeId }: PropertiesPanelProps) {
-    const { updatePlacement, removePlacement, updateShape, removeShape } = useDesignStore();
+export function PropertiesPanel({ version }: PropertiesPanelProps) {
+    const {
+        selectedPlacementId,
+        selectedShapeId,
+        setSelectedPlacementId,
+        setSelectedShapeId,
+        updatePlacement,
+        removePlacement,
+        updateShape,
+        removeShape,
+        addPlacement,
+        addShape
+    } = useDesignStore();
 
     if (!version || (!selectedPlacementId && !selectedShapeId)) {
         return (
@@ -64,24 +73,61 @@ export function PropertiesPanel({ version, selectedPlacementId, selectedShapeId 
         }
     };
 
+    const handleDuplicate = () => {
+        if (!version) return;
+        if (placement) {
+            const newId = addPlacement(version.id, { ...placement, x: placement.x + 5, y: placement.y + 5 });
+            setSelectedPlacementId(newId);
+        } else if (shape) {
+            const newId = addShape(version.id, { ...shape, x: shape.x + 5, y: shape.y + 5 });
+            setSelectedShapeId(newId);
+        }
+    };
+
     // Render para SHAPES
     if (shape) {
         return (
             <aside className="w-full bg-white border-l border-gray-200 overflow-y-auto h-full">
                 <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 sticky top-0 z-10">
-                    <div className="flex items-center justify-between mb-2">
-                        <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wider">Propiedades</h2>
-                        <button
-                            onClick={handleDelete}
-                            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-all"
-                        >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                        </button>
+                    <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                            <div className="bg-white p-1.5 rounded-lg shadow-sm">
+                                <svg className="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                            </div>
+                            <h2 className="text-sm font-bold text-gray-800 uppercase tracking-tight">Propiedades</h2>
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <button
+                                onClick={handleDuplicate}
+                                className="p-2 text-indigo-600 hover:bg-indigo-100 rounded-lg transition-all"
+                                title="Duplicar"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+                                </svg>
+                            </button>
+                            <button
+                                onClick={handleDelete}
+                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                title="Eliminar"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                            </button>
+                        </div>
                     </div>
-                    <div className="text-xs text-gray-600 bg-white/80 px-2 py-1 rounded">
-                        <span className="font-semibold capitalize">{shape.type}</span>
+                    <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold text-indigo-600 bg-white px-2 py-0.5 rounded-full shadow-sm border border-indigo-100 uppercase">
+                            {shape.type}
+                        </span>
+                        {shape.groupId && (
+                            <span className="text-[10px] font-bold text-purple-600 bg-white px-2 py-0.5 rounded-full shadow-sm border border-purple-100 uppercase">
+                                En Grupo
+                            </span>
+                        )}
                     </div>
                 </div>
 
@@ -89,8 +135,6 @@ export function PropertiesPanel({ version, selectedPlacementId, selectedShapeId 
                     {/* Style Picker */}
                     <StylePicker
                         version={version}
-                        selectedPlacementId={selectedPlacementId}
-                        selectedShapeId={selectedShapeId}
                         onApplyStyle={handleApplyStyle}
                     />
 
@@ -390,32 +434,90 @@ export function PropertiesPanel({ version, selectedPlacementId, selectedShapeId 
         <aside className="w-full bg-white border-l border-gray-200 overflow-y-auto h-full">
             {/* Header */}
             <div className="p-4 border-b border-gray-200 bg-gradient-to-r from-primary/5 to-purple/5 sticky top-0 z-10">
-                <div className="flex items-center justify-between mb-2">
-                    <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wider">Propiedades</h2>
-                    <button
-                        onClick={handleDelete}
-                        className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-all"
-                        title="Eliminar campo"
-                    >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                    </button>
+                <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                        <div className="bg-white p-1.5 rounded-lg shadow-sm border border-primary/20">
+                            <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                            </svg>
+                        </div>
+                        <h2 className="text-sm font-bold text-gray-800 uppercase tracking-tight">Propiedades Campo</h2>
+                    </div>
+                    <div className="flex items-center gap-1">
+                        <button
+                            onClick={handleDuplicate}
+                            className="p-2 text-primary hover:bg-primary/10 rounded-lg transition-all"
+                            title="Duplicar"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+                            </svg>
+                        </button>
+                        <button
+                            onClick={handleDelete}
+                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                            title="Eliminar campo"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                        </button>
+                    </div>
                 </div>
                 {field && (
-                    <div className="text-xs text-gray-600 bg-white/80 px-2 py-1 rounded">
-                        <span className="font-semibold">{field.label}</span>
-                        <span className="text-gray-400 ml-2">({field.category})</span>
+                    <div className="text-[10px] text-gray-600 bg-white/80 px-3 py-1.5 rounded-full border border-gray-200 inline-flex items-center gap-2">
+                        <span className="font-bold text-gray-800">{field.label}</span>
+                        <span className="w-1 h-1 bg-gray-300 rounded-full"></span>
+                        <span className="text-gray-500 uppercase">{field.category}</span>
                     </div>
                 )}
             </div>
 
             <div className="p-4 space-y-6">
+                {/* SECCIÓN 0: ETIQUETA / TEXTO (Prioridad Máxima del Usuario) */}
+                <section className="bg-gradient-to-br from-primary/10 to-purple/10 p-4 rounded-xl border-2 border-primary/20 space-y-3">
+                    <div className="flex items-center gap-2">
+                        <div className="bg-primary text-white p-1 rounded">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                        </div>
+                        <h3 className="text-xs font-bold text-primary uppercase tracking-wider">Texto del Campo</h3>
+                    </div>
+
+                    <div>
+                        <label className="text-[10px] text-primary/70 mb-1.5 block font-bold uppercase">Nombre Personalizado</label>
+                        <input
+                            type="text"
+                            value={placement.customLabel || ''}
+                            onChange={(e) => handleUpdate({ customLabel: e.target.value })}
+                            placeholder={field?.label || 'Escribe aquí...'}
+                            className="w-full bg-white border-2 border-primary/30 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all shadow-sm"
+                        />
+                        <p className="text-[9px] text-gray-500 mt-2 leading-tight">
+                            Este texto aparecerá en la etiqueta si está activada y servirá para identificar el elemento.
+                        </p>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2">
+                        <label className="flex items-center gap-2 cursor-pointer group">
+                            <div className={`w-8 h-4 rounded-full transition-all relative ${placement.showLabel ? 'bg-primary' : 'bg-gray-300'}`}>
+                                <input
+                                    type="checkbox"
+                                    checked={placement.showLabel}
+                                    onChange={(e) => handleUpdate({ showLabel: e.target.checked })}
+                                    className="sr-only"
+                                />
+                                <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${placement.showLabel ? 'left-4.5' : 'left-0.5'}`} />
+                            </div>
+                            <span className="text-xs font-bold text-gray-700">Mostrar Etiqueta</span>
+                        </label>
+                    </div>
+                </section>
+
                 {/* Style Picker */}
                 <StylePicker
                     version={version}
-                    selectedPlacementId={selectedPlacementId}
-                    selectedShapeId={selectedShapeId}
                     onApplyStyle={handleApplyStyle}
                 />
 

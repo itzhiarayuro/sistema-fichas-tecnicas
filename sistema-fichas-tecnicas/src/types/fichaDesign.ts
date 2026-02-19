@@ -27,10 +27,10 @@ export interface GroupElement {
     height: number; // mm
     zIndex: number;
     pageNumber?: number; // 1-5
-    
+
     // IDs de los elementos que contiene
     childIds: string[]; // IDs de FieldPlacement o ShapeElement
-    
+
     // Estado del grupo
     isVisible?: boolean;
     isLocked?: boolean;
@@ -162,6 +162,10 @@ export interface DesignState {
     past: Record<string, FichaDesignVersion[]>; // versionId -> history
     future: Record<string, FichaDesignVersion[]>; // versionId -> future
 
+    // Selection State (Global para evitar desincronización)
+    selectedPlacementId: string | null;
+    selectedShapeId: string | null;
+
     // Acciones
     createVersion: (name: string, description?: string) => string;
     addVersion: (version: FichaDesignVersion) => void;
@@ -201,6 +205,10 @@ export interface DesignState {
     // History
     undo: () => void;
     redo: () => void;
+
+    // Selection Actions
+    setSelectedPlacementId: (id: string | null) => void;
+    setSelectedShapeId: (id: string | null) => void;
 }
 
 // 70 Campos disponibles del sistema

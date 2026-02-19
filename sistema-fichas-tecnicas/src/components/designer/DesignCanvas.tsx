@@ -11,10 +11,6 @@ import { useDesignStore } from '@/stores/designStore';
 
 interface DesignCanvasProps {
     version: FichaDesignVersion | null;
-    selectedPlacementId: string | null;
-    selectedShapeId: string | null;
-    onSelectPlacement: (id: string | null) => void;
-    onSelectShape: (id: string | null) => void;
     zoom: number;
     snapToGrid: boolean;
     gridSize: number;
@@ -26,10 +22,6 @@ interface DesignCanvasProps {
 
 export function DesignCanvas({
     version,
-    selectedPlacementId,
-    selectedShapeId,
-    onSelectPlacement,
-    onSelectShape,
     zoom,
     snapToGrid,
     gridSize,
@@ -38,7 +30,18 @@ export function DesignCanvas({
     pendingImageData,
     onShapeAdded
 }: DesignCanvasProps) {
-    const { updatePlacement, addPlacement, removePlacement, updateShape, addShape, removeShape } = useDesignStore();
+    const {
+        selectedPlacementId,
+        selectedShapeId,
+        setSelectedPlacementId,
+        setSelectedShapeId,
+        updatePlacement,
+        addPlacement,
+        removePlacement,
+        updateShape,
+        addShape,
+        removeShape
+    } = useDesignStore();
 
     // Refs para scroll automático
     const selectedElementRef = useRef<HTMLDivElement>(null);
@@ -96,8 +99,7 @@ export function DesignCanvas({
                         zIndex: version.placements.length + (version.shapes?.length || 0) + 1,
                     };
                     const newId = addPlacement(version.id, newPlacement);
-                    onSelectPlacement(newId);
-                    onSelectShape(null);
+                    setSelectedPlacementId(newId);
                     console.log('✅ Campo pegado con offset');
                 } else if (copiedElement.type === 'shape') {
                     const original = copiedElement.data as ShapeElement;
@@ -108,8 +110,7 @@ export function DesignCanvas({
                         zIndex: version.placements.length + (version.shapes?.length || 0) + 1,
                     };
                     const newId = addShape(version.id, newShape);
-                    onSelectShape(newId);
-                    onSelectPlacement(null);
+                    setSelectedShapeId(newId);
                     console.log('✅ Figura pegada con offset');
                 }
             }
@@ -129,7 +130,7 @@ export function DesignCanvas({
                             zIndex: version.placements.length + (version.shapes?.length || 0) + 1,
                         };
                         const newId = addPlacement(version.id, newPlacement);
-                        onSelectPlacement(newId);
+                        setSelectedPlacementId(newId);
                         console.log('✅ Campo duplicado');
                     }
                 } else if (selectedShapeId) {
@@ -142,7 +143,7 @@ export function DesignCanvas({
                             zIndex: version.placements.length + (version.shapes?.length || 0) + 1,
                         };
                         const newId = addShape(version.id, newShape);
-                        onSelectShape(newId);
+                        setSelectedShapeId(newId);
                         console.log('✅ Figura duplicada');
                     }
                 }
@@ -152,10 +153,10 @@ export function DesignCanvas({
             if (e.key === 'Delete') {
                 if (selectedPlacementId) {
                     removePlacement(version.id, selectedPlacementId);
-                    onSelectPlacement(null);
+                    setSelectedPlacementId(null);
                 } else if (selectedShapeId) {
                     removeShape(version.id, selectedShapeId);
-                    onSelectShape(null);
+                    setSelectedShapeId(null);
                 }
             }
 
@@ -180,7 +181,7 @@ export function DesignCanvas({
 
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [version, selectedPlacementId, selectedShapeId, copiedElement, removePlacement, removeShape, onSelectPlacement, onSelectShape, updatePlacement, updateShape, addPlacement, addShape]);
+    }, [version, selectedPlacementId, selectedShapeId, copiedElement, removePlacement, removeShape, setSelectedPlacementId, setSelectedShapeId, updatePlacement, updateShape, addPlacement, addShape]);
 
 
     // Refs para evitar lag de re-renderizado durante drag
@@ -361,9 +362,9 @@ export function DesignCanvas({
         }
 
         // Si no hay nada pendiente, deseleccionar
-        onSelectPlacement(null);
-        onSelectShape(null);
-    }, [pendingShape, pendingField, version, zoom, snapValue, onSelectPlacement, onSelectShape]);
+        setSelectedPlacementId(null);
+        setSelectedShapeId(null);
+    }, [pendingShape, pendingField, version, zoom, snapValue, setSelectedPlacementId, setSelectedShapeId]);
 
 
     // Drag de placements existentes
@@ -373,8 +374,7 @@ export function DesignCanvas({
         if (placement.isLocked) return;
 
         // Seleccionar SIEMPRE cuando se hace clic
-        onSelectPlacement(placement.id);
-        onSelectShape(null);
+        setSelectedPlacementId(placement.id);
 
         // Preparar para drag (pero no iniciar aún)
         dragElementTypeRef.current = 'placement';
@@ -386,7 +386,7 @@ export function DesignCanvas({
             initialY: placement.y,
         };
         console.log('🟡 Drag preparado - dragStartRef:', dragStartRef.current);
-    }, [onSelectPlacement, onSelectShape]);
+    }, [setSelectedPlacementId]);
 
     // Drag de shapes existentes
     const handleShapeMouseDown = useCallback((e: React.MouseEvent, shape: ShapeElement) => {
@@ -394,8 +394,7 @@ export function DesignCanvas({
         if (shape.isLocked) return;
 
         // Seleccionar SIEMPRE cuando se hace clic
-        onSelectShape(shape.id);
-        onSelectPlacement(null);
+        setSelectedShapeId(shape.id);
 
         // Preparar para drag (pero no iniciar aún)
         dragElementTypeRef.current = 'shape';
@@ -406,7 +405,7 @@ export function DesignCanvas({
             initialX: shape.x,
             initialY: shape.y,
         };
-    }, [onSelectShape, onSelectPlacement]);
+    }, [setSelectedShapeId]);
 
     const handleMouseMove = useCallback((e: MouseEvent) => {
         if (!version) return;
@@ -493,9 +492,9 @@ export function DesignCanvas({
 
         // Asegurar que el elemento está seleccionado
         if ('fieldId' in item) {
-            onSelectPlacement(item.id);
+            setSelectedPlacementId(item.id);
         } else {
-            onSelectShape(item.id);
+            setSelectedShapeId(item.id);
         }
 
         isResizingRef.current = true;
@@ -506,7 +505,7 @@ export function DesignCanvas({
             initialH: item.height,
         };
         setIsResizing(true);
-    }, [onSelectPlacement, onSelectShape]);
+    }, []);
 
     useEffect(() => {
         // Agregar listeners SIEMPRE para que funcione el drag

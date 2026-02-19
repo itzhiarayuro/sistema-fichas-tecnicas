@@ -36,6 +36,8 @@ export const useDesignStore = create<DesignState>()(
             currentVersionId: null,
             past: {},
             future: {},
+            selectedPlacementId: null,
+            selectedShapeId: null,
 
             // History Actions
             undo: () => {
@@ -226,7 +228,15 @@ export const useDesignStore = create<DesignState>()(
             },
 
             setCurrentVersion: (id) => {
-                set({ currentVersionId: id });
+                set({ currentVersionId: id, selectedPlacementId: null, selectedShapeId: null });
+            },
+
+            setSelectedPlacementId: (id) => {
+                set({ selectedPlacementId: id, selectedShapeId: id ? null : get().selectedShapeId });
+            },
+
+            setSelectedShapeId: (id) => {
+                set({ selectedShapeId: id, selectedPlacementId: id ? null : get().selectedPlacementId });
             },
 
             // Persistencia externa
@@ -403,20 +413,20 @@ export const useDesignStore = create<DesignState>()(
                 set((state) => {
                     const version = state.versions.find(v => v.id === versionId);
                     if (!version) return state;
-                    
+
                     // Calcular bounding box de los elementos
                     const elements = [
                         ...version.placements.filter(p => elementIds.includes(p.id)),
                         ...version.shapes.filter(s => elementIds.includes(s.id))
                     ];
-                    
+
                     if (elements.length === 0) return state;
-                    
+
                     const minX = Math.min(...elements.map(e => e.x));
                     const minY = Math.min(...elements.map(e => e.y));
                     const maxX = Math.max(...elements.map(e => e.x + e.width));
                     const maxY = Math.max(...elements.map(e => e.y + e.height));
-                    
+
                     const newGroup = {
                         id: groupId,
                         type: 'group' as const,
@@ -430,7 +440,7 @@ export const useDesignStore = create<DesignState>()(
                         isVisible: true,
                         isLocked: false
                     };
-                    
+
                     const newPast = [...(state.past[versionId] || []), version].slice(-20);
 
                     return {
@@ -438,10 +448,10 @@ export const useDesignStore = create<DesignState>()(
                             v.id === versionId ? {
                                 ...v,
                                 groups: [...(v.groups || []), newGroup],
-                                placements: v.placements.map(p => 
+                                placements: v.placements.map(p =>
                                     elementIds.includes(p.id) ? { ...p, groupId } : p
                                 ),
-                                shapes: v.shapes.map(s => 
+                                shapes: v.shapes.map(s =>
                                     elementIds.includes(s.id) ? { ...s, groupId } : s
                                 ),
                                 updatedAt: Date.now()
@@ -482,7 +492,7 @@ export const useDesignStore = create<DesignState>()(
                     if (!version) return state;
                     const group = version.groups?.find(g => g.id === groupId);
                     if (!group) return state;
-                    
+
                     const newPast = [...(state.past[versionId] || []), version].slice(-20);
 
                     return {
@@ -512,10 +522,10 @@ export const useDesignStore = create<DesignState>()(
                             v.id === versionId ? {
                                 ...v,
                                 groups: (v.groups || []).filter((g) => g.id !== groupId),
-                                placements: v.placements.map(p => 
+                                placements: v.placements.map(p =>
                                     p.groupId === groupId ? { ...p, groupId: undefined } : p
                                 ),
-                                shapes: v.shapes.map(s => 
+                                shapes: v.shapes.map(s =>
                                     s.groupId === groupId ? { ...s, groupId: undefined } : s
                                 ),
                                 updatedAt: Date.now()
@@ -533,20 +543,20 @@ export const useDesignStore = create<DesignState>()(
                     if (!version) return state;
                     const group = version.groups?.find(g => g.id === groupId);
                     if (!group) return state;
-                    
+
                     const newPast = [...(state.past[versionId] || []), version].slice(-20);
 
                     return {
                         versions: state.versions.map((v) =>
                             v.id === versionId ? {
                                 ...v,
-                                groups: (v.groups || []).map(g => 
+                                groups: (v.groups || []).map(g =>
                                     g.id === groupId ? { ...g, childIds: [...g.childIds, ...elementIds] } : g
                                 ),
-                                placements: v.placements.map(p => 
+                                placements: v.placements.map(p =>
                                     elementIds.includes(p.id) ? { ...p, groupId } : p
                                 ),
-                                shapes: v.shapes.map(s => 
+                                shapes: v.shapes.map(s =>
                                     elementIds.includes(s.id) ? { ...s, groupId } : s
                                 ),
                                 updatedAt: Date.now()
@@ -564,20 +574,20 @@ export const useDesignStore = create<DesignState>()(
                     if (!version) return state;
                     const group = version.groups?.find(g => g.id === groupId);
                     if (!group) return state;
-                    
+
                     const newPast = [...(state.past[versionId] || []), version].slice(-20);
 
                     return {
                         versions: state.versions.map((v) =>
                             v.id === versionId ? {
                                 ...v,
-                                groups: (v.groups || []).map(g => 
+                                groups: (v.groups || []).map(g =>
                                     g.id === groupId ? { ...g, childIds: g.childIds.filter(id => !elementIds.includes(id)) } : g
                                 ),
-                                placements: v.placements.map(p => 
+                                placements: v.placements.map(p =>
                                     elementIds.includes(p.id) ? { ...p, groupId: undefined } : p
                                 ),
-                                shapes: v.shapes.map(s => 
+                                shapes: v.shapes.map(s =>
                                     elementIds.includes(s.id) ? { ...s, groupId: undefined } : s
                                 ),
                                 updatedAt: Date.now()
@@ -594,7 +604,7 @@ export const useDesignStore = create<DesignState>()(
                 const state = get();
                 if (!state.currentVersionId) return null;
                 const version = state.versions.find((v) => v.id === state.currentVersionId) || null;
-                
+
                 // Asegurar que la versión tiene todos los campos requeridos
                 if (version) {
                     return {
@@ -609,7 +619,7 @@ export const useDesignStore = create<DesignState>()(
 
             getVersionById: (id) => {
                 const version = get().versions.find((v) => v.id === id);
-                
+
                 // Asegurar que la versión tiene todos los campos requeridos
                 if (version) {
                     return {
@@ -628,7 +638,7 @@ export const useDesignStore = create<DesignState>()(
             // Migración automática para asegurar que todas las versiones tengan el campo groups
             migrate: (persistedState: any, version: number) => {
                 console.log('🔧 Ejecutando migración de store...');
-                
+
                 if (persistedState && persistedState.versions && Array.isArray(persistedState.versions)) {
                     persistedState.versions = persistedState.versions.map((v: any) => {
                         const migrated = {
@@ -637,7 +647,7 @@ export const useDesignStore = create<DesignState>()(
                             shapes: Array.isArray(v.shapes) ? v.shapes : [],
                             placements: Array.isArray(v.placements) ? v.placements : []
                         };
-                        
+
                         if (!Array.isArray(v.groups) || !Array.isArray(v.shapes) || !Array.isArray(v.placements)) {
                             console.log('✅ Versión migrada:', v.id, {
                                 hadGroups: Array.isArray(v.groups),
@@ -645,11 +655,11 @@ export const useDesignStore = create<DesignState>()(
                                 hadPlacements: Array.isArray(v.placements)
                             });
                         }
-                        
+
                         return migrated;
                     });
                 }
-                
+
                 console.log('✅ Migración completada');
                 return persistedState;
             }

@@ -26,11 +26,19 @@ import type { AvailableField, ShapeType } from '@/types/fichaDesign';
 
 export default function DesignerPage() {
     const [mounted, setMounted] = useState(false);
-    const { versions, currentVersionId, setCurrentVersion, createVersion, getCurrentVersion, addVersion } = useDesignStore();
+    const {
+        versions,
+        currentVersionId,
+        setCurrentVersion,
+        addVersion,
+        getCurrentVersion,
+        selectedPlacementId,
+        selectedShapeId,
+        setSelectedPlacementId,
+        setSelectedShapeId
+    } = useDesignStore();
     const { addToast, designerPanels, setDesignerPanelWidth, toggleDesignerPanel } = useUIStore();
 
-    const [selectedPlacementId, setSelectedPlacementId] = useState<string | null>(null);
-    const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null);
     const [zoom, setZoom] = useState(0.6);
     const [snapToGrid, setSnapToGrid] = useState(true);
     const [gridSize, setGridSize] = useState(5);
@@ -80,8 +88,6 @@ export default function DesignerPage() {
 
     const handleVersionSelect = (id: string) => {
         setCurrentVersion(id);
-        setSelectedPlacementId(null);
-        setSelectedShapeId(null);
     };
 
     const handleFieldDragStart = (field: AvailableField) => {
@@ -111,53 +117,13 @@ export default function DesignerPage() {
         setPendingShape('image');
         setPendingField(null);
         setPendingImageData(imageData);
-        setSelectedPlacementId(null);
-        setSelectedShapeId(null);
         addToast({ type: 'info', message: 'Haz clic en el canvas para agregar la imagen' });
     };
 
-    const handleSelectPlacement = (id: string | null) => {
-        console.log('🔵 handleSelectPlacement llamado con id:', id);
-        
-        setSelectedPlacementId(id);
-        setSelectedShapeId(null);
-        setPendingShape(null);
-        setPendingField(null);
-        
-        // Abrir panel de propiedades si hay selección y no está abierto
-        if (id && !designerPanels.showProperties) {
-            console.log('🔵 Abriendo panel de propiedades...');
-            toggleDesignerPanel('properties');
-        }
-    };
-
-    const handleSelectShape = (id: string | null) => {
-        console.log('🟢 handleSelectShape llamado con id:', id);
-        
-        setSelectedShapeId(id);
-        setSelectedPlacementId(null);
-        setPendingShape(null);
-        setPendingField(null);
-        
-        // Abrir panel de propiedades si hay selección y no está abierto
-        if (id && !designerPanels.showProperties) {
-            console.log('🟢 Abriendo panel de propiedades...');
-            toggleDesignerPanel('properties');
-        }
-    };
-
-    // Handlers para selección desde el panel de capas (SÍ abre propiedades)
+    // Handlers para selección
     const handleSelectPlacementFromLayers = (id: string | null) => {
         setSelectedPlacementId(id);
-        setSelectedShapeId(null);
-        setPendingShape(null);
-        setPendingField(null);
-        
-        // Abrir propiedades cuando se selecciona desde capas
-        if (id && !designerPanels.showProperties) {
-            toggleDesignerPanel('properties');
-        }
-        
+
         // Scroll al elemento en el canvas si existe
         if (id) {
             setTimeout(() => {
@@ -171,15 +137,7 @@ export default function DesignerPage() {
 
     const handleSelectShapeFromLayers = (id: string | null) => {
         setSelectedShapeId(id);
-        setSelectedPlacementId(null);
-        setPendingShape(null);
-        setPendingField(null);
-        
-        // Abrir propiedades cuando se selecciona desde capas
-        if (id && !designerPanels.showProperties) {
-            toggleDesignerPanel('properties');
-        }
-        
+
         // Scroll al elemento en el canvas si existe
         if (id) {
             setTimeout(() => {
@@ -190,6 +148,14 @@ export default function DesignerPage() {
             }, 100);
         }
     };
+
+    // useEffect para abrir propiedades cuando hay selección
+    useEffect(() => {
+        if ((selectedPlacementId || selectedShapeId) && !designerPanels.showProperties) {
+            console.log('🟣 useEffect: Abriendo panel de propiedades...');
+            toggleDesignerPanel('properties');
+        }
+    }, [selectedPlacementId, selectedShapeId, designerPanels.showProperties, toggleDesignerPanel]);
 
     // Keyboard Shortcuts for Undo/Redo
     useEffect(() => {
@@ -377,10 +343,6 @@ export default function DesignerPage() {
                             >
                                 <LayersPanel
                                     version={currentVersion}
-                                    selectedPlacementId={selectedPlacementId}
-                                    selectedShapeId={selectedShapeId}
-                                    onSelectPlacement={handleSelectPlacementFromLayers}
-                                    onSelectShape={handleSelectShapeFromLayers}
                                 />
                             </div>
                             {/* Mobile drawer for layers */}
@@ -396,10 +358,6 @@ export default function DesignerPage() {
                                 <div className="flex-1 overflow-y-auto overflow-x-hidden" style={{ height: 'calc(100% - 52px)' }}>
                                     <LayersPanel
                                         version={currentVersion}
-                                        selectedPlacementId={selectedPlacementId}
-                                        selectedShapeId={selectedShapeId}
-                                        onSelectPlacement={(id) => { handleSelectPlacementFromLayers(id); setDesignerPanelWidth('layers', 0); }}
-                                        onSelectShape={(id) => { handleSelectShapeFromLayers(id); setDesignerPanelWidth('layers', 0); }}
                                     />
                                 </div>
                             </div>
@@ -424,19 +382,19 @@ export default function DesignerPage() {
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <p className="text-xs font-bold text-emerald-700 mb-2 uppercase tracking-wide">Seleccionado</p>
-                                        
+
                                         {/* Nombre del elemento */}
                                         <div className="bg-white rounded-md p-2 mb-2 border border-emerald-200">
                                             <p className="text-sm font-bold text-emerald-900 truncate">
-                                                {selectedPlacementId 
-                                                    ? (currentVersion.placements.find(p => p.id === selectedPlacementId)?.customLabel || 
-                                                       `Campo ${currentVersion.placements.find(p => p.id === selectedPlacementId)?.fieldId}`)
+                                                {selectedPlacementId
+                                                    ? (currentVersion.placements.find(p => p.id === selectedPlacementId)?.customLabel ||
+                                                        `Campo ${currentVersion.placements.find(p => p.id === selectedPlacementId)?.fieldId}`)
                                                     : selectedShapeId
                                                         ? (() => {
                                                             const shape = currentVersion.shapes?.find(s => s.id === selectedShapeId);
-                                                            return shape?.type === 'text' && shape.content 
+                                                            return shape?.type === 'text' && shape.content
                                                                 ? `Texto: ${shape.content.substring(0, 20)}${shape.content.length > 20 ? '...' : ''}`
-                                                                : shape?.type === 'image' 
+                                                                : shape?.type === 'image'
                                                                     ? 'Imagen'
                                                                     : shape?.type ? shape.type.charAt(0).toUpperCase() + shape.type.slice(1) : 'Elemento';
                                                         })()
@@ -456,7 +414,7 @@ export default function DesignerPage() {
                                 </div>
                             </div>
                         )}
-                        
+
                         {(pendingShape || pendingField) && (
                             <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-purple-600 text-white px-4 py-2 rounded-lg shadow-lg z-10 flex items-center gap-2">
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -475,17 +433,13 @@ export default function DesignerPage() {
                         )}
                         <DesignCanvas
                             version={currentVersion}
-                            selectedPlacementId={selectedPlacementId}
-                            selectedShapeId={selectedShapeId}
-                            onSelectPlacement={handleSelectPlacement}
-                            onSelectShape={handleSelectShape}
                             zoom={zoom}
                             snapToGrid={snapToGrid}
                             gridSize={gridSize}
                             pendingShape={pendingShape}
                             pendingField={pendingField}
                             pendingImageData={pendingImageData}
-                            onShapeAdded={() => { setPendingShape(null); setPendingField(null); }}
+                            onShapeAdded={() => { setPendingShape(null); setPendingField(null); setPendingImageData(null); }}
                         />
                     </main>
 
@@ -500,8 +454,6 @@ export default function DesignerPage() {
                             <div style={{ width: designerPanels.propertiesWidth }} className="flex-shrink-0 flex overflow-hidden border-l border-gray-200">
                                 <PropertiesPanel
                                     version={currentVersion}
-                                    selectedPlacementId={selectedPlacementId}
-                                    selectedShapeId={selectedShapeId}
                                 />
                             </div>
                         </>
