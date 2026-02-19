@@ -275,7 +275,7 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
                     {isPhoto ? (
                         <div className="w-full h-full relative">
                             {(value && value !== '-') && (
-                                <img src={typeof value === 'string' && value.startsWith('data:') ? value : blobStore.getUrl(String(value))} alt="" className="w-full h-full object-cover" />
+                                <img src={typeof value === 'string' && value.startsWith('data:') ? value : blobStore.getUrl(String(value))} alt="" className="w-full h-full object-contain" />
                             )}
                         </div>
                     ) : isWidget ? (

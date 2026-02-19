@@ -451,7 +451,7 @@ export function DesignPreview({ version, isOpen, onClose }: DesignPreviewProps) 
                                                 <img
                                                     src={displayValue.startsWith('data:') ? displayValue : blobStore.getUrl(displayValue)}
                                                     alt=""
-                                                    className="w-full h-full object-cover"
+                                                    className="w-full h-full object-contain"
                                                     onError={(e) => {
                                                         const target = e.target as HTMLImageElement;
                                                         target.style.display = 'none';

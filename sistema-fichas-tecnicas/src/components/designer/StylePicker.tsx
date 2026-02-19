@@ -9,6 +9,8 @@ interface StylePickerProps {
 }
 
 interface CapturedStyle {
+    width?: number;
+    height?: number;
     fontSize?: number;
     fontFamily?: string;
     color?: string;
@@ -42,6 +44,8 @@ export function StylePicker({ version, onApplyStyle }: StylePickerProps) {
             // Es un FieldPlacement
             const placement = element as FieldPlacement;
             return {
+                width: placement.width,
+                height: placement.height,
                 fontSize: placement.fontSize,
                 fontFamily: placement.fontFamily,
                 color: placement.color,
@@ -63,6 +67,8 @@ export function StylePicker({ version, onApplyStyle }: StylePickerProps) {
             // Es un ShapeElement
             const shape = element as ShapeElement;
             return {
+                width: shape.width,
+                height: shape.height,
                 fontSize: shape.fontSize,
                 fontFamily: shape.fontFamily,
                 color: shape.color,
@@ -147,6 +153,21 @@ export function StylePicker({ version, onApplyStyle }: StylePickerProps) {
             {capturedStyle && (
                 <div className="bg-white rounded border border-slate-200 p-3 space-y-2">
                     <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Estilos Capturados</div>
+
+                    {/* Dimensiones */}
+                    {(capturedStyle.width || capturedStyle.height) && (
+                        <div className="space-y-1">
+                            <div className="text-xs font-medium text-slate-600">Dimensiones</div>
+                            <div className="text-xs text-slate-600 space-y-0.5 ml-2">
+                                {capturedStyle.width && (
+                                    <div>Ancho: <span className="font-mono font-semibold">{capturedStyle.width}mm</span></div>
+                                )}
+                                {capturedStyle.height && (
+                                    <div>Alto: <span className="font-mono font-semibold">{capturedStyle.height}mm</span></div>
+                                )}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Tipografía */}
                     {(capturedStyle.fontSize || capturedStyle.fontFamily || capturedStyle.color) && (
