@@ -81,8 +81,8 @@ export function DesignPreview({ version, isOpen, onClose }: DesignPreviewProps) 
                             <button
                                 onClick={() => setPreviewMode('design')}
                                 className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${previewMode === 'design'
-                                        ? 'bg-white text-primary shadow-sm'
-                                        : 'text-gray-600 hover:text-gray-800'
+                                    ? 'bg-white text-primary shadow-sm'
+                                    : 'text-gray-600 hover:text-gray-800'
                                     }`}
                             >
                                 Diseño
@@ -90,8 +90,8 @@ export function DesignPreview({ version, isOpen, onClose }: DesignPreviewProps) 
                             <button
                                 onClick={() => setPreviewMode('data')}
                                 className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${previewMode === 'data'
-                                        ? 'bg-white text-primary shadow-sm'
-                                        : 'text-gray-600 hover:text-gray-800'
+                                    ? 'bg-white text-primary shadow-sm'
+                                    : 'text-gray-600 hover:text-gray-800'
                                     }`}
                                 disabled={pozos.size === 0}
                             >
@@ -248,7 +248,8 @@ export function DesignPreview({ version, isOpen, onClose }: DesignPreviewProps) 
                                                 opacity: shape.opacity ?? 1,
                                                 zIndex: shape.zIndex,
                                                 display: 'flex',
-                                                alignItems: 'center'
+                                                alignItems: 'center',
+                                                justifyContent: shape.textAlign === 'center' ? 'center' : (shape.textAlign === 'right' ? 'flex-end' : 'flex-start')
                                             }}
                                         >
                                             {shape.content || 'Texto'}

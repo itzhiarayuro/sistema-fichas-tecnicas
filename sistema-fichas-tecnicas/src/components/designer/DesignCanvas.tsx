@@ -575,6 +575,7 @@ export function DesignCanvas({
                             fontFamily: shape.fontFamily || 'Arial',
                             color: shape.color || '#000',
                             textAlign: shape.textAlign || 'left',
+                            justifyContent: shape.textAlign === 'center' ? 'center' : (shape.textAlign === 'right' ? 'flex-end' : 'flex-start'),
                             fontWeight: shape.fontWeight || 'normal'
                         }}>
                             {shape.content}

@@ -646,27 +646,39 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
     const lineHeightMM = fontSize * 0.3527;
     const textY = placement.y + labelAreaHeight + (availableContentHeight / 2) + (lineHeightMM / 2.5);
 
-    (doc as any).text(
-        sanitizeTextForPDF(content),
-        textX,
-        textY,
-        {
-            maxWidth: placement.width - (padding * 2),
-            align: align,
-            link: link ? { url: link } : undefined
-        } as any
-    );
-
-    // Si hay link, dibujar línea de subrayado manual (jsPDF no lo hace bien con link)
+    const textContent = sanitizeTextForPDF(content);
+    
+    // Renderizar texto con o sin enlace
     if (link && content && content !== '-') {
-        const textWidth = doc.getTextWidth(content);
-        let lineX = textX;
-        if (align === 'center') lineX = textX - (textWidth / 2);
-        if (align === 'right') lineX = textX - textWidth;
-
+        // Calcular dimensiones del texto para el área del enlace
+        const textWidth = doc.getTextWidth(textContent);
+        let linkX = textX;
+        
+        if (align === 'center') linkX = textX - (textWidth / 2);
+        if (align === 'right') linkX = textX - textWidth;
+        
+        // Renderizar el texto
+        doc.text(textContent, textX, textY, {
+            maxWidth: placement.width - (padding * 2),
+            align: align
+        });
+        
+        // Crear el área clickeable del enlace
+        const linkWidth = Math.min(textWidth, placement.width - (padding * 2));
+        const linkHeight = fontSize * 0.4; // Altura aproximada del texto
+        
+        doc.link(linkX, textY - linkHeight, linkWidth, linkHeight, { url: link });
+        
+        // Dibujar línea de subrayado
         doc.setDrawColor('#0000FF');
         doc.setLineWidth(0.1);
-        doc.line(lineX, textY + 0.5, lineX + Math.min(textWidth, placement.width - (padding * 2)), textY + 0.5);
+        doc.line(linkX, textY + 0.5, linkX + linkWidth, textY + 0.5);
+    } else {
+        // Texto sin enlace
+        doc.text(textContent, textX, textY, {
+            maxWidth: placement.width - (padding * 2),
+            align: align
+        });
     }
 }
 

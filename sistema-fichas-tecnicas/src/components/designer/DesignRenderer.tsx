@@ -162,7 +162,8 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
                             fontSize: `${(shape.fontSize || 12) * zoom}pt`,
                             fontFamily: shape.fontFamily || 'Inter',
                             color: shape.color || '#000',
-                            textAlign: shape.textAlign || 'left'
+                            textAlign: shape.textAlign || 'left',
+                            justifyContent: shape.textAlign === 'center' ? 'center' : (shape.textAlign === 'right' ? 'flex-end' : 'flex-start')
                         }}>
                             {shape.content}
                         </div>
