@@ -91,13 +91,14 @@ export function DesignPreview({ version, isOpen, onClose }: DesignPreviewProps) 
                         // INTERNAS
                         if (upperTarget === 'I') {
                             return filename === 'I' || filename === 'F-I' || filename === 'II' ||
-                                /^I\d?$/.test(filename) || /^I\(\d+\)$/.test(filename);
+                                /^I\d?$/.test(filename) || /^I\(\d+\)$/.test(filename) || filename.includes('-I');
                         }
 
                         // ENTRADAS
                         if (upperTarget.startsWith('E')) {
                             const num = upperTarget.replace('E', '');
                             if (num === '1' && (filename === 'E-T' || filename.includes('-E-T'))) return true;
+                            // Busca "E1" o "E-1" o "E1-T" o "F-E1-T"
                             const regex = new RegExp(`(^|[\\-_])E${num}([\\-_\\.]|$)`);
                             return regex.test(filename) || filename.includes(`F-E${num}`);
                         }
@@ -106,7 +107,7 @@ export function DesignPreview({ version, isOpen, onClose }: DesignPreviewProps) 
                         if (upperTarget.startsWith('S') && !upperTarget.startsWith('SUM')) {
                             const num = upperTarget.replace('S', '');
                             if (num === '1') {
-                                if (filename === 'S' || filename === 'S-T' || filename === 'S-HS' || filename === 'F-S-T') return true;
+                                if (filename === 'S' || filename === 'S-T' || filename === 'S-HS' || filename === 'F-S-T' || filename.includes('-S-T') || filename.includes('-S-HS') || new RegExp('(^|[\\-_])S([\\-_\\.]|$)').test(filename)) return true;
                             }
                             const regex = new RegExp(`(^|[\\-_])S${num}([\\-_\\.]|$)`);
                             return regex.test(filename) || regex.test(filename.replace(/-/g, '')) || filename.includes(`F-S${num}`);

@@ -115,7 +115,7 @@ export async function generatePdfFromDesign(
 
                     if (upperTarget === 'P') return filename === 'P' || filename === 'F-P' || filename === 'S-P' || filename.includes('-P');
                     if (upperTarget === 'T') return filename === 'T' || filename === 'F-T' || filename === 'TT' || filename.includes('-T');
-                    if (upperTarget === 'I') return filename === 'I' || filename === 'F-I' || filename === 'II' || /^I\d?$/.test(filename) || /^I\(\d+\)$/.test(filename);
+                    if (upperTarget === 'I') return filename === 'I' || filename === 'F-I' || filename === 'II' || /^I\d?$/.test(filename) || /^I\(\d+\)$/.test(filename) || filename.includes('-I');
                     if (upperTarget.startsWith('E')) {
                         const num = upperTarget.replace('E', '');
                         if (num === '1' && (filename === 'E-T' || filename.includes('-E-T'))) return true;
@@ -123,7 +123,7 @@ export async function generatePdfFromDesign(
                     }
                     if (upperTarget.startsWith('S') && !upperTarget.startsWith('SUM')) {
                         const num = upperTarget.replace('S', '');
-                        if (num === '1' && (filename === 'S' || filename === 'S-T' || filename === 'S-HS' || filename === 'F-S-T')) return true;
+                        if (num === '1' && (filename === 'S' || filename === 'S-T' || filename === 'S-HS' || filename === 'F-S-T' || filename.includes('-S-T') || filename.includes('-S-HS') || new RegExp('(^|[\\-_])S([\\-_\\.]|$)').test(filename))) return true;
                         return new RegExp(`(^|[\\-_])S${num}([\\-_\\.]|$)`).test(filename) || new RegExp(`(^|[\\-_])S${num}([\\-_\\.]|$)`).test(filename.replace(/-/g, '')) || filename.includes(`F-S${num}`);
                     }
                     if (upperTarget.startsWith('SUM')) {

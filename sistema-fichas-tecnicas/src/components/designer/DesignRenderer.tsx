@@ -86,7 +86,7 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
                         // INTERNAS
                         if (upperTarget === 'I') {
                             return filename === 'I' || filename === 'F-I' || filename === 'II' ||
-                                /^I\d?$/.test(filename) || /^I\(\d+\)$/.test(filename);
+                                /^I\d?$/.test(filename) || /^I\(\d+\)$/.test(filename) || filename.includes('-I');
                         }
 
                         // ENTRADAS
@@ -102,7 +102,7 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
                         if (upperTarget.startsWith('S') && !upperTarget.startsWith('SUM')) {
                             const num = upperTarget.replace('S', '');
                             if (num === '1') {
-                                if (filename === 'S' || filename === 'S-T' || filename === 'S-HS' || filename === 'F-S-T') return true;
+                                if (filename === 'S' || filename === 'S-T' || filename === 'S-HS' || filename === 'F-S-T' || filename.includes('-S-T') || filename.includes('-S-HS') || new RegExp('(^|[\\-_])S([\\-_\\.]|$)').test(filename)) return true;
                             }
                             const regex = new RegExp(`(^|[\\-_])S${num}([\\-_\\.]|$)`);
                             return regex.test(filename) || regex.test(filename.replace(/-/g, '')) || filename.includes(`F-S${num}`);

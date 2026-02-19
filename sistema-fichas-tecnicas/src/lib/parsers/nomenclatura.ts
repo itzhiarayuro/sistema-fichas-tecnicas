@@ -76,66 +76,51 @@ const SUBTIPO_DESCRIPCION: Record<string, string> = {
  * @returns Resultado del parsing con información estructurada
  */
 export function parseNomenclatura(filename: string): NomenclaturaResult {
-  // Remover extensión si existe
   const nameWithoutExt = filename.replace(/\.[^/.]+$/, '').trim();
 
   if (!nameWithoutExt) {
     return createInvalidResult(filename, 'Nombre de archivo vacío');
   }
 
-  // Intentar patrón PRINCIPAL
-  let match = nameWithoutExt.match(PATTERNS.PRINCIPAL);
-  if (match) {
-    let tipoCode = match[2].toUpperCase();
-    if (tipoCode === 'AT') tipoCode = 'A'; // Normalizar Acceso Tapa -> Acceso
-    return {
-      pozoId: match[1].toUpperCase(),
-      categoria: 'PRINCIPAL',
-      subcategoria: tipoCode,
-      tipo: TIPO_DESCRIPCION[tipoCode] || tipoCode,
-      isValid: true,
-    };
-  }
-
-  // Intentar patrón ENTRADA
-  match = nameWithoutExt.match(PATTERNS.ENTRADA);
+  // 1. Intentar patrón ENTRADA (Más específico)
+  let match = nameWithoutExt.match(PATTERNS.ENTRADA);
   if (match) {
     const entradaNum = match[2].toUpperCase();
     return {
       pozoId: match[1].toUpperCase(),
       categoria: 'ENTRADA',
-      subcategoria: entradaNum, // Limpio: E1, E2...
+      subcategoria: entradaNum,
       tipo: `Entrada ${entradaNum.slice(1)} - Tubería`,
       isValid: true,
     };
   }
 
-  // Intentar patrón SALIDA con número
+  // 2. Intentar patrón SALIDA con número
   match = nameWithoutExt.match(PATTERNS.SALIDA_CON_NUMERO);
   if (match) {
     const salidaNum = match[2].toUpperCase();
     return {
       pozoId: match[1].toUpperCase(),
       categoria: 'SALIDA',
-      subcategoria: salidaNum, // Limpio: S1, S2...
+      subcategoria: salidaNum,
       tipo: `Salida ${salidaNum.slice(1)} - Tubería`,
       isValid: true,
     };
   }
 
-  // Intentar patrón SALIDA sin número
+  // 3. Intentar patrón SALIDA sin número (Ej: M001-S-T)
   match = nameWithoutExt.match(PATTERNS.SALIDA_SIN_NUMERO);
   if (match) {
     return {
       pozoId: match[1].toUpperCase(),
       categoria: 'SALIDA',
-      subcategoria: `S1`, // Mapear S -> S1 automáticamente
+      subcategoria: `S1`,
       tipo: `Salida 1 - Tubería`,
       isValid: true,
     };
   }
 
-  // Intentar patrón SUMIDERO
+  // 4. Intentar patrón SUMIDERO
   match = nameWithoutExt.match(PATTERNS.SUMIDERO);
   if (match) {
     const sumideroId = match[2].toUpperCase();
@@ -149,7 +134,7 @@ export function parseNomenclatura(filename: string): NomenclaturaResult {
     };
   }
 
-  // Intentar patrón DESCARGA
+  // 5. Intentar patrón DESCARGA
   match = nameWithoutExt.match(PATTERNS.DESCARGA);
   if (match) {
     const descId = match[2].toUpperCase();
@@ -167,7 +152,7 @@ export function parseNomenclatura(filename: string): NomenclaturaResult {
     };
   }
 
-  // Intentar patrón ARGIS
+  // 6. Intentar patrón ARGIS (Esquema)
   match = nameWithoutExt.match(PATTERNS.ARGIS);
   if (match) {
     return {
@@ -175,6 +160,20 @@ export function parseNomenclatura(filename: string): NomenclaturaResult {
       categoria: 'PRINCIPAL',
       subcategoria: 'L',
       tipo: TIPO_DESCRIPCION['L'],
+      isValid: true,
+    };
+  }
+
+  // 7. Intentar patrón PRINCIPAL (Al final, para evitar capturar falsos positivos de T)
+  match = nameWithoutExt.match(PATTERNS.PRINCIPAL);
+  if (match) {
+    let tipoCode = match[2].toUpperCase();
+    if (tipoCode === 'AT') tipoCode = 'A';
+    return {
+      pozoId: match[1].toUpperCase(),
+      categoria: 'PRINCIPAL',
+      subcategoria: tipoCode,
+      tipo: TIPO_DESCRIPCION[tipoCode] || tipoCode,
       isValid: true,
     };
   }
