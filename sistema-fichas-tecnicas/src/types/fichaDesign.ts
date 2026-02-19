@@ -232,7 +232,7 @@ export const AVAILABLE_FIELDS: AvailableField[] = [
 
     { id: 'pozo_sistema', label: 'Sistema', fieldPath: 'componentes.sistema.value', category: 'pozo', isRepeatable: false, defaultWidth: 60, defaultHeight: 10 },
     { id: 'pozo_tipoCamara', label: 'Tipo de Cámara', fieldPath: 'componentes.tipoCamara.value', category: 'pozo', isRepeatable: false, defaultWidth: 70, defaultHeight: 10 },
-    { id: 'pozo_estructuraPavimento', label: 'Estructura de Pavimento', fieldPath: 'componentes.estructuraPavimento.value', category: 'pozo', isRepeatable: false, defaultWidth: 80, defaultHeight: 10 },
+    { id: 'pozo_estructuraPavimento', label: 'Rasante', fieldPath: 'componentes.estructuraPavimento.value', category: 'pozo', isRepeatable: false, defaultWidth: 80, defaultHeight: 10 },
     { id: 'pozo_materialRasante', label: 'Material Rasante', fieldPath: 'componentes.materialRasante.value', category: 'pozo', isRepeatable: false, defaultWidth: 60, defaultHeight: 10 },
     { id: 'pozo_estadoRasante', label: 'Estado Rasante', fieldPath: 'componentes.estadoRasante.value', category: 'pozo', isRepeatable: false, defaultWidth: 60, defaultHeight: 10 },
     { id: 'pozo_existeTapa', label: 'Existe Tapa', fieldPath: 'componentes.existeTapa.value', category: 'pozo', isRepeatable: false, defaultWidth: 40, defaultHeight: 10 },
@@ -303,10 +303,34 @@ export const AVAILABLE_FIELDS: AvailableField[] = [
     { id: 'foto_medicion', label: 'Foto Medición (M)', fieldPath: 'fotos.fotos[M]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
     { id: 'foto_esquema', label: 'Esquema Localización (L)', fieldPath: 'fotos.fotos[L]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
 
-    // FOTOS DE COMPONENTES
+    // FOTOS DE COMPONENTES (Entradas, Salidas, Sumideros, Descargas 1-6)
     { id: 'foto_entrada_1', label: 'Foto Entrada 1', fieldPath: 'fotos.fotos[E1]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
-    { id: 'foto_salida_1', label: 'Foto Salida', fieldPath: 'fotos.fotos[S1]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+    { id: 'foto_entrada_2', label: 'Foto Entrada 2', fieldPath: 'fotos.fotos[E2]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+    { id: 'foto_entrada_3', label: 'Foto Entrada 3', fieldPath: 'fotos.fotos[E3]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+    { id: 'foto_entrada_4', label: 'Foto Entrada 4', fieldPath: 'fotos.fotos[E4]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+    { id: 'foto_entrada_5', label: 'Foto Entrada 5', fieldPath: 'fotos.fotos[E5]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+    { id: 'foto_entrada_6', label: 'Foto Entrada 6', fieldPath: 'fotos.fotos[E6]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+
+    { id: 'foto_salida_1', label: 'Foto Salida 1', fieldPath: 'fotos.fotos[S1]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+    { id: 'foto_salida_2', label: 'Foto Salida 2', fieldPath: 'fotos.fotos[S2]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+    { id: 'foto_salida_3', label: 'Foto Salida 3', fieldPath: 'fotos.fotos[S3]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+    { id: 'foto_salida_4', label: 'Foto Salida 4', fieldPath: 'fotos.fotos[S4]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+    { id: 'foto_salida_5', label: 'Foto Salida 5', fieldPath: 'fotos.fotos[S5]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+    { id: 'foto_salida_6', label: 'Foto Salida 6', fieldPath: 'fotos.fotos[S6]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+
     { id: 'foto_sumidero_1', label: 'Foto Sumidero 1', fieldPath: 'fotos.fotos[SUM1]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+    { id: 'foto_sumidero_2', label: 'Foto Sumidero 2', fieldPath: 'fotos.fotos[SUM2]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+    { id: 'foto_sumidero_3', label: 'Foto Sumidero 3', fieldPath: 'fotos.fotos[SUM3]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+    { id: 'foto_sumidero_4', label: 'Foto Sumidero 4', fieldPath: 'fotos.fotos[SUM4]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+    { id: 'foto_sumidero_5', label: 'Foto Sumidero 5', fieldPath: 'fotos.fotos[SUM5]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+    { id: 'foto_sumidero_6', label: 'Foto Sumidero 6', fieldPath: 'fotos.fotos[SUM6]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+
+    { id: 'foto_descarga_1', label: 'Foto Descarga 1', fieldPath: 'fotos.fotos[D1]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+    { id: 'foto_descarga_2', label: 'Foto Descarga 2', fieldPath: 'fotos.fotos[D2]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+    { id: 'foto_descarga_3', label: 'Foto Descarga 3', fieldPath: 'fotos.fotos[D3]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+    { id: 'foto_descarga_4', label: 'Foto Descarga 4', fieldPath: 'fotos.fotos[D4]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+    { id: 'foto_descarga_5', label: 'Foto Descarga 5', fieldPath: 'fotos.fotos[D5]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+    { id: 'foto_descarga_6', label: 'Foto Descarga 6', fieldPath: 'fotos.fotos[D6]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
 
     // FOTOS GENÉRICAS (Hasta 12 slots)
     { id: 'foto_1', label: 'Foto 1', fieldPath: 'fotos.fotos[0].blobId', category: 'fotos', isRepeatable: true, defaultWidth: 60, defaultHeight: 45 },

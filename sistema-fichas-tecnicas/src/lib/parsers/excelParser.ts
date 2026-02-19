@@ -86,6 +86,7 @@ const COLUMN_MAPPING: Record<string, string> = {
   'ano_de_instalacion': 'anoInstalacion',
   'año_de_instalacion': 'anoInstalacion',
   'tipo_camara': 'tipoCamara',
+  'rasante': 'estructuraPavimento',
   'estructura_pavimento': 'estructuraPavimento',
   'estructura_de_pavimento': 'estructuraPavimento',
   'material_rasante': 'materialRasante',

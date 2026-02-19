@@ -6,7 +6,7 @@
  * - Sistema (🟢 Opcional)
  * - Año de instalación (🟢 Opcional)
  * - Tipo de cámara (🟢 Opcional)
- * - Estructura de pavimento (🟢 Opcional)
+ * - Rasante (🟢 Opcional)
  * - Tapa (material, estado, existencia) (🟠 Importante)
  * - Cono (tipo, material, estado, existencia) (🟢 Opcional)
  * - Cuerpo (diámetro, material, estado, existencia) (🟠 Importante)
@@ -223,7 +223,7 @@ export function EstructuraSection({
               showSource={true}
             />
             <TextEditor
-              label="Estructura de Pavimento"
+              label="Rasante"
               fieldValue={data.estructuraPavimento}
               editable={!locked}
               onCommit={handleFieldCommit('estructuraPavimento')}

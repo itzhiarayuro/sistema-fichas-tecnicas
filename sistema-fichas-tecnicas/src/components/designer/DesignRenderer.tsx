@@ -41,16 +41,15 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
         if (fieldId.startsWith('foto_') && !/^\d+/.test(fieldId.split('_')[1])) {
             // ... existing photo logic ...
             const codeMap: Record<string, string> = {
-                'panoramica': 'P', 'tapa': 'T', 'interior': 'I',
-                'acceso': 'A', 'fondo': 'F', 'medicion': 'M',
-                'entrada_1': 'E1', 'entrada_2': 'E2', 'entrada_3': 'E3', 'entrada_4': 'E4', 'entrada_5': 'E5', 'entrada_6': 'E6',
-                'salida_1': 'S1', 'salida_2': 'S2', 'salida_3': 'S3', 'salida_4': 'S4', 'salida_5': 'S5', 'salida_6': 'S6',
-                'sumidero_1': 'SUM1', 'sumidero_2': 'SUM2', 'sumidero_3': 'SUM3', 'sumidero_4': 'SUM4', 'sumidero_5': 'SUM5', 'sumidero_6': 'SUM6',
-                'descarga_1': 'D1', 'descarga_2': 'D2', 'descarga_3': 'D3', 'descarga_4': 'D4', 'descarga_5': 'D5', 'descarga_6': 'D6',
-                'esquema': 'L', 'shape': 'L'
+                'foto_panoramica': 'P', 'foto_tapa': 'T', 'foto_interior': 'I',
+                'foto_acceso': 'A', 'foto_fondo': 'F', 'foto_medicion': 'M',
+                'foto_entrada_1': 'E1', 'foto_entrada_2': 'E2', 'foto_entrada_3': 'E3', 'foto_entrada_4': 'E4', 'foto_entrada_5': 'E5', 'foto_entrada_6': 'E6', 'foto_entrada_7': 'E7',
+                'foto_salida_1': 'S1', 'foto_salida_2': 'S2', 'foto_salida_3': 'S3', 'foto_salida_4': 'S4', 'foto_salida_5': 'S5', 'foto_salida_6': 'S6', 'foto_salida_7': 'S7',
+                'foto_sumidero_1': 'SUM1', 'foto_sumidero_2': 'SUM2', 'foto_sumidero_3': 'SUM3', 'foto_sumidero_4': 'SUM4', 'foto_sumidero_5': 'SUM5', 'foto_sumidero_6': 'SUM6', 'foto_sumidero_7': 'SUM7',
+                'foto_descarga_1': 'D1', 'foto_descarga_2': 'D2', 'foto_descarga_3': 'D3', 'foto_descarga_4': 'D4', 'foto_descarga_5': 'D5', 'foto_descarga_6': 'D6', 'foto_descarga_7': 'D7',
+                'foto_esquema': 'L', 'foto_shape': 'L'
             };
-            const typeKey = fieldId.replace('foto_', '');
-            const targetCode = codeMap[typeKey];
+            const targetCode = codeMap[fieldId];
 
             if (targetCode) {
                 const upperTarget = targetCode.toUpperCase();
@@ -60,27 +59,74 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
 
                 if (!found) {
                     found = pozo.fotos?.fotos?.find(f => {
-                        const filename = String(f.filename || '').toUpperCase();
-                        const matchSimple = filename.includes(`-${upperTarget}.`) ||
-                            filename.includes(`_${upperTarget}.`) ||
-                            filename.endsWith(`-${upperTarget}`) ||
-                            filename.endsWith(`_${upperTarget}`);
+                        const filename = String(f.filename || '').toUpperCase().split('.')[0]; // Sin extensión
 
-                        if (upperTarget === 'L') {
-                            return matchSimple || filename.includes('_ARGIS');
+                        // REGLA: Omitir si termina en AT o Z (Seguimos respetando esto)
+                        if (filename.endsWith('-AT') || filename.endsWith('_AT') ||
+                            filename.endsWith('-Z') || filename.endsWith('_Z')) {
+                            return false;
                         }
-                        return matchSimple;
+
+                        // 1. Coincidencia Exacta de la Subcategoría
+                        const subcat = String(f.subcategoria || '').toUpperCase();
+                        if (subcat === upperTarget) return true;
+
+                        // 2. Lógica por Categoría (Casos Especiales del listado)
+
+                        // PANORÁMICAS
+                        if (upperTarget === 'P') {
+                            return filename === 'P' || filename === 'F-P' || filename === 'S-P' || filename.includes('-P');
+                        }
+
+                        // TAPAS
+                        if (upperTarget === 'T') {
+                            return filename === 'T' || filename === 'F-T' || filename === 'TT' || filename.includes('-T');
+                        }
+
+                        // INTERNAS
+                        if (upperTarget === 'I') {
+                            return filename === 'I' || filename === 'F-I' || filename === 'II' ||
+                                /^I\d?$/.test(filename) || /^I\(\d+\)$/.test(filename);
+                        }
+
+                        // ENTRADAS
+                        if (upperTarget.startsWith('E')) {
+                            const num = upperTarget.replace('E', '');
+                            if (num === '1' && (filename === 'E-T' || filename.includes('-E-T'))) return true;
+                            // Busca "E1" o "E-1" o "E1-T" o "F-E1-T"
+                            const regex = new RegExp(`(^|[\\-_])E${num}([\\-_\\.]|$)`);
+                            return regex.test(filename) || filename.includes(`F-E${num}`);
+                        }
+
+                        // SALIDAS
+                        if (upperTarget.startsWith('S') && !upperTarget.startsWith('SUM')) {
+                            const num = upperTarget.replace('S', '');
+                            if (num === '1') {
+                                if (filename === 'S' || filename === 'S-T' || filename === 'S-HS' || filename === 'F-S-T') return true;
+                            }
+                            const regex = new RegExp(`(^|[\\-_])S${num}([\\-_\\.]|$)`);
+                            return regex.test(filename) || regex.test(filename.replace(/-/g, '')) || filename.includes(`F-S${num}`);
+                        }
+
+                        // SUMIDEROS
+                        if (upperTarget.startsWith('SUM')) {
+                            const num = upperTarget.replace('SUM', '');
+                            // Los sumideros pueden venir como SUM1 o como S1
+                            const regexSum = new RegExp(`(^|[\\-_])SUM${num}([\\-_\\.]|$)`);
+                            const regexS = new RegExp(`(^|[\\-_])S${num}([\\-_\\.]|$)`);
+                            return regexSum.test(filename) || regexS.test(filename);
+                        }
+
+                        // ESQUEMAS / ARGIS
+                        if (upperTarget === 'L') {
+                            return filename.includes('_ARGIS') || filename === 'L';
+                        }
+
+                        return false;
                     });
                 }
 
-                if (!found) {
-                    found = pozo.fotos?.fotos?.find(f =>
-                        String(f.tipo || '').toUpperCase() === typeKey.toUpperCase() ||
-                        String(f.subcategoria || '').toUpperCase().includes(upperTarget)
-                    );
-                }
-
-                if (found) return found.blobId ? blobStore.getUrl(found.blobId) : (found as any).dataUrl || '-';
+                if (found) return found.blobId || (found as any).dataUrl || '-';
             }
         }
 

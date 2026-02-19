@@ -38,7 +38,7 @@ const exampleData = [
     'Sistema': 'Alcantarillado sanitario',
     'Año de instalación': '2010',
     'Tipo Cámara': 'Circular',
-    'Estructura de pavimento': 'Concreto',
+    'Rasante': 'Concreto',
     'Material tapa': 'Hierro fundido',
     'Existe cono': 'No',
     'Tipo Cono': '',
@@ -78,7 +78,7 @@ const exampleData = [
     'Sistema': 'Alcantarillado pluvial',
     'Año de instalación': '2005',
     'Tipo Cámara': 'Rectangular',
-    'Estructura de pavimento': 'Asfalto',
+    'Rasante': 'Asfalto',
     'Material tapa': 'Concreto',
     'Existe cono': 'Sí',
     'Tipo Cono': 'Estándar',
@@ -118,7 +118,7 @@ const exampleData = [
     'Sistema': 'Alcantarillado combinado',
     'Año de instalación': '1995',
     'Tipo Cámara': 'Cuadrada',
-    'Estructura de pavimento': 'Tierra',
+    'Rasante': 'Tierra',
     'Material tapa': '',
     'Existe cono': 'No',
     'Tipo Cono': '',
@@ -158,7 +158,7 @@ const exampleData = [
     'Sistema': 'Alcantarillado sanitario',
     'Año de instalación': '2015',
     'Tipo Cámara': 'Circular',
-    'Estructura de pavimento': 'Concreto',
+    'Rasante': 'Concreto',
     'Material tapa': 'Hierro fundido',
     'Existe cono': 'Sí',
     'Tipo Cono': 'Excéntrico',
@@ -200,7 +200,7 @@ ws['!cols'] = [
   { wch: 25 }, // Sistema
   { wch: 18 }, // Año de instalación
   { wch: 12 }, // Tipo Cámara
-  { wch: 20 }, // Estructura de pavimento
+  { wch: 20 }, // Rasante
   { wch: 15 }, // Material tapa
   { wch: 12 }, // Existe cono
   { wch: 12 }, // Tipo Cono
@@ -431,7 +431,7 @@ Contiene datos de 4 pozos de ejemplo con la estructura completa del diccionario 
 - Sistema: Sistema al que pertenece
 - Año de instalación: Año de instalación
 - Tipo Cámara: Tipo de cámara (Circular/Rectangular/Cuadrada)
-- Estructura de pavimento: Tipo de pavimento superficial
+- Rasante: Tipo de pavimento superficial
 - Material tapa: Material de la tapa
 - Existe cono: ¿Tiene cono? (Sí/No)
 - Tipo Cono: Tipo de cono

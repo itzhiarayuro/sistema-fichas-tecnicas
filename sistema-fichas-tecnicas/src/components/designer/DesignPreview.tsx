@@ -9,6 +9,7 @@ import { useState, useEffect } from 'react';
 import type { FichaDesignVersion } from '@/types/fichaDesign';
 import { AVAILABLE_FIELDS } from '@/types/fichaDesign';
 import { useGlobalStore } from '@/stores';
+import { blobStore } from '@/lib/storage/blobStore';
 
 interface DesignPreviewProps {
     version: FichaDesignVersion;
@@ -39,8 +40,98 @@ export function DesignPreview({ version, isOpen, onClose }: DesignPreviewProps) 
     const canvasHeight = (version.pageSize === 'A4' ? 297 : 279.4) * MM_TO_PX;
 
     // Helper para obtener valor de un campo
-    const getFieldValue = (fieldPath: string): string => {
+    const getFieldValue = (fieldId: string, fieldPath: string): string => {
         if (!selectedPozo) return '[Sin datos]';
+
+        // CASO ESPECIAL: Fotos específicas por nomenclatura
+        if (fieldId.startsWith('foto_') && !/^\d+/.test(fieldId.split('_')[1])) {
+            const codeMap: Record<string, string> = {
+                'foto_panoramica': 'P', 'foto_tapa': 'T', 'foto_interior': 'I',
+                'foto_acceso': 'A', 'foto_fondo': 'F', 'foto_medicion': 'M',
+                'foto_entrada_1': 'E1', 'foto_entrada_2': 'E2', 'foto_entrada_3': 'E3', 'foto_entrada_4': 'E4', 'foto_entrada_5': 'E5', 'foto_entrada_6': 'E6', 'foto_entrada_7': 'E7',
+                'foto_salida_1': 'S1', 'foto_salida_2': 'S2', 'foto_salida_3': 'S3', 'foto_salida_4': 'S4', 'foto_salida_5': 'S5', 'foto_salida_6': 'S6', 'foto_salida_7': 'S7',
+                'foto_sumidero_1': 'SUM1', 'foto_sumidero_2': 'SUM2', 'foto_sumidero_3': 'SUM3', 'foto_sumidero_4': 'SUM4', 'foto_sumidero_5': 'SUM5', 'foto_sumidero_6': 'SUM6', 'foto_sumidero_7': 'SUM7',
+                'foto_descarga_1': 'D1', 'foto_descarga_2': 'D2', 'foto_descarga_3': 'D3', 'foto_descarga_4': 'D4', 'foto_descarga_5': 'D5', 'foto_descarga_6': 'D6', 'foto_descarga_7': 'D7',
+                'foto_esquema': 'L', 'foto_shape': 'L'
+            };
+            const targetCode = codeMap[fieldId];
+
+            if (targetCode) {
+                const upperTarget = targetCode.toUpperCase();
+                let found = selectedPozo.fotos?.fotos?.find(f =>
+                    String(f.subcategoria || '').toUpperCase() === upperTarget
+                );
+
+                if (!found) {
+                    found = selectedPozo.fotos?.fotos?.find(f => {
+                        const filename = String(f.filename || '').toUpperCase().split('.')[0];
+
+                        // REGLA: Omitir si termina en AT o Z (Seguimos respetando esto)
+                        if (filename.endsWith('-AT') || filename.endsWith('_AT') ||
+                            filename.endsWith('-Z') || filename.endsWith('_Z')) {
+                            return false;
+                        }
+
+                        // 1. Coincidencia Exacta de la Subcategoría
+                        const subcat = String(f.subcategoria || '').toUpperCase();
+                        if (subcat === upperTarget) return true;
+
+                        // 2. Lógica por Categoría (Casos Especiales del listado)
+
+                        // PANORÁMICAS
+                        if (upperTarget === 'P') {
+                            return filename === 'P' || filename === 'F-P' || filename === 'S-P' || filename.includes('-P');
+                        }
+
+                        // TAPAS
+                        if (upperTarget === 'T') {
+                            return filename === 'T' || filename === 'F-T' || filename === 'TT' || filename.includes('-T');
+                        }
+
+                        // INTERNAS
+                        if (upperTarget === 'I') {
+                            return filename === 'I' || filename === 'F-I' || filename === 'II' ||
+                                /^I\d?$/.test(filename) || /^I\(\d+\)$/.test(filename);
+                        }
+
+                        // ENTRADAS
+                        if (upperTarget.startsWith('E')) {
+                            const num = upperTarget.replace('E', '');
+                            if (num === '1' && (filename === 'E-T' || filename.includes('-E-T'))) return true;
+                            const regex = new RegExp(`(^|[\\-_])E${num}([\\-_\\.]|$)`);
+                            return regex.test(filename) || filename.includes(`F-E${num}`);
+                        }
+
+                        // SALIDAS
+                        if (upperTarget.startsWith('S') && !upperTarget.startsWith('SUM')) {
+                            const num = upperTarget.replace('S', '');
+                            if (num === '1') {
+                                if (filename === 'S' || filename === 'S-T' || filename === 'S-HS' || filename === 'F-S-T') return true;
+                            }
+                            const regex = new RegExp(`(^|[\\-_])S${num}([\\-_\\.]|$)`);
+                            return regex.test(filename) || regex.test(filename.replace(/-/g, '')) || filename.includes(`F-S${num}`);
+                        }
+
+                        // SUMIDEROS
+                        if (upperTarget.startsWith('SUM')) {
+                            const num = upperTarget.replace('SUM', '');
+                            const regexSum = new RegExp(`(^|[\\-_])SUM${num}([\\-_\\.]|$)`);
+                            const regexS = new RegExp(`(^|[\\-_])S${num}([\\-_\\.]|$)`);
+                            return regexSum.test(filename) || regexS.test(filename);
+                        }
+
+                        // ESQUEMAS / ARGIS
+                        if (upperTarget === 'L') {
+                            return filename.includes('_ARGIS') || filename === 'L';
+                        }
+
+                        return false;
+                    });
+                }
+
+                if (found) return found.blobId || (found as any).dataUrl || '[Vacío]';
+            }
+        }
 
         try {
             const parts = fieldPath.split('.');
@@ -293,12 +384,15 @@ export function DesignPreview({ version, isOpen, onClose }: DesignPreviewProps) 
                             {/* Render Field Placements */}
                             {version.placements.map((placement) => {
                                 const field = AVAILABLE_FIELDS.find(f => f.id === placement.fieldId);
+                                const isPhoto = placement.fieldId.startsWith('foto_');
 
-                                // En modo diseño, mostrar el nombre del campo
+                                // En modo diseño, mostrar el nombre del campo o placeholder
                                 // En modo data, mostrar el valor real
                                 const displayValue = previewMode === 'design'
                                     ? (placement.customLabel || field?.label || placement.fieldId)
-                                    : (field ? getFieldValue(field.fieldPath) : '[Campo no encontrado]');
+                                    : (field ? getFieldValue(placement.fieldId, field.fieldPath) : '[Campo no encontrado]');
+
+                                const isRealImage = isPhoto && previewMode === 'data' && displayValue && displayValue !== '[Sin datos]' && displayValue !== '[Vacío]' && displayValue !== '[N/A]' && displayValue !== '[Error]';
 
                                 return (
                                     <div
@@ -310,7 +404,7 @@ export function DesignPreview({ version, isOpen, onClose }: DesignPreviewProps) 
                                             width: `${placement.width}mm`,
                                             height: `${placement.height}mm`,
                                             zIndex: placement.zIndex,
-                                            backgroundColor: placement.backgroundColor || 'transparent',
+                                            backgroundColor: placement.backgroundColor || (isPhoto && previewMode === 'design' ? '#f9fafb' : 'transparent'),
                                             borderRadius: placement.borderRadius ? `${placement.borderRadius}px` : 0,
                                             padding: placement.padding ? `${placement.padding}px` : '2px',
                                             border: placement.borderWidth
@@ -318,9 +412,10 @@ export function DesignPreview({ version, isOpen, onClose }: DesignPreviewProps) 
                                                 : (previewMode === 'design' ? '1px dashed rgba(99, 102, 241, 0.3)' : 'none'),
                                             display: 'flex',
                                             flexDirection: 'column',
+                                            overflow: 'hidden'
                                         }}
                                     >
-                                        {placement.showLabel && (
+                                        {placement.showLabel && !isRealImage && (
                                             <div
                                                 className="flex-shrink-0 mb-0.5 flex items-center overflow-hidden"
                                                 style={{
@@ -340,23 +435,42 @@ export function DesignPreview({ version, isOpen, onClose }: DesignPreviewProps) 
                                                 </span>
                                             </div>
                                         )}
-                                        <div className="flex-grow w-full flex items-center overflow-hidden"
+                                        <div className="flex-grow w-full flex items-center justify-center overflow-hidden"
                                             style={{
                                                 justifyContent: placement.textAlign === 'center' ? 'center' : (placement.textAlign === 'right' ? 'flex-end' : 'flex-start')
                                             }}
                                         >
-                                            <span
-                                                className="truncate"
-                                                style={{
-                                                    fontSize: `${placement.fontSize || 10}pt`,
-                                                    fontFamily: placement.fontFamily || 'Inter',
-                                                    fontWeight: placement.fontWeight || 'normal',
-                                                    color: placement.color || '#000000',
-                                                    lineHeight: 1.2
-                                                }}
-                                            >
-                                                {displayValue}
-                                            </span>
+                                            {isRealImage ? (
+                                                <img
+                                                    src={displayValue.startsWith('data:') ? displayValue : blobStore.getUrl(displayValue)}
+                                                    alt=""
+                                                    className="w-full h-full object-cover"
+                                                    onError={(e) => {
+                                                        const target = e.target as HTMLImageElement;
+                                                        target.style.display = 'none';
+                                                    }}
+                                                />
+                                            ) : isPhoto && previewMode === 'design' ? (
+                                                <div className="flex flex-col items-center justify-center text-gray-400 opacity-40">
+                                                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                    </svg>
+                                                    <span className="text-[8px] font-bold uppercase mt-1">FOTO</span>
+                                                </div>
+                                            ) : (
+                                                <span
+                                                    className="truncate"
+                                                    style={{
+                                                        fontSize: `${placement.fontSize || 10}pt`,
+                                                        fontFamily: placement.fontFamily || 'Inter',
+                                                        fontWeight: placement.fontWeight || 'normal',
+                                                        color: placement.color || '#000000',
+                                                        lineHeight: 1.2
+                                                    }}
+                                                >
+                                                    {displayValue}
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
                                 );

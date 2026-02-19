@@ -49,18 +49,12 @@ async function resolvePhotoValue(
     usedPhotoIds: Set<string>
 ): Promise<string | null> {
     const codeMap: Record<string, string> = {
-        'foto_panoramica': 'P',
-        'foto_tapa': 'T',
-        'foto_interior': 'I',
-        'foto_acceso': 'A',
-        'foto_fondo': 'F',
-        'foto_medicion': 'M',
-        'foto_entrada_1': 'E1',
-        'foto_entrada_2': 'E2',
-        'foto_salida_1': 'S1',
-        'foto_salida_2': 'S2',
-        'foto_sumidero_1': 'SUM1',
-        'foto_sumidero_2': 'SUM2',
+        'foto_panoramica': 'P', 'foto_tapa': 'T', 'foto_interior': 'I',
+        'foto_acceso': 'A', 'foto_fondo': 'F', 'foto_medicion': 'M',
+        'foto_entrada_1': 'E1', 'foto_entrada_2': 'E2', 'foto_entrada_3': 'E3', 'foto_entrada_4': 'E4', 'foto_entrada_5': 'E5', 'foto_entrada_6': 'E6',
+        'foto_salida_1': 'S1', 'foto_salida_2': 'S2', 'foto_salida_3': 'S3', 'foto_salida_4': 'S4', 'foto_salida_5': 'S5', 'foto_salida_6': 'S6',
+        'foto_sumidero_1': 'SUM1', 'foto_sumidero_2': 'SUM2', 'foto_sumidero_3': 'SUM3', 'foto_sumidero_4': 'SUM4', 'foto_sumidero_5': 'SUM5', 'foto_sumidero_6': 'SUM6',
+        'foto_descarga_1': 'D1', 'foto_descarga_2': 'D2', 'foto_descarga_3': 'D3', 'foto_descarga_4': 'D4', 'foto_descarga_5': 'D5', 'foto_descarga_6': 'D6',
         'foto_esquema': 'L'
     };
 
