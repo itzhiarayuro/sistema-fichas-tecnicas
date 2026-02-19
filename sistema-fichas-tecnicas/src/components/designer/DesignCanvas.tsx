@@ -629,7 +629,7 @@ export function DesignCanvas({
                 >
                     {placement.showLabel && (
                         <div
-                            className="flex-shrink-0 mb-0.5 flex items-center overflow-hidden"
+                            className="flex-shrink-0 mb-0 flex items-center overflow-hidden"
                             style={{
                                 fontWeight: placement.labelFontWeight || 'bold',
                                 color: placement.labelColor || '#6B7280',
