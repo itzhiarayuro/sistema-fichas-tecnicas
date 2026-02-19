@@ -262,22 +262,54 @@ export const AVAILABLE_FIELDS: AvailableField[] = [
     { id: 'tub_1_estado', label: 'Tub 1 Est', fieldPath: 'tuberias.tuberias[0].estado.value', category: 'tuberias', isRepeatable: true, defaultWidth: 45, defaultHeight: 10 },
     { id: 'tub_1_orden', label: 'Tub 1 Ord', fieldPath: 'tuberias.tuberias[0].orden.value', category: 'tuberias', isRepeatable: true, defaultWidth: 25, defaultHeight: 10 },
     { id: 'tub_1_batea', label: 'Tub 1 Bat', fieldPath: 'tuberias.tuberias[0].batea.value', category: 'tuberias', isRepeatable: true, defaultWidth: 35, defaultHeight: 10 },
+    { id: 'tub_1_id', label: 'Tub 1 ID', fieldPath: 'tuberias.tuberias[0].idTuberia.value', category: 'tuberias', isRepeatable: true, defaultWidth: 40, defaultHeight: 10 },
 
     { id: 'tub_2_diametro', label: 'Tub 2 Ø', fieldPath: 'tuberias.tuberias[1].diametro.value', category: 'tuberias', isRepeatable: true, defaultWidth: 35, defaultHeight: 10 },
     { id: 'tub_2_material', label: 'Tub 2 Mat', fieldPath: 'tuberias.tuberias[1].material.value', category: 'tuberias', isRepeatable: true, defaultWidth: 45, defaultHeight: 10 },
     { id: 'tub_2_estado', label: 'Tub 2 Est', fieldPath: 'tuberias.tuberias[1].estado.value', category: 'tuberias', isRepeatable: true, defaultWidth: 45, defaultHeight: 10 },
     { id: 'tub_2_orden', label: 'Tub 2 Ord', fieldPath: 'tuberias.tuberias[1].orden.value', category: 'tuberias', isRepeatable: true, defaultWidth: 25, defaultHeight: 10 },
     { id: 'tub_2_batea', label: 'Tub 2 Bat', fieldPath: 'tuberias.tuberias[1].batea.value', category: 'tuberias', isRepeatable: true, defaultWidth: 35, defaultHeight: 10 },
+    { id: 'tub_2_id', label: 'Tub 2 ID', fieldPath: 'tuberias.tuberias[1].idTuberia.value', category: 'tuberias', isRepeatable: true, defaultWidth: 40, defaultHeight: 10 },
 
     { id: 'tub_3_diametro', label: 'Tub 3 Ø', fieldPath: 'tuberias.tuberias[2].diametro.value', category: 'tuberias', isRepeatable: true, defaultWidth: 35, defaultHeight: 10 },
     { id: 'tub_3_material', label: 'Tub 3 Mat', fieldPath: 'tuberias.tuberias[2].material.value', category: 'tuberias', isRepeatable: true, defaultWidth: 45, defaultHeight: 10 },
     { id: 'tub_3_orden', label: 'Tub 3 Ord', fieldPath: 'tuberias.tuberias[2].orden.value', category: 'tuberias', isRepeatable: true, defaultWidth: 25, defaultHeight: 10 },
     { id: 'tub_3_batea', label: 'Tub 3 Bat', fieldPath: 'tuberias.tuberias[2].batea.value', category: 'tuberias', isRepeatable: true, defaultWidth: 35, defaultHeight: 10 },
+    { id: 'tub_3_id', label: 'Tub 3 ID', fieldPath: 'tuberias.tuberias[2].idTuberia.value', category: 'tuberias', isRepeatable: true, defaultWidth: 40, defaultHeight: 10 },
 
     { id: 'tub_4_diametro', label: 'Tub 4 Ø', fieldPath: 'tuberias.tuberias[3].diametro.value', category: 'tuberias', isRepeatable: true, defaultWidth: 35, defaultHeight: 10 },
     { id: 'tub_4_material', label: 'Tub 4 Mat', fieldPath: 'tuberias.tuberias[3].material.value', category: 'tuberias', isRepeatable: true, defaultWidth: 45, defaultHeight: 10 },
     { id: 'tub_4_orden', label: 'Tub 4 Ord', fieldPath: 'tuberias.tuberias[3].orden.value', category: 'tuberias', isRepeatable: true, defaultWidth: 25, defaultHeight: 10 },
     { id: 'tub_4_batea', label: 'Tub 4 Bat', fieldPath: 'tuberias.tuberias[3].batea.value', category: 'tuberias', isRepeatable: true, defaultWidth: 35, defaultHeight: 10 },
+    { id: 'tub_4_id', label: 'Tub 4 ID', fieldPath: 'tuberias.tuberias[3].idTuberia.value', category: 'tuberias', isRepeatable: true, defaultWidth: 40, defaultHeight: 10 },
+
+    { id: 'tub_5_diametro', label: 'Tub 5 Ø', fieldPath: 'tuberias.tuberias[4].diametro.value', category: 'tuberias', isRepeatable: true, defaultWidth: 35, defaultHeight: 10 },
+    { id: 'tub_5_material', label: 'Tub 5 Mat', fieldPath: 'tuberias.tuberias[4].material.value', category: 'tuberias', isRepeatable: true, defaultWidth: 45, defaultHeight: 10 },
+    { id: 'tub_5_estado', label: 'Tub 5 Est', fieldPath: 'tuberias.tuberias[4].estado.value', category: 'tuberias', isRepeatable: true, defaultWidth: 45, defaultHeight: 10 },
+    { id: 'tub_5_orden', label: 'Tub 5 Ord', fieldPath: 'tuberias.tuberias[4].orden.value', category: 'tuberias', isRepeatable: true, defaultWidth: 25, defaultHeight: 10 },
+    { id: 'tub_5_batea', label: 'Tub 5 Bat', fieldPath: 'tuberias.tuberias[4].batea.value', category: 'tuberias', isRepeatable: true, defaultWidth: 35, defaultHeight: 10 },
+    { id: 'tub_5_id', label: 'Tub 5 ID', fieldPath: 'tuberias.tuberias[4].idTuberia.value', category: 'tuberias', isRepeatable: true, defaultWidth: 40, defaultHeight: 10 },
+
+    { id: 'tub_6_diametro', label: 'Tub 6 Ø', fieldPath: 'tuberias.tuberias[5].diametro.value', category: 'tuberias', isRepeatable: true, defaultWidth: 35, defaultHeight: 10 },
+    { id: 'tub_6_material', label: 'Tub 6 Mat', fieldPath: 'tuberias.tuberias[5].material.value', category: 'tuberias', isRepeatable: true, defaultWidth: 45, defaultHeight: 10 },
+    { id: 'tub_6_estado', label: 'Tub 6 Est', fieldPath: 'tuberias.tuberias[5].estado.value', category: 'tuberias', isRepeatable: true, defaultWidth: 45, defaultHeight: 10 },
+    { id: 'tub_6_orden', label: 'Tub 6 Ord', fieldPath: 'tuberias.tuberias[5].orden.value', category: 'tuberias', isRepeatable: true, defaultWidth: 25, defaultHeight: 10 },
+    { id: 'tub_6_batea', label: 'Tub 6 Bat', fieldPath: 'tuberias.tuberias[5].batea.value', category: 'tuberias', isRepeatable: true, defaultWidth: 35, defaultHeight: 10 },
+    { id: 'tub_6_id', label: 'Tub 6 ID', fieldPath: 'tuberias.tuberias[5].idTuberia.value', category: 'tuberias', isRepeatable: true, defaultWidth: 40, defaultHeight: 10 },
+
+    { id: 'tub_7_diametro', label: 'Tub 7 Ø', fieldPath: 'tuberias.tuberias[6].diametro.value', category: 'tuberias', isRepeatable: true, defaultWidth: 35, defaultHeight: 10 },
+    { id: 'tub_7_material', label: 'Tub 7 Mat', fieldPath: 'tuberias.tuberias[6].material.value', category: 'tuberias', isRepeatable: true, defaultWidth: 45, defaultHeight: 10 },
+    { id: 'tub_7_estado', label: 'Tub 7 Est', fieldPath: 'tuberias.tuberias[6].estado.value', category: 'tuberias', isRepeatable: true, defaultWidth: 45, defaultHeight: 10 },
+    { id: 'tub_7_orden', label: 'Tub 7 Ord', fieldPath: 'tuberias.tuberias[6].orden.value', category: 'tuberias', isRepeatable: true, defaultWidth: 25, defaultHeight: 10 },
+    { id: 'tub_7_batea', label: 'Tub 7 Bat', fieldPath: 'tuberias.tuberias[6].batea.value', category: 'tuberias', isRepeatable: true, defaultWidth: 35, defaultHeight: 10 },
+    { id: 'tub_7_id', label: 'Tub 7 ID', fieldPath: 'tuberias.tuberias[6].idTuberia.value', category: 'tuberias', isRepeatable: true, defaultWidth: 40, defaultHeight: 10 },
+
+    { id: 'tub_8_diametro', label: 'Tub 8 Ø', fieldPath: 'tuberias.tuberias[7].diametro.value', category: 'tuberias', isRepeatable: true, defaultWidth: 35, defaultHeight: 10 },
+    { id: 'tub_8_material', label: 'Tub 8 Mat', fieldPath: 'tuberias.tuberias[7].material.value', category: 'tuberias', isRepeatable: true, defaultWidth: 45, defaultHeight: 10 },
+    { id: 'tub_8_estado', label: 'Tub 8 Est', fieldPath: 'tuberias.tuberias[7].estado.value', category: 'tuberias', isRepeatable: true, defaultWidth: 45, defaultHeight: 10 },
+    { id: 'tub_8_orden', label: 'Tub 8 Ord', fieldPath: 'tuberias.tuberias[7].orden.value', category: 'tuberias', isRepeatable: true, defaultWidth: 25, defaultHeight: 10 },
+    { id: 'tub_8_batea', label: 'Tub 8 Bat', fieldPath: 'tuberias.tuberias[7].batea.value', category: 'tuberias', isRepeatable: true, defaultWidth: 35, defaultHeight: 10 },
+    { id: 'tub_8_id', label: 'Tub 8 ID', fieldPath: 'tuberias.tuberias[7].idTuberia.value', category: 'tuberias', isRepeatable: true, defaultWidth: 40, defaultHeight: 10 },
 
     // SUMIDEROS (Hasta 4 slots)
     { id: 'sum_1_tipo', label: 'Sum 1 Tipo', fieldPath: 'sumideros.sumideros[0].tipoSumidero.value', category: 'sumideros', isRepeatable: true, defaultWidth: 40, defaultHeight: 10 },
@@ -286,6 +318,7 @@ export const AVAILABLE_FIELDS: AvailableField[] = [
     { id: 'sum_1_diametro', label: 'Sum 1 Ø', fieldPath: 'sumideros.sumideros[0].diametro.value', category: 'sumideros', isRepeatable: true, defaultWidth: 25, defaultHeight: 10 },
     { id: 'sum_1_hSalida', label: 'Sum 1 H Sal', fieldPath: 'sumideros.sumideros[0].alturaSalida.value', category: 'sumideros', isRepeatable: true, defaultWidth: 30, defaultHeight: 10 },
     { id: 'sum_1_hLlegada', label: 'Sum 1 H Lleg', fieldPath: 'sumideros.sumideros[0].alturaLlegada.value', category: 'sumideros', isRepeatable: true, defaultWidth: 30, defaultHeight: 10 },
+    { id: 'sum_1_id', label: 'Sum 1 ID', fieldPath: 'sumideros.sumideros[0].idSumidero.value', category: 'sumideros', isRepeatable: true, defaultWidth: 40, defaultHeight: 10 },
 
     { id: 'sum_2_tipo', label: 'Sum 2 Tipo', fieldPath: 'sumideros.sumideros[1].tipoSumidero.value', category: 'sumideros', isRepeatable: true, defaultWidth: 40, defaultHeight: 10 },
     { id: 'sum_2_material', label: 'Sum 2 Mat', fieldPath: 'sumideros.sumideros[1].materialTuberia.value', category: 'sumideros', isRepeatable: true, defaultWidth: 40, defaultHeight: 10 },
@@ -293,6 +326,39 @@ export const AVAILABLE_FIELDS: AvailableField[] = [
     { id: 'sum_2_diametro', label: 'Sum 2 Ø', fieldPath: 'sumideros.sumideros[1].diametro.value', category: 'sumideros', isRepeatable: true, defaultWidth: 25, defaultHeight: 10 },
     { id: 'sum_2_hSalida', label: 'Sum 2 H Sal', fieldPath: 'sumideros.sumideros[1].alturaSalida.value', category: 'sumideros', isRepeatable: true, defaultWidth: 30, defaultHeight: 10 },
     { id: 'sum_2_hLlegada', label: 'Sum 2 H Lleg', fieldPath: 'sumideros.sumideros[1].alturaLlegada.value', category: 'sumideros', isRepeatable: true, defaultWidth: 30, defaultHeight: 10 },
+    { id: 'sum_2_id', label: 'Sum 2 ID', fieldPath: 'sumideros.sumideros[1].idSumidero.value', category: 'sumideros', isRepeatable: true, defaultWidth: 40, defaultHeight: 10 },
+
+    { id: 'sum_3_tipo', label: 'Sum 3 Tipo', fieldPath: 'sumideros.sumideros[2].tipoSumidero.value', category: 'sumideros', isRepeatable: true, defaultWidth: 40, defaultHeight: 10 },
+    { id: 'sum_3_material', label: 'Sum 3 Mat', fieldPath: 'sumideros.sumideros[2].materialTuberia.value', category: 'sumideros', isRepeatable: true, defaultWidth: 40, defaultHeight: 10 },
+    { id: 'sum_3_esquema', label: 'Sum 3 Esq', fieldPath: 'sumideros.sumideros[2].numeroEsquema.value', category: 'sumideros', isRepeatable: true, defaultWidth: 25, defaultHeight: 10 },
+    { id: 'sum_3_diametro', label: 'Sum 3 Ø', fieldPath: 'sumideros.sumideros[2].diametro.value', category: 'sumideros', isRepeatable: true, defaultWidth: 25, defaultHeight: 10 },
+    { id: 'sum_3_hSalida', label: 'Sum 3 H Sal', fieldPath: 'sumideros.sumideros[2].alturaSalida.value', category: 'sumideros', isRepeatable: true, defaultWidth: 30, defaultHeight: 10 },
+    { id: 'sum_3_hLlegada', label: 'Sum 3 H Lleg', fieldPath: 'sumideros.sumideros[2].alturaLlegada.value', category: 'sumideros', isRepeatable: true, defaultWidth: 30, defaultHeight: 10 },
+
+    { id: 'sum_4_tipo', label: 'Sum 4 Tipo', fieldPath: 'sumideros.sumideros[3].tipoSumidero.value', category: 'sumideros', isRepeatable: true, defaultWidth: 40, defaultHeight: 10 },
+    { id: 'sum_4_material', label: 'Sum 4 Mat', fieldPath: 'sumideros.sumideros[3].materialTuberia.value', category: 'sumideros', isRepeatable: true, defaultWidth: 40, defaultHeight: 10 },
+    { id: 'sum_4_esquema', label: 'Sum 4 Esq', fieldPath: 'sumideros.sumideros[3].numeroEsquema.value', category: 'sumideros', isRepeatable: true, defaultWidth: 25, defaultHeight: 10 },
+    { id: 'sum_4_diametro', label: 'Sum 4 Ø', fieldPath: 'sumideros.sumideros[3].diametro.value', category: 'sumideros', isRepeatable: true, defaultWidth: 25, defaultHeight: 10 },
+    { id: 'sum_4_hSalida', label: 'Sum 4 H Sal', fieldPath: 'sumideros.sumideros[3].alturaSalida.value', category: 'sumideros', isRepeatable: true, defaultWidth: 30, defaultHeight: 10 },
+    { id: 'sum_4_hLlegada', label: 'Sum 4 H Lleg', fieldPath: 'sumideros.sumideros[3].alturaLlegada.value', category: 'sumideros', isRepeatable: true, defaultWidth: 30, defaultHeight: 10 },
+
+    { id: 'sum_5_tipo', label: 'Sum 5 Tipo', fieldPath: 'sumideros.sumideros[4].tipoSumidero.value', category: 'sumideros', isRepeatable: true, defaultWidth: 40, defaultHeight: 10 },
+    { id: 'sum_5_material', label: 'Sum 5 Mat', fieldPath: 'sumideros.sumideros[4].materialTuberia.value', category: 'sumideros', isRepeatable: true, defaultWidth: 40, defaultHeight: 10 },
+    { id: 'sum_5_esquema', label: 'Sum 5 Esq', fieldPath: 'sumideros.sumideros[4].numeroEsquema.value', category: 'sumideros', isRepeatable: true, defaultWidth: 25, defaultHeight: 10 },
+    { id: 'sum_5_diametro', label: 'Sum 5 Ø', fieldPath: 'sumideros.sumideros[4].diametro.value', category: 'sumideros', isRepeatable: true, defaultWidth: 25, defaultHeight: 10 },
+    { id: 'sum_5_hSalida', label: 'Sum 5 H Sal', fieldPath: 'sumideros.sumideros[4].alturaSalida.value', category: 'sumideros', isRepeatable: true, defaultWidth: 30, defaultHeight: 10 },
+    { id: 'sum_5_hLlegada', label: 'Sum 5 H Lleg', fieldPath: 'sumideros.sumideros[4].alturaLlegada.value', category: 'sumideros', isRepeatable: true, defaultWidth: 30, defaultHeight: 10 },
+
+    { id: 'sum_6_tipo', label: 'Sum 6 Tipo', fieldPath: 'sumideros.sumideros[5].tipoSumidero.value', category: 'sumideros', isRepeatable: true, defaultWidth: 40, defaultHeight: 10 },
+    { id: 'sum_6_material', label: 'Sum 6 Mat', fieldPath: 'sumideros.sumideros[5].materialTuberia.value', category: 'sumideros', isRepeatable: true, defaultWidth: 40, defaultHeight: 10 },
+    { id: 'sum_6_esquema', label: 'Sum 6 Esq', fieldPath: 'sumideros.sumideros[5].numeroEsquema.value', category: 'sumideros', isRepeatable: true, defaultWidth: 25, defaultHeight: 10 },
+    { id: 'sum_6_diametro', label: 'Sum 6 Ø', fieldPath: 'sumideros.sumideros[5].diametro.value', category: 'sumideros', isRepeatable: true, defaultWidth: 25, defaultHeight: 10 },
+    { id: 'sum_6_hSalida', label: 'Sum 6 H Sal', fieldPath: 'sumideros.sumideros[5].alturaSalida.value', category: 'sumideros', isRepeatable: true, defaultWidth: 30, defaultHeight: 10 },
+    { id: 'sum_6_hLlegada', label: 'Sum 6 H Lleg', fieldPath: 'sumideros.sumideros[5].alturaLlegada.value', category: 'sumideros', isRepeatable: true, defaultWidth: 30, defaultHeight: 10 },
+    { id: 'sum_3_id', label: 'Sum 3 ID', fieldPath: 'sumideros.sumideros[2].idSumidero.value', category: 'sumideros', isRepeatable: true, defaultWidth: 40, defaultHeight: 10 },
+    { id: 'sum_4_id', label: 'Sum 4 ID', fieldPath: 'sumideros.sumideros[3].idSumidero.value', category: 'sumideros', isRepeatable: true, defaultWidth: 40, defaultHeight: 10 },
+    { id: 'sum_5_id', label: 'Sum 5 ID', fieldPath: 'sumideros.sumideros[4].idSumidero.value', category: 'sumideros', isRepeatable: true, defaultWidth: 40, defaultHeight: 10 },
+    { id: 'sum_6_id', label: 'Sum 6 ID', fieldPath: 'sumideros.sumideros[5].idSumidero.value', category: 'sumideros', isRepeatable: true, defaultWidth: 40, defaultHeight: 10 },
 
     // FOTOS ESPECÍFICAS (Por Nomenclatura)
     { id: 'foto_panoramica', label: 'Foto Panorámica (P)', fieldPath: 'fotos.fotos[P]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
@@ -310,6 +376,7 @@ export const AVAILABLE_FIELDS: AvailableField[] = [
     { id: 'foto_entrada_4', label: 'Foto Entrada 4', fieldPath: 'fotos.fotos[E4]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
     { id: 'foto_entrada_5', label: 'Foto Entrada 5', fieldPath: 'fotos.fotos[E5]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
     { id: 'foto_entrada_6', label: 'Foto Entrada 6', fieldPath: 'fotos.fotos[E6]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+    { id: 'foto_entrada_7', label: 'Foto Entrada 7', fieldPath: 'fotos.fotos[E7]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
 
     { id: 'foto_salida_1', label: 'Foto Salida 1', fieldPath: 'fotos.fotos[S1]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
     { id: 'foto_salida_2', label: 'Foto Salida 2', fieldPath: 'fotos.fotos[S2]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
@@ -317,6 +384,7 @@ export const AVAILABLE_FIELDS: AvailableField[] = [
     { id: 'foto_salida_4', label: 'Foto Salida 4', fieldPath: 'fotos.fotos[S4]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
     { id: 'foto_salida_5', label: 'Foto Salida 5', fieldPath: 'fotos.fotos[S5]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
     { id: 'foto_salida_6', label: 'Foto Salida 6', fieldPath: 'fotos.fotos[S6]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+    { id: 'foto_salida_7', label: 'Foto Salida 7', fieldPath: 'fotos.fotos[S7]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
 
     { id: 'foto_sumidero_1', label: 'Foto Sumidero 1', fieldPath: 'fotos.fotos[SUM1]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
     { id: 'foto_sumidero_2', label: 'Foto Sumidero 2', fieldPath: 'fotos.fotos[SUM2]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
@@ -324,6 +392,7 @@ export const AVAILABLE_FIELDS: AvailableField[] = [
     { id: 'foto_sumidero_4', label: 'Foto Sumidero 4', fieldPath: 'fotos.fotos[SUM4]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
     { id: 'foto_sumidero_5', label: 'Foto Sumidero 5', fieldPath: 'fotos.fotos[SUM5]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
     { id: 'foto_sumidero_6', label: 'Foto Sumidero 6', fieldPath: 'fotos.fotos[SUM6]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+    { id: 'foto_sumidero_7', label: 'Foto Sumidero 7', fieldPath: 'fotos.fotos[SUM7]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
 
     { id: 'foto_descarga_1', label: 'Foto Descarga 1', fieldPath: 'fotos.fotos[D1]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
     { id: 'foto_descarga_2', label: 'Foto Descarga 2', fieldPath: 'fotos.fotos[D2]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
@@ -331,6 +400,7 @@ export const AVAILABLE_FIELDS: AvailableField[] = [
     { id: 'foto_descarga_4', label: 'Foto Descarga 4', fieldPath: 'fotos.fotos[D4]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
     { id: 'foto_descarga_5', label: 'Foto Descarga 5', fieldPath: 'fotos.fotos[D5]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
     { id: 'foto_descarga_6', label: 'Foto Descarga 6', fieldPath: 'fotos.fotos[D6]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
+    { id: 'foto_descarga_7', label: 'Foto Descarga 7', fieldPath: 'fotos.fotos[D7]', category: 'fotos', isRepeatable: false, defaultWidth: 80, defaultHeight: 60 },
 
     // FOTOS GENÉRICAS (Hasta 12 slots)
     { id: 'foto_1', label: 'Foto 1', fieldPath: 'fotos.fotos[0].blobId', category: 'fotos', isRepeatable: true, defaultWidth: 60, defaultHeight: 45 },

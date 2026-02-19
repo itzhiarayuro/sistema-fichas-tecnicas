@@ -41,13 +41,13 @@ export interface NomenclaturaResult {
 const PATTERNS = {
   // Fotos principales: M680-P (Panorámica), M680-I (Interna), M680-T (Tapa), M680-A/AT (Acceso), M680-F (Fondo), M680-M (Medición)
   PRINCIPAL: /^(.+)-([PITAFM]|AT)$/i,
-  // Entradas con número: M680-E1, M680-E1-T, M680-E1-Z (Tubería o Zoom)
-  ENTRADA: /^(.+)-(E\d+)(?:-[TZ])?$/i,
-  // Salidas con número opcional: M680-S, M680-S1, M680-S1-T, etc.
-  SALIDA_CON_NUMERO: /^(.+)-(S\d+)(?:-[TZ])?$/i,
-  SALIDA_SIN_NUMERO: /^(.+)-(S)(?:-[TZ])?$/i,
+  // Entradas con número: M680-E1, M680-E2-T-S1
+  ENTRADA: /^(.+)-(E\d+)(?:-[TZ])?/i,
+  // Salidas con número opcional: M680-S, M680-S1...
+  SALIDA_CON_NUMERO: /^(.+)-(S\d+)(?:-[TZ])?/i,
+  SALIDA_SIN_NUMERO: /^(.+)-(S)(?:-[TZ])?/i,
   // Sumideros: M680-SUM1, M680-SUM2...
-  SUMIDERO: /^(.+)-(SUM\d+)$/i,
+  SUMIDERO: /^(.+)-(SUM\d+)/i,
   // Descargas: M680-D1, M680-DESC1...
   DESCARGA: /^(.+)-(D\d+|DESC\d*)$/i,
   // Esquema de localización: M680_ARGIS

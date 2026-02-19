@@ -109,6 +109,12 @@ export function DesignPreview({ version, isOpen, onClose }: DesignPreviewProps) 
                             if (num === '1') {
                                 if (filename === 'S' || filename === 'S-T' || filename === 'S-HS' || filename === 'F-S-T' || filename.includes('-S-T') || filename.includes('-S-HS') || new RegExp('(^|[\\-_])S([\\-_\\.]|$)').test(filename)) return true;
                             }
+
+                            // Solo coincide si NO es un tag secundario de un Sumidero (ej: evitar que S1 en E2-T-S1 sea tomado como Salida 1)
+                            if (filename.includes('-E')) {
+                                return false;
+                            }
+
                             const regex = new RegExp(`(^|[\\-_])S${num}([\\-_\\.]|$)`);
                             return regex.test(filename) || regex.test(filename.replace(/-/g, '')) || filename.includes(`F-S${num}`);
                         }

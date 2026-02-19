@@ -19,6 +19,56 @@ import {
 } from './highFidelityRenderer';
 
 /**
+ * Verifica si la página 2 debe ser omitida por falta de contenido
+ * Condiciones: NO hay tuberías, NO hay sumideros, NO hay fotos de entradas/salidas/sumideros
+ */
+async function checkIfPage2ShouldBeSkipped(
+    design: FichaDesignVersion,
+    pozo: Pozo,
+    blobStore: any
+): Promise<boolean> {
+    // Si el diseño solo tiene 1 página, no hay nada que omitir
+    if ((design.numPages || 1) < 2) return false;
+
+    // Verificar si hay tuberías (entradas o salidas)
+    const hasTuberias = pozo.tuberias?.tuberias && pozo.tuberias.tuberias.length > 0;
+    if (hasTuberias) return false;
+
+    // Verificar si hay sumideros
+    const hasSumideros = pozo.sumideros?.sumideros && pozo.sumideros.sumideros.length > 0;
+    if (hasSumideros) return false;
+
+    // Códigos de fotos que indican contenido en página 2
+    const page2PhotoCodes = [
+        'E1', 'E2', 'E3', 'E4', 'E5', 'E6', 'E7', // Entradas
+        'S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', // Salidas
+        'SUM1', 'SUM2', 'SUM3', 'SUM4', 'SUM5', 'SUM6', 'SUM7'  // Sumideros
+    ];
+
+    // Verificar si existe alguna foto de entrada, salida o sumidero
+    const hasPage2Photos = pozo.fotos?.fotos?.some(f => {
+        const subcat = String(f.subcategoria || '').toUpperCase();
+        const filename = String(f.filename || '').toUpperCase();
+        const tipo = String(f.tipo || '').toUpperCase();
+
+        return page2PhotoCodes.some(code =>
+            subcat === code ||
+            subcat.includes(code) ||
+            filename.includes(`-${code}.`) ||
+            filename.includes(`-${code}-`) ||
+            filename.endsWith(`-${code}`) ||
+            tipo === code
+        );
+    });
+
+    if (hasPage2Photos) return false;
+
+    // Si llegamos aquí: NO hay tuberías, NO hay sumideros, NO hay fotos relevantes
+    // La página 2 debe ser omitida
+    return true;
+}
+
+/**
  * Obtiene valor de un campo del pozo usando path notation
  */
 function getValueByPath(obj: any, path: string): any {
@@ -289,10 +339,25 @@ export async function generateHighFidelityPDF(
         // TRACKING: Evitar que la misma foto se use múltiples veces
         const usedPhotoIds = new Set<string>();
 
+        // Determinar si la página 2 debe ser omitida
+        const shouldSkipPage2 = await checkIfPage2ShouldBeSkipped(design, pozo, blobStore);
+
+        console.log('🔍 [HIGH FIDELITY] Evaluación página 2:', {
+            shouldSkip: shouldSkipPage2,
+            tuberias: pozo.tuberias?.tuberias?.length || 0,
+            sumideros: pozo.sumideros?.sumideros?.length || 0
+        });
+
         // Renderizar cada página
         const numPages = design.numPages || 1;
 
         for (let pageIdx = 1; pageIdx <= numPages; pageIdx++) {
+            // Saltar página 2 si está vacía
+            if (pageIdx === 2 && shouldSkipPage2) {
+                console.log('⏭️ [HIGH FIDELITY] Omitiendo página 2 (sin contenido)');
+                continue;
+            }
+
             if (pageIdx > 1) doc.addPage();
 
             for (const el of allElements) {

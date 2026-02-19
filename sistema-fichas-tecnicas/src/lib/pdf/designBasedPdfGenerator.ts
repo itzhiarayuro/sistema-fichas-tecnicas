@@ -103,7 +103,15 @@ export async function generatePdfFromDesign(
         // 1. PRE-CARGA DE BLOBS
         const neededBlobIds = new Set<string>();
         design.placements.filter(p => p.fieldId.startsWith('foto_') && !/^\d+$/.test(p.fieldId.split('_')[1])).forEach(p => {
-            const targetCode = codeMap[p.fieldId];
+            let targetCode = codeMap[p.fieldId];
+            // Fallback: Deducir código de FIELD_PATHS si no está en codeMap (ej: fotos.fotos[E1] -> E1)
+            if (!targetCode) {
+                const path = FIELD_PATHS[p.fieldId as keyof typeof FIELD_PATHS];
+                if (path && path.includes('[') && path.includes(']')) {
+                    targetCode = path.split('[').pop()?.split(']').shift() || '';
+                }
+            }
+
             if (targetCode) {
                 const upperTarget = targetCode.toUpperCase();
                 const f = pozo.fotos?.fotos?.find(f => {
@@ -124,7 +132,15 @@ export async function generatePdfFromDesign(
                     if (upperTarget.startsWith('S') && !upperTarget.startsWith('SUM')) {
                         const num = upperTarget.replace('S', '');
                         if (num === '1' && (filename === 'S' || filename === 'S-T' || filename === 'S-HS' || filename === 'F-S-T' || filename.includes('-S-T') || filename.includes('-S-HS') || new RegExp('(^|[\\-_])S([\\-_\\.]|$)').test(filename))) return true;
-                        return new RegExp(`(^|[\\-_])S${num}([\\-_\\.]|$)`).test(filename) || new RegExp(`(^|[\\-_])S${num}([\\-_\\.]|$)`).test(filename.replace(/-/g, '')) || filename.includes(`F-S${num}`);
+
+                        // Solo coincide si NO es un tag secundario de un Sumidero (ej: evitar que S1 en E2-T-S1 sea tomado como Salida 1)
+                        // Si el nombre contiene E#, el S# al final es un Sumidero.
+                        if (filename.includes('-E')) {
+                            return false;
+                        }
+
+                        const regex = new RegExp(`(^|[\\-_])S${num}([\\-_\\.]|$)`);
+                        return regex.test(filename) || new RegExp(`(^|[\\-_])S${num}([\\-_\\.]|$)`).test(filename.replace(/-/g, '')) || filename.includes(`F-S${num}`);
                     }
                     if (upperTarget.startsWith('SUM')) {
                         const num = upperTarget.replace('SUM', '');
