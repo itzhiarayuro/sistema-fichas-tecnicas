@@ -154,7 +154,7 @@ function TuberiaCard({
         </div>
 
         <div>
-          <label className="block text-xs text-gray-500 mb-1">Cota</label>
+          <label className="block text-xs text-gray-500 mb-1">Z</label>
           <TuberiaFieldWithUnit
             fieldValue={tuberia.cota}
             unit="m"

@@ -8,7 +8,6 @@ import { FichaDesignVersion } from '@/types/fichaDesign';
 import { useDesignStore, useUIStore, useGlobalStore } from '@/stores';
 import { HTMLImporter } from './HTMLImporter';
 import { generatePdfFromDesign } from '@/lib/pdf/designBasedPdfGenerator';
-import { downloadPDF } from '@/lib/pdf/pdfGenerator';
 
 interface DesignerToolbarProps {
     design: FichaDesignVersion | null | undefined;
@@ -34,11 +33,12 @@ export function DesignerToolbar({ design, onSave }: DesignerToolbarProps) {
         const result = await generatePdfFromDesign(design, firstPozo);
 
         if (result.success && result.blob) {
-            downloadPDF({
-                success: true,
-                blob: result.blob,
-                filename: `preview_${design.name}.pdf`
-            });
+            const url = URL.createObjectURL(result.blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `preview_${design.name}.pdf`;
+            link.click();
+            URL.revokeObjectURL(url);
             addToast({ type: 'success', message: 'Vista previa generada' });
         } else {
             addToast({ type: 'error', message: `Error: ${result.error}` });
@@ -100,10 +100,41 @@ export function DesignerToolbar({ design, onSave }: DesignerToolbarProps) {
                 <button
                     onClick={handlePreview}
                     className="p-2 text-gray-500 hover:text-primary hover:bg-primary-50 rounded-lg transition-all"
-                    title="Exportar PDF de prueba"
+                    title="Exportar PDF de prueba (Estándar)"
                 >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                </button>
+
+                <button
+                    onClick={async () => {
+                        if (!design) return;
+                        const firstPozo = Array.from(pozos.values())[0];
+                        if (!firstPozo) {
+                            addToast({ type: 'warning', message: 'Carga al menos un pozo para ver la vista previa' });
+                            return;
+                        }
+                        addToast({ type: 'info', message: 'Generando PDF Flexible (Beta)...' });
+                        const { generateFlexiblePdf } = await import('@/lib/pdf/flexiblePdfGenerator');
+                        const result = await generateFlexiblePdf(design, firstPozo);
+                        if (result.success && result.blob) {
+                            const url = URL.createObjectURL(result.blob);
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.download = `flexible_preview_${design.name}.pdf`;
+                            link.click();
+                            URL.revokeObjectURL(url);
+                            addToast({ type: 'success', message: 'PDF Flexible generado' });
+                        } else {
+                            addToast({ type: 'error', message: `Error: ${result.error}` });
+                        }
+                    }}
+                    className="p-2 text-orange-500 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-all"
+                    title="Exportar PDF Flexible (Beta - Grid Dinámico)"
+                >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
                     </svg>
                 </button>
 

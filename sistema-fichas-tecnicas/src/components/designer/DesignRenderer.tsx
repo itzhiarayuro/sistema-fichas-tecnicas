@@ -280,20 +280,22 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
                         </div>
                     ) : isWidget ? (
                         <div className="w-full h-full border border-gray-300 rounded overflow-hidden text-[5.5pt] bg-white">
-                            <div className="grid grid-cols-5 bg-gray-100 font-bold border-b border-gray-300 p-1">
+                            <div className="grid grid-cols-6 bg-gray-100 font-bold border-b border-gray-300 p-1">
                                 <span>#</span>
                                 <span>Ø (")</span>
                                 <span>Material</span>
                                 <span>Estado</span>
                                 <span>Batea</span>
+                                <span>Z</span>
                             </div>
                             {(pozo.tuberias?.tuberias || []).slice(0, 10).map((t, idx) => (
-                                <div key={idx} className="grid grid-cols-5 border-b border-gray-200 p-1 last:border-0 bg-white">
+                                <div key={idx} className="grid grid-cols-6 border-b border-gray-200 p-1 last:border-0 bg-white">
                                     <span>{t.orden?.value || idx + 1}</span>
                                     <span>{t.diametroPulgadas?.value || t.diametro?.value || '-'}</span>
                                     <span>{t.material?.value || '-'}</span>
                                     <span>{t.estado?.value || '-'}</span>
                                     <span>{t.batea?.value || '-'}</span>
+                                    <span>{t.cota?.value || t.z?.value || '-'}</span>
                                 </div>
                             ))}
                             {(pozo.tuberias?.tuberias?.length || 0) === 0 && <div className="p-2 text-center text-gray-400 italic">Sin tuberías</div>}

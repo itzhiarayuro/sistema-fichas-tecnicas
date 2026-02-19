@@ -362,8 +362,6 @@ export function DesignToolbar({
                     onClick={async () => {
                         if (!version) return;
                         try {
-                            // En el toolbar, necesitamos un pozo para exportar. 
-                            // Si no hay pozo seleccionado en el global store, usamos el primero disponible.
                             const { useGlobalStore } = await import('@/stores');
                             const pozos = useGlobalStore.getState().pozos;
                             const pozo = Array.from(pozos.values())[0];
@@ -391,12 +389,52 @@ export function DesignToolbar({
                         }
                     }}
                     className="flex items-center gap-2 bg-gradient-to-r from-red-600 to-red-700 text-white px-3 py-2 rounded-lg font-medium hover:shadow-lg transition-all active:scale-95 text-xs"
-                    title="Exportar PDF"
+                    title="Exportar PDF Estándar (Posiciones fijas)"
                 >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                     PDF
+                </button>
+
+                {/* Export PDF Flexible (EXPERIMENTAL) */}
+                <button
+                    onClick={async () => {
+                        if (!version) return;
+                        try {
+                            const { useGlobalStore } = await import('@/stores');
+                            const pozos = useGlobalStore.getState().pozos;
+                            const pozo = Array.from(pozos.values())[0];
+
+                            if (!pozo) {
+                                alert('No hay pozos cargados para probar la exportación flexible.');
+                                return;
+                            }
+
+                            const { generateFlexiblePdf } = await import('@/lib/pdf/flexiblePdfGenerator');
+                            const result = await generateFlexiblePdf(version, pozo);
+                            if (result.success && result.blob) {
+                                const url = URL.createObjectURL(result.blob);
+                                const link = document.createElement('a');
+                                link.href = url;
+                                link.download = `${version.name.replace(/\s+/g, '_')}_flexible_beta.pdf`;
+                                link.click();
+                                URL.revokeObjectURL(url);
+                            } else {
+                                alert('Error al generar PDF Flexible: ' + result.error);
+                            }
+                        } catch (e) {
+                            console.error(e);
+                            alert('Error inesperado al generar PDF Flexible');
+                        }
+                    }}
+                    className="flex items-center gap-2 bg-gradient-to-r from-orange-500 to-yellow-600 text-white px-3 py-2 rounded-lg font-medium hover:shadow-lg transition-all active:scale-95 text-xs"
+                    title="PROBAR: Reorganización dinámica (Grid Flexible)"
+                >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                    </svg>
+                    PDF Flexible (Beta)
                 </button>
 
                 {/* Export HTML */}

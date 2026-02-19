@@ -127,16 +127,24 @@ const COLUMN_MAPPING: Record<string, string> = {
  */
 const TUBERIA_MAPPING: Record<string, string> = {
   'id_pozo': 'idPozo',
+  'id_de_pozo': 'idPozo',
   'pozo': 'idPozo',
+  'codigo_pozo': 'idPozo',
+  'codigo': 'idPozo',
   'id_tuberia': 'idTuberia',
   'tuberia': 'idTuberia',
   'tipo': 'tipoTuberia',
   'tipo_tuberia': 'tipoTuberia',
   'orden': 'orden',
+  'orden_tuberia': 'orden',
   'diametro': 'diametro',
   'o_pulgadas': 'diametro',
+  'o_pulg': 'diametro',
+  'o_mm': 'diametro',
+  'diametro_mm': 'diametro',
   'material': 'material',
   'cota': 'cota',
+  'cota_z': 'cota',
   'z': 'cota',
   'estado': 'estado',
   'emboquillado': 'emboquillado',
@@ -146,16 +154,20 @@ const TUBERIA_MAPPING: Record<string, string> = {
 
 const SUMIDERO_MAPPING: Record<string, string> = {
   'id_pozo': 'idPozo',
+  'id_de_pozo': 'idPozo',
   'pozo': 'idPozo',
+  'codigo_pozo': 'idPozo',
   'id_sumidero': 'idSumidero',
   'sumidero': 'idSumidero',
   'tipo': 'tipoSumidero',
   'tipo_sumidero': 'tipoSumidero',
   'numero_esquema': 'numeroEsquema',
   'esquema': 'numeroEsquema',
+  'no_esquema': 'numeroEsquema',
   '_esquema': 'numeroEsquema',
   'o_pulg': 'diametro',
   'diametro': 'diametro',
+  'o_mm': 'diametro',
   'material_tuberia': 'materialTuberia',
   'altura_salida': 'alturaSalida',
   'h_salida_m': 'alturaSalida',
@@ -433,27 +445,28 @@ function detectColumns(data: Record<string, unknown>[], result: ExcelParseResult
  * Busca la fila de cabeceras si la primera no parece serlo
  * Algunas hojas tienen títulos o filas vacías al inicio.
  */
-function findHeaderRow(data: any[]): number {
+/**
+ * Busca la fila de cabeceras si la primera no parece serlo
+ * Algunas hojas tienen títulos o filas vacías al inicio.
+ */
+function findHeaderRow(data: any[], mapping: Record<string, string> = COLUMN_MAPPING): number {
   if (!data || data.length === 0) return 0;
 
   for (let i = 0; i < Math.min(data.length, 10); i++) {
     const row = data[i];
     if (!row || typeof row !== 'object') continue;
 
-    // Buscamos en los VALORES de la fila, ya que si la cabecera no se detectó,
-    // estará como una fila de datos.
     const values = Object.values(row);
     let matches = 0;
 
     for (const val of values) {
       const normalized = normalizeColumnName(safeStringValue(val));
-      if (COLUMN_MAPPING[normalized]) {
+      if (mapping[normalized]) {
         matches++;
       }
     }
 
     // Si encontramos al menos 2 columnas conocidas, esta fila es la cabecera real
-    // Retornamos i + 1 porque pozosData[0] es la fila 1 de la hoja (siendo fila 0 la cabecera detectada)
     if (matches >= 2) return i + 1;
   }
 
@@ -610,7 +623,12 @@ export function parseExcelData(data: unknown, tipoFicha?: 'POZO' | 'DESCARGA'): 
         result.pozos.push(pozo);
         result.stats.validRows++;
       } else {
-        result.stats.skippedRows++;
+        // Log skip if has some data but failed required fields
+        if (Object.values(row).some(v => v !== '')) {
+          result.stats.skippedRows++;
+        } else {
+          result.stats.totalRows--; // Empty row, don't count
+        }
       }
     } catch (error) {
       // Capturar cualquier error inesperado - fail-safe
@@ -1013,7 +1031,7 @@ export async function parseExcelFileContent(workbook: any): Promise<ExcelParseRe
       if (!worksheet) continue;
 
       let sheetData = XLSX.utils.sheet_to_json(worksheet, { defval: '', raw: false }) as any[];
-      const offset = findHeaderRow(sheetData);
+      const offset = findHeaderRow(sheetData, COLUMN_MAPPING);
       if (offset > 0) {
         sheetData = XLSX.utils.sheet_to_json(worksheet, { range: offset, defval: '', raw: false });
       }
@@ -1039,7 +1057,10 @@ export async function parseExcelFileContent(workbook: any): Promise<ExcelParseRe
     }
 
     const pozosMap = new Map<string, Pozo>();
-    result.pozos.forEach(p => pozosMap.set(p.identificacion.idPozo.value, p));
+    result.pozos.forEach(p => {
+      const id = p.identificacion.idPozo.value.trim().toUpperCase();
+      if (id) pozosMap.set(id, p);
+    });
 
     // 3. Parsear TUBERIAS (Soporta múltiples hojas como Tuberias_entrada, Tuberias_salida)
     const tuberiasSheetNames = workbook.SheetNames.filter((name: string) =>
@@ -1047,48 +1068,68 @@ export async function parseExcelFileContent(workbook: any): Promise<ExcelParseRe
     );
 
     tuberiasSheetNames.forEach((tbSheetName: string) => {
-      const tbData = XLSX.utils.sheet_to_json(workbook.Sheets[tbSheetName], { defval: '', raw: false }) as Record<string, unknown>[];
+      const worksheet = workbook.Sheets[tbSheetName];
+      if (!worksheet) return;
+
+      let tbData = XLSX.utils.sheet_to_json(worksheet, { defval: '', raw: false }) as any[];
+      const offset = findHeaderRow(tbData, TUBERIA_MAPPING);
+      if (offset > 0) {
+        tbData = XLSX.utils.sheet_to_json(worksheet, { range: offset, defval: '', raw: false });
+      }
+
       const tuberias = parseChildSheet(tbData, TUBERIA_MAPPING, parseTuberiaRow, result, tbSheetName);
 
       tuberias.forEach(tub => {
-        const pId = tub.idPozo?.value;
+        const pId = tub.idPozo?.value?.trim().toUpperCase();
         const pozo = pozosMap.get(pId);
         if (pozo) {
           pozo.tuberias.tuberias.push(tub);
         } else if (pId) {
-          result.warnings.push(`Tubería ${tub.idTuberia.value} huérfana en hoja ${tbSheetName} (Pozo ${pId} no encontrado)`);
+          result.warnings.push(`Tubería ${tub.idTuberia.value} huérfana en hoja ${tbSheetName} (Pozo "${pId}" no encontrado)`);
         }
       });
     });
 
     // 4. Parsear SUMIDEROS
     if (sumiderosSheetName && workbook.Sheets[sumiderosSheetName]) {
-      const smData = XLSX.utils.sheet_to_json(workbook.Sheets[sumiderosSheetName], { defval: '', raw: false }) as Record<string, unknown>[];
+      const worksheet = workbook.Sheets[sumiderosSheetName];
+      let smData = XLSX.utils.sheet_to_json(worksheet, { defval: '', raw: false }) as any[];
+      const offset = findHeaderRow(smData, SUMIDERO_MAPPING);
+      if (offset > 0) {
+        smData = XLSX.utils.sheet_to_json(worksheet, { range: offset, defval: '', raw: false });
+      }
+
       const sumideros = parseChildSheet(smData, SUMIDERO_MAPPING, parseSumideroRow, result, 'SUMIDEROS');
 
       sumideros.forEach(sum => {
-        const pId = sum.idPozo?.value;
+        const pId = sum.idPozo?.value?.trim().toUpperCase();
         const pozo = pozosMap.get(pId);
         if (pozo) {
           pozo.sumideros.sumideros.push(sum);
-        } else {
-          result.warnings.push(`Sumidero ${sum.idSumidero.value} huérfano (Pozo ${pId} no encontrado)`);
+        } else if (pId) {
+          result.warnings.push(`Sumidero ${sum.idSumidero.value} huérfano (Pozo "${pId}" no encontrado)`);
         }
       });
     }
 
     // 5. Parsear FOTOS
     if (fotosSheetName && workbook.Sheets[fotosSheetName]) {
-      const ftData = XLSX.utils.sheet_to_json(workbook.Sheets[fotosSheetName], { defval: '', raw: false }) as Record<string, unknown>[];
+      const worksheet = workbook.Sheets[fotosSheetName];
+      let ftData = XLSX.utils.sheet_to_json(worksheet, { defval: '', raw: false }) as any[];
+      const offset = findHeaderRow(ftData, FOTO_MAPPING);
+      if (offset > 0) {
+        ftData = XLSX.utils.sheet_to_json(worksheet, { range: offset, defval: '', raw: false });
+      }
+
       const fotos = parseChildSheet(ftData, FOTO_MAPPING, parseFotoRow, result, 'FOTOS');
 
       fotos.forEach(foto => {
-        const pId = foto.idPozo;
+        const pId = foto.idPozo?.trim().toUpperCase();
         const pozo = pozosMap.get(pId);
         if (pozo) {
           pozo.fotos.fotos.push(foto);
-        } else {
-          result.warnings.push(`Foto ${foto.id} huérfana (Pozo ${pId} no encontrado)`);
+        } else if (pId) {
+          result.warnings.push(`Foto ${foto.id} huérfana (Pozo "${pId}" no encontrado)`);
         }
       });
     }
