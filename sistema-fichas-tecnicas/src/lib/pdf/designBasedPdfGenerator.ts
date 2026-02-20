@@ -62,14 +62,97 @@ const getValueByPath = (obj: any, path: string) => {
 
 export async function generatePdfFromDesign(
     design: FichaDesignVersion,
-    pozo: Pozo
+    pozo: Pozo,
+    options: { isFlexible?: boolean } = {}
 ): Promise<{ success: boolean; blob?: Blob; error?: string }> {
     try {
-        console.log('🎨 Generando PDF con diseño personalizado:', {
+        const isFlexible = options.isFlexible === true;
+        console.log('🎨 Generando PDF:', {
             nombre: design.name,
-            placements: design.placements?.length || 0,
-            pageSize: design.pageSize
+            flexible: isFlexible,
+            placements: design.placements?.length || 0
         });
+
+        // LÓGICA DE FLEXIBILIDAD (Colapsar espacios vacíos)
+        const groupVisibilityMap = new Map<string, boolean>();
+        const hiddenStrips: Array<{ yMin: number; yMax: number; height: number }> = [];
+
+        if (design.groups) {
+            design.groups.forEach(group => {
+                const name = (group.name || '').toLowerCase();
+                let shouldHide = false;
+
+                if (name.includes('entrada') || name.includes('salida')) {
+                    const match = name.match(/(entrada|salida)\s*(\d+)/);
+                    if (match) {
+                        const type = match[1];
+                        const num = match[2];
+                        const pipe = pozo.tuberias?.tuberias?.find(t =>
+                            String(t.tipoTuberia?.value || '').toLowerCase() === (type === 'entrada' ? 'entrada' : 'salida') &&
+                            String(t.orden?.value) === num
+                        );
+                        if (!pipe) shouldHide = true;
+                    }
+                } else if (name.includes('sumidero')) {
+                    const match = name.match(/sumidero\s*(\d+)/);
+                    if (match) {
+                        const num = parseInt(match[1]);
+                        const sumidero = pozo.sumideros?.sumideros?.[num - 1];
+                        if (!sumidero) shouldHide = true;
+                    }
+                }
+
+                groupVisibilityMap.set(group.id, !shouldHide);
+
+                if (shouldHide && isFlexible) {
+                    // Solo considerar miembros que están en la página 2
+                    const members = [
+                        ...(design.shapes || []).filter(s => (s as any).groupId === group.id && ((s as any).pageNumber || 1) === 2),
+                        ...(design.placements || []).filter(p => (p as any).groupId === group.id && ((p as any).pageNumber || 1) === 2)
+                    ];
+                    if (members.length > 0) {
+                        const yMin = Math.min(...members.map(m => m.y));
+                        const yMax = Math.max(...members.map(m => m.y + (m.height || 0)));
+                        hiddenStrips.push({ yMin, yMax, height: yMax - yMin });
+                    }
+                }
+            });
+        }
+
+        // Filtrar franjas que realmente se pueden colapsar (solo considerar elementos de página 2)
+        const finalCompressibleStrips: Array<{ yMin: number; yMax: number; height: number }> = [];
+        if (isFlexible) {
+            const page2Els = [
+                ...(design.shapes || []).filter(s => ((s as any).pageNumber || 1) === 2),
+                ...(design.placements || []).filter(p => ((p as any).pageNumber || 1) === 2)
+            ];
+            hiddenStrips.sort((a, b) => a.yMin - b.yMin).forEach(strip => {
+                const isClear = !page2Els.some(el => {
+                    const gVisible = !el.groupId || groupVisibilityMap.get(el.groupId) !== false;
+                    if (!gVisible) return false;
+                    const top = el.y;
+                    const bottom = el.y + (el.height || 0);
+                    return (top < strip.yMax && bottom > strip.yMin);
+                });
+                if (isClear) finalCompressibleStrips.push(strip);
+            });
+
+            console.log('🎹 Acordeón - Grupos ocultos:',
+                Array.from(groupVisibilityMap.entries()).filter(([, v]) => !v).length,
+                'Franjas colapsables:', finalCompressibleStrips.length,
+                finalCompressibleStrips.map(s => `[y:${s.yMin.toFixed(1)}-${s.yMax.toFixed(1)}, h:${s.height.toFixed(1)}mm]`)
+            );
+        }
+
+        const getShiftedY = (originalY: number, originalHeight: number) => {
+            if (!isFlexible) return originalY;
+            const mid = originalY + (originalHeight / 2);
+            let shift = 0;
+            finalCompressibleStrips.forEach(strip => {
+                if (mid > strip.yMax) shift += strip.height;
+            });
+            return originalY - shift;
+        };
 
         const orientation = design.orientation === 'portrait' ? 'p' : 'l';
         const doc = new jsPDF({
@@ -156,18 +239,33 @@ export async function generatePdfFromDesign(
         for (let pIdx = 1; pIdx <= numPages; pIdx++) {
             if (pIdx > 1) doc.addPage();
 
+            // ¿Aplicar efecto acordeón en esta página?
+            const applyAccordion = isFlexible && pIdx >= 2;
+
             for (const el of allElements) {
+                // Saltar grupos ocultos SOLO en página 2+ con modo Flexible
+                if (applyAccordion && el.groupId && groupVisibilityMap.has(el.groupId)) {
+                    if (!groupVisibilityMap.get(el.groupId)) continue;
+                }
+
                 if (el.isVisible === false) continue;
                 const isHeader = (el as any).repeatOnEveryPage;
                 const elementPage = (el as any).pageNumber || 1;
                 if (!isHeader && elementPage !== pIdx) continue;
+
+                // Calcular posición vertical:
+                // Página 1 = posición original (sin cambios)
+                // Página 2+ con Flexible = posición desplazada por acordeón
+                const shiftedY = applyAccordion
+                    ? getShiftedY(el.y, (el as any).height || 0)
+                    : el.y;
 
                 // Opacidad
                 const opacity = (el as any).opacity ?? 1;
                 doc.setGState(new (doc as any).GState({ opacity }));
 
                 if (el.isShape) {
-                    await renderShape(doc, el as ShapeElement);
+                    await renderShape(doc, el as ShapeElement, shiftedY);
                 } else {
                     const placement = el as FieldPlacement;
                     let value: any = '-';
@@ -291,7 +389,7 @@ export async function generatePdfFromDesign(
                     const hasNoData = !value || value === '-' || value === '' || value === 'Sin foto';
 
                     if (!(isTechnicalSlot && hasNoData)) {
-                        await renderField(doc, placement, pozo, value, link);
+                        await renderField(doc, placement, pozo, value, link, shiftedY);
                     }
                 }
             }
@@ -304,7 +402,8 @@ export async function generatePdfFromDesign(
     }
 }
 
-async function renderShape(doc: jsPDF, shape: ShapeElement) {
+async function renderShape(doc: jsPDF, shape: ShapeElement, shiftedY?: number) {
+    const yVal = shiftedY !== undefined ? shiftedY : shape.y;
     if (shape.type === 'rectangle' || shape.type === 'circle' || shape.type === 'triangle') {
         const style = (shape.fillColor && shape.fillColor !== 'transparent' && shape.strokeColor && shape.strokeColor !== 'transparent') ? 'FD' :
             (shape.fillColor && shape.fillColor !== 'transparent') ? 'F' : 'D';
@@ -317,23 +416,23 @@ async function renderShape(doc: jsPDF, shape: ShapeElement) {
 
         if (shape.type === 'circle') {
             const radius = Math.min(shape.width, shape.height) / 2;
-            doc.ellipse(shape.x + radius, shape.y + radius, radius, radius, style);
+            doc.ellipse(shape.x + radius, yVal + radius, radius, radius, style);
         } else if (shape.type === 'rectangle') {
             if (shape.borderRadius && shape.borderRadius > 0) {
                 const r = shape.borderRadius / 3.78;
-                (doc as any).roundedRect(shape.x, shape.y, shape.width, shape.height, r, r, style);
+                (doc as any).roundedRect(shape.x, yVal, shape.width, shape.height, r, r, style);
             } else {
-                doc.rect(shape.x, shape.y, shape.width, shape.height, style);
+                doc.rect(shape.x, yVal, shape.width, shape.height, style);
             }
         } else if (shape.type === 'triangle') {
-            doc.triangle(shape.x + shape.width / 2, shape.y, shape.x + shape.width, shape.y + shape.height, shape.x, shape.y + shape.height, style);
+            doc.triangle(shape.x + shape.width / 2, yVal, shape.x + shape.width, yVal + shape.height, shape.x, yVal + shape.height, style);
         }
     }
 
     if (shape.type === 'line') {
         doc.setDrawColor(shape.strokeColor || '#000000');
         doc.setLineWidth((shape.strokeWidth || 0.5) * PX_TO_MM);
-        doc.line(shape.x, shape.y, shape.x + shape.width, shape.y + shape.height);
+        doc.line(shape.x, yVal, shape.x + shape.width, yVal + shape.height);
     }
 
     if (shape.type === 'text' && shape.content) {
@@ -346,8 +445,8 @@ async function renderShape(doc: jsPDF, shape: ShapeElement) {
         if (align === 'center') x = shape.x + (shape.width / 2);
         if (align === 'right') x = shape.x + shape.width;
         const lineHeight = fontSize * 0.3527;
-        const y = shape.y + (shape.height / 2) + (lineHeight / 2) - 0.2;
-        doc.text(sanitizeTextForPDF(shape.content), x, y, { maxWidth: shape.width, align: align });
+        const textY = yVal + (shape.height / 2) + (lineHeight / 2) - 0.2;
+        doc.text(sanitizeTextForPDF(shape.content), x, textY, { maxWidth: shape.width, align: align });
     }
 
     if (shape.type === 'image' && shape.imageUrl) {
@@ -362,10 +461,10 @@ async function renderShape(doc: jsPDF, shape: ShapeElement) {
             if (img.width > 0) {
                 const imgAspect = img.width / img.height;
                 const boxAspect = shape.width / shape.height;
-                let drawW = shape.width, drawH = shape.height, drawX = shape.x, drawY = shape.y;
+                let drawW = shape.width, drawH = shape.height, drawX = shape.x, drawY = yVal;
                 if (imgAspect > boxAspect) {
                     drawH = shape.width / imgAspect;
-                    drawY = shape.y + (shape.height - drawH) / 2;
+                    drawY = yVal + (shape.height - drawH) / 2;
                 } else {
                     drawW = shape.height * imgAspect;
                     drawX = shape.x + (shape.width - drawW) / 2;
@@ -377,7 +476,8 @@ async function renderShape(doc: jsPDF, shape: ShapeElement) {
     }
 }
 
-async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, value: any, link?: string) {
+async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, value: any, link?: string, shiftedY?: number) {
+    const yVal = shiftedY !== undefined ? shiftedY : placement.y;
     const isPhoto = placement.fieldId.startsWith('foto_');
     const isWidget = placement.fieldId.startsWith('widget_');
 
@@ -392,9 +492,9 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
         if (style !== 'S' || (placement.borderWidth && placement.borderWidth > 0)) {
             if (placement.borderRadius && placement.borderRadius > 0) {
                 const r = placement.borderRadius / 3.78;
-                (doc as any).roundedRect(placement.x, placement.y, placement.width, placement.height, r, r, style);
+                (doc as any).roundedRect(placement.x, yVal, placement.width, placement.height, r, r, style);
             } else {
-                doc.rect(placement.x, placement.y, placement.width, placement.height, style);
+                doc.rect(placement.x, yVal, placement.width, placement.height, style);
             }
         }
     }
@@ -412,7 +512,7 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
         const labelWidthMM = placement.labelWidth || placement.width;
         if (placement.labelBackgroundColor && placement.labelBackgroundColor !== 'transparent') {
             doc.setFillColor(placement.labelBackgroundColor);
-            doc.rect(placement.x, placement.y, labelWidthMM, labelAreaHeight, 'F');
+            doc.rect(placement.x, yVal, labelWidthMM, labelAreaHeight, 'F');
         }
         doc.setFontSize(labelFontSize);
         doc.setFont(font, (placement.labelFontWeight === 'bold') ? 'bold' : 'normal');
@@ -421,7 +521,7 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
         let labelX = placement.x + labelPadding;
         if (labelAlign === 'center') labelX = placement.x + (labelWidthMM / 2);
         if (labelAlign === 'right') labelX = placement.x + labelWidthMM - labelPadding;
-        doc.text(labelText, labelX, placement.y + labelPadding + (labelFontSize * 0.28), { align: labelAlign, maxWidth: labelWidthMM - (labelPadding * 2) });
+        doc.text(labelText, labelX, yVal + labelPadding + (labelFontSize * 0.28), { align: labelAlign, maxWidth: labelWidthMM - (labelPadding * 2) });
         availableContentHeight -= labelAreaHeight;
     }
 
@@ -435,7 +535,7 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
                 setTimeout(() => resolve(), 2000);
             });
             const imgAspect = img.width / img.height;
-            const contentAreaY = placement.y + labelAreaHeight;
+            const contentAreaY = yVal + labelAreaHeight;
             const boxAspect = placement.width / availableContentHeight;
             let drawW = placement.width, drawH = availableContentHeight, drawX = placement.x, drawY = contentAreaY;
             if (imgAspect > boxAspect) {
@@ -455,7 +555,7 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
         const tuberias = (pozo.tuberias?.tuberias || []).slice(0, 10);
         const headers = ['#', 'Ø (")', 'Material', 'Estado', 'Batea'];
         const headerH = 5;
-        const contentAreaY = placement.y + labelAreaHeight;
+        const contentAreaY = yVal + labelAreaHeight;
         const rowH = (availableContentHeight - headerH) / Math.max(tuberias.length, 1);
         doc.setFillColor('#e5e7eb');
         doc.rect(placement.x, contentAreaY, placement.width, headerH, 'F');
@@ -488,15 +588,15 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
     if (align === 'center') tx = placement.x + (placement.width / 2);
     if (align === 'right') tx = placement.x + placement.width - padding;
     const lh = fontSize * 0.3527;
-    const ty = placement.y + labelAreaHeight + (availableContentHeight / 2) + (lh / 2.5);
+    const textYFinal = yVal + labelAreaHeight + (availableContentHeight / 2) + (lh / 2.5);
     const textContent = sanitizeTextForPDF(content);
-    doc.text(textContent, tx, ty, { maxWidth: placement.width - (padding * 2), align: align });
+    doc.text(textContent, tx, textYFinal, { maxWidth: placement.width - (padding * 2), align: align });
     if (link && content && content !== '-') {
         const tw = doc.getTextWidth(textContent);
         let lx = tx;
         if (align === 'center') lx = tx - (tw / 2);
         if (align === 'right') lx = tx - tw;
-        doc.link(lx, ty - (fontSize * 0.4), tw, fontSize * 0.4, { url: link });
-        doc.setDrawColor('#0000FF'); doc.setLineWidth(0.1); doc.line(lx, ty + 0.5, lx + tw, ty + 0.5);
+        doc.link(lx, textYFinal - (fontSize * 0.4), tw, fontSize * 0.4, { url: link });
+        doc.setDrawColor('#0000FF'); doc.setLineWidth(0.1); doc.line(lx, textYFinal + 0.5, lx + tw, textYFinal + 0.5);
     }
 }
