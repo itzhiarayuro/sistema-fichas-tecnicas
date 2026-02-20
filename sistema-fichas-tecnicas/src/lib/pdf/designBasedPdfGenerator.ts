@@ -63,10 +63,11 @@ const getValueByPath = (obj: any, path: string) => {
 export async function generatePdfFromDesign(
     design: FichaDesignVersion,
     pozo: Pozo,
-    options: { isFlexible?: boolean } = {}
+    options: { isFlexible?: boolean; skipGroupVisibility?: boolean } = {}
 ): Promise<{ success: boolean; blob?: Blob; error?: string }> {
     try {
         const isFlexible = options.isFlexible === true;
+        const skipGroupVisibility = options.skipGroupVisibility === true;
         console.log('🎨 Generando PDF:', {
             nombre: design.name,
             flexible: isFlexible,
@@ -74,10 +75,12 @@ export async function generatePdfFromDesign(
         });
 
         // LÓGICA DE FLEXIBILIDAD (Colapsar espacios vacíos)
+        // Si skipGroupVisibility es true, el layoutEngine ya hizo todo el trabajo
+        // de ocultar grupos sin datos y reubicar los visibles.
         const groupVisibilityMap = new Map<string, boolean>();
         const hiddenStrips: Array<{ yMin: number; yMax: number; height: number }> = [];
 
-        if (design.groups) {
+        if (design.groups && !skipGroupVisibility) {
             design.groups.forEach(group => {
                 const name = (group.name || '').toLowerCase();
                 let shouldHide = false;
@@ -105,7 +108,6 @@ export async function generatePdfFromDesign(
                 groupVisibilityMap.set(group.id, !shouldHide);
 
                 if (shouldHide && isFlexible) {
-                    // Solo considerar miembros que están en la página 2
                     const members = [
                         ...(design.shapes || []).filter(s => (s as any).groupId === group.id && ((s as any).pageNumber || 1) === 2),
                         ...(design.placements || []).filter(p => (p as any).groupId === group.id && ((p as any).pageNumber || 1) === 2)
@@ -117,11 +119,17 @@ export async function generatePdfFromDesign(
                     }
                 }
             });
+        } else if (skipGroupVisibility && design.groups) {
+            // Cuando el layoutEngine ya procesó, marcamos todos los grupos como visibles
+            // (los que no tenían datos ya fueron ocultados por el layoutEngine)
+            design.groups.forEach(group => {
+                groupVisibilityMap.set(group.id, group.isVisible !== false);
+            });
         }
 
-        // Filtrar franjas que realmente se pueden colapsar (solo considerar elementos de página 2)
+        // Filtrar franjas colapsables (solo aplica al modo acordeón estándar, NO al layoutEngine)
         const finalCompressibleStrips: Array<{ yMin: number; yMax: number; height: number }> = [];
-        if (isFlexible) {
+        if (isFlexible && !skipGroupVisibility) {
             const page2Els = [
                 ...(design.shapes || []).filter(s => ((s as any).pageNumber || 1) === 2),
                 ...(design.placements || []).filter(p => ((p as any).pageNumber || 1) === 2)
@@ -136,15 +144,12 @@ export async function generatePdfFromDesign(
                 });
                 if (isClear) finalCompressibleStrips.push(strip);
             });
-
-            console.log('🎹 Acordeón - Grupos ocultos:',
-                Array.from(groupVisibilityMap.entries()).filter(([, v]) => !v).length,
-                'Franjas colapsables:', finalCompressibleStrips.length,
-                finalCompressibleStrips.map(s => `[y:${s.yMin.toFixed(1)}-${s.yMax.toFixed(1)}, h:${s.height.toFixed(1)}mm]`)
-            );
         }
 
         const getShiftedY = (originalY: number, originalHeight: number) => {
+            // Si skipGroupVisibility está activo, el layoutEngine ya colocó todo
+            // en su posición final. No desplazar nada.
+            if (skipGroupVisibility) return originalY;
             if (!isFlexible) return originalY;
             const mid = originalY + (originalHeight / 2);
             let shift = 0;
