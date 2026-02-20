@@ -227,40 +227,26 @@ export function applyFlexibleGrid(
         const group = newDesign.groups.find(g => g.id === unit.id);
         const name = (group?.name || '').toLowerCase();
 
-        let type = 'other';
+        let type: 'entrada' | 'salida' | 'sumidero' | 'other' = 'other';
         let num = 999;
 
-        // 1. Detectar tipo (Prioridad: Entrada=1, Salida=2)
+        // 1. Detectar tipo (Prioridad por nombre o por hijos técnicos como fotos o campos)
         if (name.includes('entrada')) type = 'entrada';
         else if (name.includes('salida')) type = 'salida';
         else if (name.includes('sumidero')) type = 'sumidero';
         else {
-            // Si el nombre no ayuda, miramos los hijos
             for (const el of unit.elements) {
-                const fid = (el as any).fieldId || '';
-                
-                // Detectar campos de datos: ent_1_material, sal_2_diametro
-                if (fid.startsWith('ent_')) { type = 'entrada'; break; }
-                if (fid.startsWith('sal_')) { type = 'salida'; break; }
-                if (fid.startsWith('sum_')) { type = 'sumidero'; break; }
-                
-                // Detectar fotos: foto_entrada_1, foto_salida_2, foto_sumidero_3
-                if (fid.startsWith('foto_entrada_')) { type = 'entrada'; break; }
-                if (fid.startsWith('foto_salida_')) { type = 'salida'; break; }
-                if (fid.startsWith('foto_sumidero_')) { type = 'sumidero'; break; }
+                const fid = ((el as any).fieldId || '').toLowerCase();
+                if (fid.includes('entrada') || fid.startsWith('ent_')) { type = 'entrada'; break; }
+                if (fid.includes('salida') || fid.startsWith('sal_')) { type = 'salida'; break; }
+                if (fid.includes('sumidero') || fid.startsWith('sum_')) { type = 'sumidero'; break; }
             }
         }
 
-        // 2. Detectar número de orden
-        const m = name.match(/(\d+)/);
-        if (m) num = parseInt(m[1]);
-        else {
-            for (const el of unit.elements) {
-                const fid = (el as any).fieldId || '';
-                const m2 = fid.match(/(\d+)/);
-                if (m2) { num = parseInt(m2[1]); break; }
-            }
-        }
+        // 2. Detectar número de orden (ej: "foto_salida_1" -> 1)
+        const allText = name + " " + unit.elements.map(el => (el as any).fieldId || '').join(' ');
+        const numMatch = allText.match(/(\d+)/);
+        if (numMatch) num = parseInt(numMatch[0]);
 
         return { type, num };
     };
@@ -272,7 +258,7 @@ export function applyFlexibleGrid(
     const rightTrack = flowUnits.filter(u => getUnitInfo(u).type === 'sumidero');
 
     console.log(`🚦 Tracks — Main: ${mainTrack.length} (ent/sal), Right: ${rightTrack.length} (sum)`);
-    
+
     // Debug: Mostrar clasificación de cada unidad
     if (mainTrack.length > 0) {
         console.log('📋 Clasificación Main Track:');

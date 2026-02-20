@@ -178,17 +178,22 @@ export default function PozosPage() {
 
         if (isCustom && customDesign) {
           // GENERACIÓN CON DISEÑO PERSONALIZADO
-
-          // CAMBIO: Usar siempre designBasedPdfGenerator para consistencia
-          // Antes: Usaba highFidelityGenerator para diseños personalizados
-          // Razón: designBasedPdfGenerator genera bordes más consistentes y delgados
-          // Razón: designBasedPdfGenerator genera bordes más consistentes y delgados
-          const { generatePdfFromDesign } = await import('@/lib/pdf/designBasedPdfGenerator');
-          const result = await generatePdfFromDesign(customDesign, enrichedPozo, { isFlexible });
+          
+          let result;
+          if (isFlexible) {
+            // Modo Flexible: Usa layoutEngine para reorganizar elementos dinámicamente
+            const { generateFlexiblePdf } = await import('@/lib/pdf/flexiblePdfGenerator');
+            result = await generateFlexiblePdf(customDesign, enrichedPozo);
+          } else {
+            // Modo Normal: Usa generador estándar con posiciones fijas
+            const { generatePdfFromDesign } = await import('@/lib/pdf/designBasedPdfGenerator');
+            result = await generatePdfFromDesign(customDesign, enrichedPozo, { isFlexible: false });
+          }
+          
           if (result.success && result.blob) {
             pdfBlobs.push({ name: pozoName, blob: result.blob });
           } else {
-            console.warn('⚠️ designBasedPdfGenerator falló');
+            console.warn('⚠️ Generador de PDF falló');
           }
         } else {
           // GENERACIÓN CON DISEÑO ESTÁNDAR
