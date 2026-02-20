@@ -96,7 +96,7 @@ export function LayersPanel({
             isGroup: true,
             label: g.name || 'Grupo sin nombre'
         }))
-    ].sort((a, b) => (b.zIndex || 0) - (a.zIndex || 0)); // Descending Z-Index
+    ].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0)); // Ascending Z-Index (Opción A: menor arriba, mayor abajo)
 
     // Filtrar elementos que no están en grupos (para mostrar en el nivel raíz)
     const rootElements = allElements.filter(item => {
@@ -206,8 +206,8 @@ export function LayersPanel({
                         ref={isSelected ? selectedItemRef : null}
                         onClick={(e) => toggleGroupCollapse(e, item.id)}
                         className={`flex items-center gap-1.5 px-3 py-2.5 rounded-lg cursor-pointer group border-2 transition-all ${isSelected
-                                ? 'bg-gradient-to-r from-purple-100 via-indigo-100 to-purple-100 border-purple-500 shadow-xl ring-4 ring-purple-300'
-                                : 'bg-gradient-to-r from-purple-50 to-indigo-50 border-purple-200 hover:border-purple-300 hover:shadow-sm'
+                            ? 'bg-gradient-to-r from-purple-100 via-indigo-100 to-purple-100 border-purple-500 shadow-xl ring-4 ring-purple-300'
+                            : 'bg-gradient-to-r from-purple-50 to-indigo-50 border-purple-200 hover:border-purple-300 hover:shadow-sm'
                             }`}
                     >
                         {/* Icono de grupo con expand/collapse */}
@@ -323,10 +323,10 @@ export function LayersPanel({
                 {/* Label con indicador de personalización */}
                 <div className="flex-1 min-w-0">
                     <span className={`text-sm truncate block ${isSelected
-                            ? 'font-extrabold text-emerald-900 text-base'
-                            : (item as any).hasCustomLabel
-                                ? 'font-semibold text-gray-800'
-                                : 'font-medium text-gray-600'
+                        ? 'font-extrabold text-emerald-900 text-base'
+                        : (item as any).hasCustomLabel
+                            ? 'font-semibold text-gray-800'
+                            : 'font-medium text-gray-600'
                         }`}>
                         {isSelected && '👉 '}
                         {item.label}

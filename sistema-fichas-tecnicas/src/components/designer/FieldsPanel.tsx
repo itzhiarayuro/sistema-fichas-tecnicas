@@ -11,6 +11,8 @@ import { AVAILABLE_FIELDS, type AvailableField, type FieldCategory } from '@/typ
 const CATEGORY_INFO: Record<FieldCategory, { label: string; icon: string; color: string; bg: string }> = {
     pozo: { label: 'Pozo', icon: '🔵', color: 'text-blue-700', bg: 'bg-blue-50 border-blue-200 hover:bg-blue-100' },
     tuberias: { label: 'Tuberías', icon: '🟢', color: 'text-green-700', bg: 'bg-green-50 border-green-200 hover:bg-green-100' },
+    entradas: { label: 'Entradas', icon: '📥', color: 'text-cyan-700', bg: 'bg-cyan-50 border-cyan-200 hover:bg-cyan-100' },
+    salidas: { label: 'Salidas', icon: '📤', color: 'text-indigo-700', bg: 'bg-indigo-50 border-indigo-200 hover:bg-indigo-100' },
     sumideros: { label: 'Sumideros', icon: '🟠', color: 'text-orange-700', bg: 'bg-orange-50 border-orange-200 hover:bg-orange-100' },
     fotos: { label: 'Fotos', icon: '🟣', color: 'text-purple-700', bg: 'bg-purple-50 border-purple-200 hover:bg-purple-100' },
     otros: { label: 'Otros', icon: '⚪', color: 'text-gray-700', bg: 'bg-gray-50 border-gray-200 hover:bg-gray-100' }
@@ -62,6 +64,8 @@ export function FieldsPanel({ onFieldDragStart, onFieldSelect }: FieldsPanelProp
         const groups: Record<FieldCategory, AvailableField[]> = {
             pozo: [],
             tuberias: [],
+            entradas: [],
+            salidas: [],
             sumideros: [],
             fotos: [],
             otros: []
@@ -81,7 +85,7 @@ export function FieldsPanel({ onFieldDragStart, onFieldSelect }: FieldsPanelProp
     };
 
     const categoryCounts = useMemo(() => {
-        const counts: Record<FieldCategory, number> = { pozo: 0, tuberias: 0, sumideros: 0, fotos: 0, otros: 0 };
+        const counts: Record<FieldCategory, number> = { pozo: 0, tuberias: 0, entradas: 0, salidas: 0, sumideros: 0, fotos: 0, otros: 0 };
         AVAILABLE_FIELDS.forEach(f => counts[f.category]++);
         return counts;
     }, []);

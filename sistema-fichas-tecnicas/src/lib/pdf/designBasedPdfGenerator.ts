@@ -14,19 +14,11 @@ import {
     DEFAULT_STYLES
 } from './designHelpers';
 
-const TRANSLIT_MAP: Record<string, string> = {
-    '\u00E1': 'a', '\u00E9': 'e', '\u00ED': 'i', '\u00F3': 'o', '\u00FA': 'u',
-    '\u00C1': 'A', '\u00C9': 'E', '\u00CD': 'I', '\u00D3': 'O', '\u00DA': 'U',
-    '\u00F1': 'n', '\u00D1': 'N', '\u00FC': 'u', '\u00DC': 'U'
-};
-
 function sanitizeTextForPDF(text: string): string {
     if (!text) return '';
     try {
-        let result = String(text).normalize('NFC');
-        return result.replace(/[\u00E1\u00E9\u00ED\u00F3\u00FA\u00C1\u00C9\u00CD\u00D3\u00DA\u00F1\u00D1\u00FC\u00DC]/g, (char) => {
-            return TRANSLIT_MAP[char] || char;
-        });
+        // Normalizar a NFC y devolver tal cual — Helvetica soporta Latin-1 (ñ, tildes, ü)
+        return String(text).normalize('NFC');
     } catch (e) {
         return String(text);
     }
@@ -238,7 +230,42 @@ export async function generatePdfFromDesign(
                     } else {
                         // Campos de datos
                         const path = FIELD_PATHS[placement.fieldId];
-                        if (path) {
+
+                        // REGLA ESPECIAL: Campos de Entradas/Salidas específicas
+                        if (placement.fieldId.startsWith('ent_') || placement.fieldId.startsWith('sal_')) {
+                            const parts = placement.fieldId.split('_'); // [ent, 1, diametro]
+                            const typePrefix = parts[0]; // ent o sal
+                            const orderNum = parts[1]; // 1, 2, ...
+                            const fieldName = parts.slice(2).join('_'); // id, diametro, etc.
+
+                            const targetType = typePrefix === 'ent' ? 'entrada' : 'salida';
+
+                            // Buscar la tubería que coincida con el tipo y el orden
+                            const pipe = pozo.tuberias?.tuberias?.find(t =>
+                                String(t.tipoTuberia?.value || '').toLowerCase() === targetType &&
+                                String(t.orden?.value) === orderNum
+                            );
+
+                            if (pipe) {
+                                // Mapeo interno de campos de TuberiaInfo a la propiedad correspondiente
+                                const pipeFieldMap: Record<string, string> = {
+                                    'id': 'idTuberia',
+                                    'diametro': 'diametro',
+                                    'material': 'material',
+                                    'estado': 'estado',
+                                    'batea': 'batea',
+                                    'z': 'cota',
+                                    'emboquillado': 'emboquillado'
+                                };
+
+                                const targetField = pipeFieldMap[fieldName] || fieldName;
+                                const fieldValueObj = (pipe as any)[targetField];
+                                value = fieldValueObj?.value ?? '-';
+                                link = fieldValueObj?.link;
+                            } else {
+                                value = '-';
+                            }
+                        } else if (path) {
                             const basePath = path.endsWith('.value') ? path.substring(0, path.length - 6) : path;
                             const fieldObj = getValueByPath(pozo, basePath);
                             if (fieldObj && typeof fieldObj === 'object') {
@@ -258,7 +285,8 @@ export async function generatePdfFromDesign(
                     // ADAPTACIÓN DINÁMICA
                     const isTechnicalSlot = placement.fieldId.startsWith('foto_entrada_') || placement.fieldId.startsWith('foto_salida_') ||
                         placement.fieldId.startsWith('foto_sumidero_') || placement.fieldId.startsWith('foto_descarga_') ||
-                        placement.fieldId.startsWith('tub_') || placement.fieldId.startsWith('sum_');
+                        placement.fieldId.startsWith('tub_') || placement.fieldId.startsWith('ent_') ||
+                        placement.fieldId.startsWith('sal_') || placement.fieldId.startsWith('sum_');
 
                     const hasNoData = !value || value === '-' || value === '' || value === 'Sin foto';
 

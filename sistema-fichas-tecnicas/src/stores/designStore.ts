@@ -203,8 +203,18 @@ export const useDesignStore = create<DesignState>()(
                     isDefault: false,
                     createdAt: now,
                     updatedAt: now,
-                    placements: clonedPlacements,
-                    shapes: clonedShapes
+                    placements: (Array.isArray(original.placements) ? original.placements : []).map(p => ({
+                        ...p,
+                        id: generateId()
+                    })),
+                    shapes: (Array.isArray(original.shapes) ? original.shapes : []).map(s => ({
+                        ...s,
+                        id: generateId()
+                    })),
+                    groups: (Array.isArray(original.groups) ? original.groups : []).map(g => ({
+                        ...g,
+                        id: generateId()
+                    }))
                 };
 
                 set((state) => ({
@@ -354,7 +364,7 @@ export const useDesignStore = create<DesignState>()(
                         versions: state.versions.map((v) =>
                             v.id === versionId ? {
                                 ...v,
-                                shapes: [...(v.shapes || []), { ...shape, id: shapeId } as ShapeElement],
+                                shapes: [...(Array.isArray(v.shapes) ? v.shapes : []), { ...shape, id: shapeId } as ShapeElement],
                                 updatedAt: Date.now()
                             } : v
                         ),
@@ -447,11 +457,11 @@ export const useDesignStore = create<DesignState>()(
                         versions: state.versions.map((v) =>
                             v.id === versionId ? {
                                 ...v,
-                                groups: [...(v.groups || []), newGroup],
-                                placements: v.placements.map(p =>
+                                groups: [...(Array.isArray(v.groups) ? v.groups : []), newGroup],
+                                placements: (Array.isArray(v.placements) ? v.placements : []).map(p =>
                                     elementIds.includes(p.id) ? { ...p, groupId } : p
                                 ),
-                                shapes: v.shapes.map(s =>
+                                shapes: (Array.isArray(v.shapes) ? v.shapes : []).map(s =>
                                     elementIds.includes(s.id) ? { ...s, groupId } : s
                                 ),
                                 updatedAt: Date.now()
@@ -474,7 +484,7 @@ export const useDesignStore = create<DesignState>()(
                         versions: state.versions.map((v) =>
                             v.id === versionId ? {
                                 ...v,
-                                groups: (v.groups || []).map((g) =>
+                                groups: (Array.isArray(v.groups) ? v.groups : []).map((g) =>
                                     g.id === groupId ? { ...g, ...updates } : g
                                 ),
                                 updatedAt: Date.now()
@@ -499,9 +509,9 @@ export const useDesignStore = create<DesignState>()(
                         versions: state.versions.map((v) =>
                             v.id === versionId ? {
                                 ...v,
-                                groups: (v.groups || []).filter((g) => g.id !== groupId),
-                                placements: v.placements.filter(p => !group.childIds.includes(p.id)),
-                                shapes: v.shapes.filter(s => !group.childIds.includes(s.id)),
+                                groups: (Array.isArray(v.groups) ? v.groups : []).filter((g) => g.id !== groupId),
+                                placements: (Array.isArray(v.placements) ? v.placements : []).filter(p => !group.childIds.includes(p.id)),
+                                shapes: (Array.isArray(v.shapes) ? v.shapes : []).filter(s => !group.childIds.includes(s.id)),
                                 updatedAt: Date.now()
                             } : v
                         ),
@@ -521,11 +531,11 @@ export const useDesignStore = create<DesignState>()(
                         versions: state.versions.map((v) =>
                             v.id === versionId ? {
                                 ...v,
-                                groups: (v.groups || []).filter((g) => g.id !== groupId),
-                                placements: v.placements.map(p =>
+                                groups: (Array.isArray(v.groups) ? v.groups : []).filter((g) => g.id !== groupId),
+                                placements: (Array.isArray(v.placements) ? v.placements : []).map(p =>
                                     p.groupId === groupId ? { ...p, groupId: undefined } : p
                                 ),
-                                shapes: v.shapes.map(s =>
+                                shapes: (Array.isArray(v.shapes) ? v.shapes : []).map(s =>
                                     s.groupId === groupId ? { ...s, groupId: undefined } : s
                                 ),
                                 updatedAt: Date.now()
@@ -550,13 +560,13 @@ export const useDesignStore = create<DesignState>()(
                         versions: state.versions.map((v) =>
                             v.id === versionId ? {
                                 ...v,
-                                groups: (v.groups || []).map(g =>
+                                groups: (Array.isArray(v.groups) ? v.groups : []).map(g =>
                                     g.id === groupId ? { ...g, childIds: [...g.childIds, ...elementIds] } : g
                                 ),
-                                placements: v.placements.map(p =>
+                                placements: (Array.isArray(v.placements) ? v.placements : []).map(p =>
                                     elementIds.includes(p.id) ? { ...p, groupId } : p
                                 ),
-                                shapes: v.shapes.map(s =>
+                                shapes: (Array.isArray(v.shapes) ? v.shapes : []).map(s =>
                                     elementIds.includes(s.id) ? { ...s, groupId } : s
                                 ),
                                 updatedAt: Date.now()
@@ -581,13 +591,13 @@ export const useDesignStore = create<DesignState>()(
                         versions: state.versions.map((v) =>
                             v.id === versionId ? {
                                 ...v,
-                                groups: (v.groups || []).map(g =>
+                                groups: (Array.isArray(v.groups) ? v.groups : []).map(g =>
                                     g.id === groupId ? { ...g, childIds: g.childIds.filter(id => !elementIds.includes(id)) } : g
                                 ),
-                                placements: v.placements.map(p =>
+                                placements: (Array.isArray(v.placements) ? v.placements : []).map(p =>
                                     elementIds.includes(p.id) ? { ...p, groupId: undefined } : p
                                 ),
-                                shapes: v.shapes.map(s =>
+                                shapes: (Array.isArray(v.shapes) ? v.shapes : []).map(s =>
                                     elementIds.includes(s.id) ? { ...s, groupId: undefined } : s
                                 ),
                                 updatedAt: Date.now()
@@ -634,6 +644,7 @@ export const useDesignStore = create<DesignState>()(
         }),
         {
             name: 'fichas:design-versions',
+            version: 1,
             partialize: (state) => ({ versions: state.versions, currentVersionId: state.currentVersionId }),
             // Migración automática para asegurar que todas las versiones tengan el campo groups
             migrate: (persistedState: any, version: number) => {

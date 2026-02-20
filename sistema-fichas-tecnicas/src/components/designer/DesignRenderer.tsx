@@ -137,6 +137,40 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
         }
 
         const path = FIELD_PATHS[fieldId];
+
+        // REGLA ESPECIAL: Campos de Entradas/Salidas específicas
+        if (fieldId.startsWith('ent_') || fieldId.startsWith('sal_')) {
+            const parts = fieldId.split('_'); // [ent, 1, diametro]
+            const typePrefix = parts[0]; // ent o sal
+            const orderNum = parts[1]; // 1, 2, ...
+            const fieldName = parts.slice(2).join('_'); // id, diametro, etc.
+
+            const targetType = typePrefix === 'ent' ? 'entrada' : 'salida';
+
+            // Buscar la tubería que coincida con el tipo y el orden
+            const pipe = pozo.tuberias?.tuberias?.find(t =>
+                String(t.tipoTuberia?.value || '').toLowerCase() === targetType &&
+                String(t.orden?.value) === orderNum
+            );
+
+            if (!pipe) return '-';
+
+            // Mapeo interno de campos de TuberiaInfo a la propiedad correspondiente
+            const pipeFieldMap: Record<string, string> = {
+                'id': 'idTuberia',
+                'diametro': 'diametro',
+                'material': 'material',
+                'estado': 'estado',
+                'batea': 'batea',
+                'z': 'cota',
+                'emboquillado': 'emboquillado'
+            };
+
+            const targetField = pipeFieldMap[fieldName] || fieldName;
+            const fieldValueObj = (pipe as any)[targetField];
+            return fieldValueObj?.value || '-';
+        }
+
         if (!path) return '-';
 
         const value = getValueByPath(pozo, path);
@@ -236,6 +270,8 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
                 placement.fieldId.startsWith('foto_sumidero_') ||
                 placement.fieldId.startsWith('foto_descarga_') ||
                 placement.fieldId.startsWith('tub_') ||
+                placement.fieldId.startsWith('ent_') ||
+                placement.fieldId.startsWith('sal_') ||
                 placement.fieldId.startsWith('sum_');
 
             const hasNoData = !value || value === '-' || value === '' || value === 'Sin foto';
