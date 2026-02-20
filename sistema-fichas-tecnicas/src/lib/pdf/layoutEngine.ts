@@ -248,6 +248,10 @@ export function applyFlexibleGrid(
         const numMatch = allText.match(/(\d+)/);
         if (numMatch) num = parseInt(numMatch[0]);
 
+        // Debug detallado
+        const fieldIds = unit.elements.map(e => (e as any).fieldId).filter(Boolean).join(', ');
+        console.log(`🔍 Grupo: "${group?.name || 'Sin nombre'}" → tipo=${type}, num=${num}, fieldIds=[${fieldIds}]`);
+
         return { type, num };
     };
 
