@@ -221,10 +221,50 @@ export function applyFlexibleGrid(
         processedElementIds.add(s.id);
     });
 
-    // 2. SEPARAR POR CARRIL (Tracks)
-    // Esto evita que un Sumidero se mueva a la columna de una Entrada o viceversa.
-    const mainTrack = flowUnits.filter(u => u.initialBbox.x < 135);
-    const rightTrack = flowUnits.filter(u => u.initialBbox.x >= 135);
+    // 2. SEPARAR POR CARRIL usando fieldIds (NO posición X, que puede variar por diseño)
+    // mainTrack = Entradas + Salidas | rightTrack = Sumideros
+    const getUnitInfo = (unit: typeof flowUnits[0]) => {
+        const group = newDesign.groups.find(g => g.id === unit.id);
+        const name = (group?.name || '').toLowerCase();
+
+        let type = 'other';
+        let num = 999;
+
+        // 1. Detectar tipo (Prioridad: Entrada=1, Salida=2)
+        if (name.includes('entrada')) type = 'entrada';
+        else if (name.includes('salida')) type = 'salida';
+        else if (name.includes('sumidero')) type = 'sumidero';
+        else {
+            // Si el nombre no ayuda, miramos los hijos
+            for (const el of unit.elements) {
+                const fid = (el as any).fieldId || '';
+                if (fid.startsWith('ent_')) { type = 'entrada'; break; }
+                if (fid.startsWith('sal_')) { type = 'salida'; break; }
+                if (fid.startsWith('sum_')) { type = 'sumidero'; break; }
+            }
+        }
+
+        // 2. Detectar número de orden
+        const m = name.match(/(\d+)/);
+        if (m) num = parseInt(m[1]);
+        else {
+            for (const el of unit.elements) {
+                const fid = (el as any).fieldId || '';
+                const m2 = fid.match(/(\d+)/);
+                if (m2) { num = parseInt(m2[1]); break; }
+            }
+        }
+
+        return { type, num };
+    };
+
+    const mainTrack = flowUnits.filter(u => {
+        const info = getUnitInfo(u);
+        return info.type === 'entrada' || info.type === 'salida' || info.type === 'other';
+    });
+    const rightTrack = flowUnits.filter(u => getUnitInfo(u).type === 'sumidero');
+
+    console.log(`🚦 Tracks — Main: ${mainTrack.length} (ent/sal), Right: ${rightTrack.length} (sum)`);
 
     /**
      * Función interna para organizar un carril de forma compacta
@@ -235,22 +275,16 @@ export function applyFlexibleGrid(
         let maxRowHeight = 0;
         let colIndex = 0;
 
-        // Ordenar: Entradas primero, luego Salidas (por nombre de grupo)
-        const getGroupPriority = (unit: typeof units[0]): number => {
-            const group = newDesign.groups.find(g => g.id === unit.id);
-            const name = (group?.name || '').toLowerCase();
-            if (name.includes('entrada')) return 1;
-            if (name.includes('salida')) return 2;
-            return 0; // Títulos/otros van primero que todo
-        };
-
+        // Ordenar: Entrada=Prio1, Salida=Prio2, Otros=Prio9
         units.sort((a, b) => {
-            const prioA = getGroupPriority(a);
-            const prioB = getGroupPriority(b);
+            const infoA = getUnitInfo(a);
+            const infoB = getUnitInfo(b);
+
+            const prioA = infoA.type === 'entrada' ? 1 : infoA.type === 'salida' ? 2 : 9;
+            const prioB = infoB.type === 'entrada' ? 1 : infoB.type === 'salida' ? 2 : 9;
+
             if (prioA !== prioB) return prioA - prioB;
-            // Mismo tipo → ordenar por Y original, luego X
-            if (Math.abs(a.initialBbox.y - b.initialBbox.y) > 10) return a.initialBbox.y - b.initialBbox.y;
-            return a.initialBbox.x - b.initialBbox.x;
+            return infoA.num - infoB.num;
         }).forEach((unit) => {
             const bbox = unit.initialBbox;
 
@@ -262,8 +296,10 @@ export function applyFlexibleGrid(
                 colIndex = 0;
             }
 
+            // ASEGURAR QUE NADA Dinámico suba de los 49mm del encabezado
+            const targetY = Math.max(currentY, 49);
             const offsetX = currentX - bbox.x;
-            const offsetY = currentY - bbox.y;
+            const offsetY = targetY - bbox.y;
 
             unit.elements.forEach(el => {
                 el.x += offsetX;
@@ -274,7 +310,7 @@ export function applyFlexibleGrid(
                 const g = newDesign.groups.find(group => group.id === unit.id);
                 if (g) {
                     g.x = currentX;
-                    g.y = currentY;
+                    g.y = targetY;
                 }
             }
 
@@ -284,6 +320,9 @@ export function applyFlexibleGrid(
             colIndex++;
         });
     };
+
+    // Organizar Carril de Tuberías (Entradas primero, luego Salidas — 2 columnas)
+    organizeTrack(mainTrack, 2, marginX, 65);
 
     // Organizar Carril de Sumideros (1 columna, empieza en ~140mm)
     organizeTrack(rightTrack, 1, 140, 60);
