@@ -20,19 +20,24 @@ export function LayersPanel({
     const {
         selectedPlacementId,
         selectedShapeId,
+        selectedGroupId,
         setSelectedPlacementId,
         setSelectedShapeId,
+        setSelectedGroupId,
         updatePlacement,
         updateShape,
         createGroup,
         ungroupElements,
-        updateGroup
+        updateGroup,
+        removeFromGroup
     } = useDesignStore();
     const selectedItemRef = useRef<HTMLDivElement>(null);
 
     // Estado para selección múltiple
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+    const [renamingGroupId, setRenamingGroupId] = useState<string | null>(null);
+    const [renameValue, setRenameValue] = useState('');
 
     console.log('🔴 LayersPanel render - selectedPlacementId:', selectedPlacementId);
     console.log('🔴 LayersPanel render - selectedShapeId:', selectedShapeId);
@@ -168,9 +173,39 @@ export function LayersPanel({
         setSelectedShapeId(null);
     };
 
+    const handleGroupHeaderClick = (e: React.MouseEvent, item: any) => {
+        e.stopPropagation();
+        // Si ya está seleccionado, colapsar/expandir
+        if (selectedGroupId === item.id) {
+            toggleGroupCollapse(e, item.id);
+        } else {
+            // Primera vez: seleccionar el grupo
+            setSelectedGroupId(item.id);
+        }
+    };
+
+    const handleStartRename = (e: React.MouseEvent, item: any) => {
+        e.stopPropagation();
+        setRenamingGroupId(item.id);
+        setRenameValue(item.label);
+    };
+
+    const handleFinishRename = (groupId: string) => {
+        if (renameValue.trim()) {
+            updateGroup(version!.id, groupId, { name: renameValue.trim() });
+        }
+        setRenamingGroupId(null);
+    };
+
     const handleUngroup = (e: React.MouseEvent, groupId: string) => {
         e.stopPropagation();
-        ungroupElements(version.id, groupId);
+        ungroupElements(version!.id, groupId);
+    };
+
+    const handleRemoveFromGroup = (e: React.MouseEvent, item: any) => {
+        e.stopPropagation();
+        if (!item.groupId) return;
+        removeFromGroup(version!.id, item.groupId, [item.id]);
     };
 
     const toggleGroupCollapse = (e: React.MouseEvent, groupId: string) => {
@@ -196,6 +231,7 @@ export function LayersPanel({
 
         if (item.isGroup) {
             const isCollapsed = collapsedGroups.has(item.id);
+            const isGroupSelected = selectedGroupId === item.id;
             const childElements = allElements.filter(el =>
                 !el.isGroup && (el as any).groupId === item.id
             );
@@ -203,9 +239,9 @@ export function LayersPanel({
             return (
                 <div key={item.id} className={isChild ? 'ml-4' : ''}>
                     <div
-                        ref={isSelected ? selectedItemRef : null}
-                        onClick={(e) => toggleGroupCollapse(e, item.id)}
-                        className={`flex items-center gap-1.5 px-3 py-2.5 rounded-lg cursor-pointer group border-2 transition-all ${isSelected
+                        ref={isGroupSelected ? selectedItemRef : null}
+                        onClick={(e) => handleGroupHeaderClick(e, item)}
+                        className={`flex items-center gap-1.5 px-3 py-2.5 rounded-lg cursor-pointer group border-2 transition-all ${isGroupSelected
                             ? 'bg-gradient-to-r from-purple-100 via-indigo-100 to-purple-100 border-purple-500 shadow-xl ring-4 ring-purple-300'
                             : 'bg-gradient-to-r from-purple-50 to-indigo-50 border-purple-200 hover:border-purple-300 hover:shadow-sm'
                             }`}
@@ -221,19 +257,45 @@ export function LayersPanel({
                         </button>
 
                         {/* Icono de carpeta */}
-                        <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4 text-purple-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
                         </svg>
 
-                        {/* Label del grupo */}
+                        {/* Label del grupo — editable inline */}
                         <div className="flex-1 min-w-0">
-                            <span className="text-sm font-bold text-purple-900 truncate block">
-                                {item.label}
-                            </span>
+                            {renamingGroupId === item.id ? (
+                                <input
+                                    autoFocus
+                                    value={renameValue}
+                                    onChange={(e) => setRenameValue(e.target.value)}
+                                    onBlur={() => handleFinishRename(item.id)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleFinishRename(item.id);
+                                        if (e.key === 'Escape') setRenamingGroupId(null);
+                                    }}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="w-full text-sm font-bold text-purple-900 bg-white border border-purple-400 rounded px-1 py-0.5 outline-none focus:ring-2 focus:ring-purple-400"
+                                />
+                            ) : (
+                                <span className="text-sm font-bold text-purple-900 truncate block">
+                                    {item.label}
+                                </span>
+                            )}
                             <span className="text-[10px] text-purple-600">
                                 {childElements.length} elemento{childElements.length !== 1 ? 's' : ''}
                             </span>
                         </div>
+
+                        {/* Botón renombrar */}
+                        <button
+                            onClick={(e) => handleStartRename(e, item)}
+                            className="p-1 rounded hover:bg-purple-200 text-purple-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                            title="Renombrar grupo"
+                        >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                        </button>
 
                         {/* Botón desagrupar */}
                         <button
@@ -339,8 +401,20 @@ export function LayersPanel({
                     )}
                 </div>
 
-                {/* Actions (Visible/Lock) */}
+                {/* Actions (Visible/Lock + Sacar del grupo) */}
                 <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {/* Botón Sacar del grupo - solo para elementos hijos */}
+                    {isChild && (item as any).groupId && (
+                        <button
+                            onClick={(e) => handleRemoveFromGroup(e, item)}
+                            className="p-0.5 rounded text-orange-500 hover:text-orange-700 hover:bg-orange-50"
+                            title="Sacar del grupo"
+                        >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                            </svg>
+                        </button>
+                    )}
                     <button
                         onClick={(e) => handleToggleVisible(e, item)}
                         className={`p-0.5 rounded ${item.isVisible === false ? 'text-gray-300' : 'text-gray-500 hover:text-gray-700'}`}

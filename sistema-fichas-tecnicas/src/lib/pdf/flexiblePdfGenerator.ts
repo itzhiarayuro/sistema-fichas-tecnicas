@@ -25,7 +25,7 @@ export async function generateFlexiblePdf(
             marginY: 10,
             spacingX: 4,
             spacingY: 6,
-            startAtY: 46 // Ajustado para que empiece justo después del encabezado (Y=48)
+            startAtY: 90 // Y=340px en canvas ÷ 3.78 (MM_TO_PX) ≈ 90mm — empieza después del encabezado completo
         });
 
         // 2. Usar el generador estándar pero con el diseño ya "movido"

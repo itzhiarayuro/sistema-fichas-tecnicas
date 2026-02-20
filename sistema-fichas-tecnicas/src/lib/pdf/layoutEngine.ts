@@ -85,7 +85,7 @@ export function applyFlexibleGrid(
         marginY: 10,
         spacingX: 5,
         spacingY: 10,
-        startAtY: 46
+        startAtY: 90 // Y=340px en canvas ÷ 3.78 (MM_TO_PX) ≈ 90mm
     }
 ): FichaDesignVersion {
     const newDesign: FichaDesignVersion = JSON.parse(JSON.stringify(design));

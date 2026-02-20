@@ -211,7 +211,54 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
     const numPages = design.numPages || 1;
     const pages = Array.from({ length: numPages }, (_, i) => i + 1);
 
+    // Mapa de visibilidad de grupos dinámicos
+    const groupVisibilityMap = new Map<string, boolean>();
+
+    if (design.groups) {
+        design.groups.forEach(group => {
+            const name = (group.name || '').toLowerCase();
+            if (!name) return;
+
+            let shouldHide = false;
+
+            // Lógica de ocultación por nombre de grupo
+            if (name.includes('entrada') || name.includes('salida')) {
+                const match = name.match(/(entrada|salida)\s*(\d+)/);
+                if (match) {
+                    const type = match[1]; // entrada o salida
+                    const num = match[2]; // 1, 2...
+
+                    // Verificar si existe la tubería
+                    const pipe = pozo.tuberias?.tuberias?.find(t =>
+                        String(t.tipoTuberia?.value || '').toLowerCase() === (type === 'entrada' ? 'entrada' : 'salida') &&
+                        String(t.orden?.value) === num
+                    );
+
+                    if (!pipe) shouldHide = true;
+                }
+            } else if (name.includes('sumidero')) {
+                const match = name.match(/sumidero\s*(\d+)/);
+                if (match) {
+                    const num = parseInt(match[1]);
+                    const sumidero = pozo.sumideros?.sumideros?.[num - 1];
+                    if (!sumidero) shouldHide = true;
+                }
+            } else if (name.includes('foto')) {
+                // Si es un grupo de foto, ejemplo "Foto Entrada 1"
+                // Solo lo ocultamos si el campo de foto correspondiente no tiene valor
+                // (Opcional, pero útil si el usuario agrupa la foto con un recuadro)
+            }
+
+            groupVisibilityMap.set(group.id, !shouldHide);
+        });
+    }
+
     const renderElement = (el: any, isShape: boolean, currentPage: number) => {
+        // Verificar si el grupo al que pertenece el elemento está oculto
+        if (el.groupId && groupVisibilityMap.has(el.groupId)) {
+            if (!groupVisibilityMap.get(el.groupId)) return null;
+        }
+
         const isHeader = el.repeatOnEveryPage;
         const elementPage = el.pageNumber || 1;
         if (!isHeader && elementPage !== currentPage) return null;

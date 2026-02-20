@@ -38,6 +38,7 @@ export const useDesignStore = create<DesignState>()(
             future: {},
             selectedPlacementId: null,
             selectedShapeId: null,
+            selectedGroupId: null,
 
             // History Actions
             undo: () => {
@@ -238,15 +239,19 @@ export const useDesignStore = create<DesignState>()(
             },
 
             setCurrentVersion: (id) => {
-                set({ currentVersionId: id, selectedPlacementId: null, selectedShapeId: null });
+                set({ currentVersionId: id, selectedPlacementId: null, selectedShapeId: null, selectedGroupId: null });
             },
 
             setSelectedPlacementId: (id) => {
-                set({ selectedPlacementId: id, selectedShapeId: id ? null : get().selectedShapeId });
+                set({ selectedPlacementId: id, selectedShapeId: id ? null : get().selectedShapeId, selectedGroupId: null });
             },
 
             setSelectedShapeId: (id) => {
-                set({ selectedShapeId: id, selectedPlacementId: id ? null : get().selectedPlacementId });
+                set({ selectedShapeId: id, selectedPlacementId: id ? null : get().selectedPlacementId, selectedGroupId: null });
+            },
+
+            setSelectedGroupId: (id) => {
+                set({ selectedGroupId: id, selectedPlacementId: null, selectedShapeId: null });
             },
 
             // Persistencia externa

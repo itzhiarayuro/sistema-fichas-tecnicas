@@ -165,6 +165,7 @@ export interface DesignState {
     // Selection State (Global para evitar desincronización)
     selectedPlacementId: string | null;
     selectedShapeId: string | null;
+    selectedGroupId: string | null;
 
     // Acciones
     createVersion: (name: string, description?: string) => string;
@@ -209,6 +210,7 @@ export interface DesignState {
     // Selection Actions
     setSelectedPlacementId: (id: string | null) => void;
     setSelectedShapeId: (id: string | null) => void;
+    setSelectedGroupId: (id: string | null) => void;
 }
 
 // 70 Campos disponibles del sistema
