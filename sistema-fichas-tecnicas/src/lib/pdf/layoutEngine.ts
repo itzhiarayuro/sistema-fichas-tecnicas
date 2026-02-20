@@ -238,9 +238,16 @@ export function applyFlexibleGrid(
             // Si el nombre no ayuda, miramos los hijos
             for (const el of unit.elements) {
                 const fid = (el as any).fieldId || '';
+                
+                // Detectar campos de datos: ent_1_material, sal_2_diametro
                 if (fid.startsWith('ent_')) { type = 'entrada'; break; }
                 if (fid.startsWith('sal_')) { type = 'salida'; break; }
                 if (fid.startsWith('sum_')) { type = 'sumidero'; break; }
+                
+                // Detectar fotos: foto_entrada_1, foto_salida_2, foto_sumidero_3
+                if (fid.startsWith('foto_entrada_')) { type = 'entrada'; break; }
+                if (fid.startsWith('foto_salida_')) { type = 'salida'; break; }
+                if (fid.startsWith('foto_sumidero_')) { type = 'sumidero'; break; }
             }
         }
 
@@ -265,6 +272,16 @@ export function applyFlexibleGrid(
     const rightTrack = flowUnits.filter(u => getUnitInfo(u).type === 'sumidero');
 
     console.log(`🚦 Tracks — Main: ${mainTrack.length} (ent/sal), Right: ${rightTrack.length} (sum)`);
+    
+    // Debug: Mostrar clasificación de cada unidad
+    if (mainTrack.length > 0) {
+        console.log('📋 Clasificación Main Track:');
+        mainTrack.forEach(u => {
+            const info = getUnitInfo(u);
+            const group = newDesign.groups.find(g => g.id === u.id);
+            console.log(`  - ${group?.name || 'Sin nombre'}: tipo=${info.type}, num=${info.num}`);
+        });
+    }
 
     /**
      * Función interna para organizar un carril de forma compacta
