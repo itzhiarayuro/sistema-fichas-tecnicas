@@ -222,7 +222,7 @@ export class BlobStore {
   private pendingSaves: Array<{ id: string; blob: Blob }> = [];
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
 
-  private constructor() { }
+  private constructor() {}
 
   static getInstance(): BlobStore {
     if (!BlobStore.instance) {
@@ -297,7 +297,7 @@ export class BlobStore {
     }
 
     if (this.allKnownIds.has(blobId)) {
-      this.ensureLoaded(blobId).catch(() => { });
+      this.ensureLoaded(blobId).catch(() => {});
       return '';
     }
 
@@ -382,7 +382,7 @@ export class BlobStore {
     this.removeLRU(blobId);
     this.allKnownIds.delete(blobId);
     this.allSizes.delete(blobId);
-    deleteFromOPFS(blobId).catch(() => { });
+    deleteFromOPFS(blobId).catch(() => {});
   }
 
   /** Borra todo (RAM + disco) */
@@ -395,18 +395,21 @@ export class BlobStore {
     this.allKnownIds.clear();
     this.allSizes.clear();
 
-    // Limpiar OPFS — función async separada para poder usar for await
-    (async () => {
+    // Limpiar OPFS
+    getOpfsFolder().then(async folder => {
+      if (!folder) return;
+      // Listar y borrar todos los archivos
       try {
-        const folder = await getOpfsFolder();
-        if (!folder) return;
-        const keys: string[] = [];
-        for await (const [name] of (folder as any).entries()) {
-          keys.push(name as string);
+        const entries = [];
+        // @ts-ignore
+        for await (const [name] of folder.entries()) {
+          entries.push(name);
         }
-        await Promise.allSettled(keys.map(name => folder.removeEntry(name)));
-      } catch { /* silencioso */ }
-    })();
+        await Promise.all(entries.map(name => folder.removeEntry(name).catch(() => {})));
+      } catch (e) {
+        console.warn('Error clearing OPFS:', e);
+      }
+    }).catch(() => {});
   }
 
   has(blobId: string): boolean {

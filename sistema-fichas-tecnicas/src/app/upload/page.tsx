@@ -31,6 +31,7 @@ import { LimitManager } from '@/lib/managers/limitManager';
 import { processBatch } from '@/lib/utils/batchProcessor';
 import { buildExpectedPhotoIndex, filterPhotoFiles, getFiltradoSummary } from '@/lib/utils/smartPhotoFilter';
 import type { IndiceFotosEsperadas } from '@/lib/utils/smartPhotoFilter';
+import { processPhotosOnServer, checkServerAvailable } from '@/lib/utils/serverPhotoUploader';
 import type { Pozo, FotoInfo } from '@/types';
 
 export default function UploadPage() {
@@ -63,6 +64,20 @@ export default function UploadPage() {
   // Índice de fotos esperadas (se construye cuando se carga el Excel)
   const expectedIndexRef = useRef<IndiceFotosEsperadas | null>(null);
   const [filtradoInfo, setFiltradoInfo] = useState<string>('');
+
+  // Estado del procesamiento en servidor
+  const [serverAvailable, setServerAvailable] = useState<boolean | null>(null); // null = verificando
+
+  // Verificar si el servidor Sharp está disponible al cargar la página
+  useEffect(() => {
+    checkServerAvailable().then(available => {
+      setServerAvailable(available);
+      console.log(available
+        ? '🚀 Servidor Sharp disponible — procesamiento 10x más rápido activado'
+        : '⚠️ Servidor no disponible — usando procesamiento en browser'
+      );
+    });
+  }, []);
 
 
   // Refs para importación masiva optimizada
@@ -377,19 +392,28 @@ export default function UploadPage() {
 
       try {
         setProcessingMessage(`Extrayendo datos de ${file.name}...`);
-        const pozos = await processExcelFile(file);
-        allPozos.push(...pozos);
-        newStats.totalPozos += pozos.length;
+        const extractedPozos = await processExcelFile(file);
+        allPozos.push(...extractedPozos);
+        newStats.totalPozos += extractedPozos.length;
 
         // ✅ NUEVO: Construir índice de fotos esperadas desde los pozos del Excel
         // Esto permite filtrar fotos inteligentemente ANTES de procesarlas
-        if (pozos.length > 0) {
+        if (extractedPozos.length > 0) {
           // Convertir array a Map para el índice
           const pozosMap = new Map<string, Pozo>();
-          pozos.forEach(p => pozosMap.set(p.id, p));
-          // También incluir pozos ya cargados antes
-          for (const [id, p] of pozos as any) pozosMap.set(id, p);
-          
+
+          // 1. Agregar pozos nuevos del Excel
+          extractedPozos.forEach(p => pozosMap.set(p.id, p));
+
+          // 2. También incluir pozos ya cargados antes (desde el store)
+          // Usamos el Map 'pozos' que viene de useGlobalStore (desestructurado arriba)
+          if (pozos instanceof Map) {
+            pozos.forEach((p, id) => pozosMap.set(id, p));
+          } else if (typeof pozos === 'object' && pozos !== null) {
+            // Caso por si pozos fuera un objeto literal en vez de Map
+            Object.entries(pozos).forEach(([id, p]) => pozosMap.set(id, p as Pozo));
+          }
+
           expectedIndexRef.current = buildExpectedPhotoIndex(pozosMap);
           showInfo(
             `📋 Índice creado: ${expectedIndexRef.current.totalPozos} pozos, ` +
@@ -401,8 +425,8 @@ export default function UploadPage() {
         setFiles(prev => prev.map(f =>
           f.id === fileItem.id ? {
             ...f,
-            status: pozos.length > 0 ? 'success' as const : 'warning' as const,
-            message: `${pozos.length} pozos extraídos`
+            status: extractedPozos.length > 0 ? 'success' as const : 'warning' as const,
+            message: `${extractedPozos.length} pozos extraídos`
           } : f
         ));
       } catch (error) {
@@ -467,68 +491,162 @@ export default function UploadPage() {
       const isLargeImport = imageFilesToProcess.length > 200;
       console.log(`📸 Procesando ${imageFilesToProcess.length} imágenes en lotes optimizados...`);
 
-      await processBatch({
-        items: imageFilesToProcess,
-        batchSize: isLargeImport ? 15 : 20,
-        delayBetweenBatches: isLargeImport ? 100 : 50,
-        lowMemoryMode: isLargeImport, // No acumular todos los resultados en un array
-        processor: async ({ file, fileItem }, globalIndex) => {
-          // Usar buffer en vez de setFiles() directo (evita N re-renders)
-          scheduleFileUpdate(fileItem.id, { status: 'processing' as const, progress: 0 });
+      // ─── PROCESAMIENTO: SERVIDOR (rápido) o BROWSER (fallback) ───────────
+      if (serverAvailable && imageFilesToProcess.length > 0) {
+        // MODO SERVIDOR — Sharp en el servidor, 10-20x más rápido
+        setProcessingMessage(`⚡ Procesando ${imageFilesToProcess.length} fotos en el servidor...`);
 
-          // Validar archivo
-          const validation = await validateFile(file);
+        const rawFiles = imageFilesToProcess.map(({ file }) => file);
 
-          if (!validation.isValid) {
-            const errorMsg = validation.errors[0]?.userMessage || 'Archivo no válido';
-            scheduleFileUpdate(fileItem.id, { status: 'error' as const, message: errorMsg });
-            newStats.errors++;
-            return null;
+        try {
+          const serverResults = await processPhotosOnServer(rawFiles, (done, total) => {
+            const pct = Math.round((done / total) * 100);
+            setProgress(pct);
+            setProcessingMessage(`⚡ Servidor: ${done}/${total} fotos procesadas...`);
+            newStats.processedFiles = done;
+            setStats({ ...newStats });
+          });
+
+          // Guardar resultados en BlobStore y crear FotoInfo
+          for (let i = 0; i < serverResults.length; i++) {
+            const serverResult = serverResults[i];
+            const { fileItem } = imageFilesToProcess[i];
+
+            if (serverResult.error || serverResult.blob.size === 0) {
+              scheduleFileUpdate(fileItem.id, { status: 'error', message: serverResult.error || 'Error en servidor' });
+              newStats.errors++;
+              continue;
+            }
+
+            // Parsear nomenclatura para asociar con pozo
+            const nomen = parseNomenclatura(serverResult.filename);
+
+            // Guardar en BlobStore
+            const blobId = await blobStore.store(serverResult.blob);
+
+            const fotoInfo: FotoInfo = {
+              id: generateFileId(),
+              idPozo: nomen.pozoId,
+              tipo: nomen.tipo || 'otro',
+              categoria: nomen.categoria,
+              subcategoria: nomen.subcategoria,
+              descripcion: nomen.tipo,
+              blobId,
+              filename: serverResult.filename,
+              fechaCaptura: Date.now(),
+            };
+
+            allPhotos.push(fotoInfo);
+            newStats.totalPhotos++;
+
+            scheduleFileUpdate(fileItem.id, {
+              status: 'success',
+              message: nomen.isValid
+                ? `✅ ${nomen.tipo} (${(serverResult.originalSize / 1024).toFixed(0)}KB→${(serverResult.processedSize / 1024).toFixed(0)}KB)`
+                : 'Procesada (sin asociar)',
+            });
           }
 
-          if (validation.warnings.length > 0) {
-            newStats.warnings += validation.warnings.length;
-          }
+          setStats({ ...newStats });
 
-          try {
-            const foto = await processImageFile(file);
+        } catch (serverError) {
+          // Si el servidor falla completamente, caer al modo browser
+          console.error('Error en servidor, usando browser:', serverError);
+          showWarning('El servidor falló — procesando en el browser (más lento)');
+          // Caer al modo browser abajo
+          await processBatch({
+            items: imageFilesToProcess,
+            batchSize: isLargeImport ? 15 : 20,
+            delayBetweenBatches: isLargeImport ? 100 : 50,
+            lowMemoryMode: isLargeImport,
+            processor: async ({ file, fileItem }, globalIndex) => {
+              scheduleFileUpdate(fileItem.id, { status: 'processing', progress: 0 });
+              const foto = await processImageFile(file);
+              if (foto) {
+                allPhotos.push(foto);
+                newStats.totalPhotos++;
+                scheduleFileUpdate(fileItem.id, { status: 'success', message: foto.categoria !== 'OTRO' ? `Asociada: ${foto.descripcion}` : 'Sin asociar' });
+                return foto;
+              }
+              scheduleFileUpdate(fileItem.id, { status: 'error', message: 'Error al procesar' });
+              newStats.errors++;
+              return null;
+            },
+            onProgress: (done, total) => {
+              setProgress(Math.round((done / total) * 100));
+              newStats.processedFiles = done;
+              setStats({ ...newStats });
+            },
+          });
+        }
 
-            if (foto) {
-              allPhotos.push(foto);
-              newStats.totalPhotos++;
+      } else {
+        // MODO BROWSER — fallback si el servidor no está disponible
 
-              // NO generar ObjectURL para preview durante importación masiva
-              // Las previews se cargan bajo demanda cuando el usuario las ve
-              scheduleFileUpdate(fileItem.id, {
-                status: 'success' as const,
-                message: foto.categoria !== 'OTRO' ? `Asociada: ${foto.descripcion}` : 'Sin asociar',
-                // preview: omitido intencionalmente — se carga bajo demanda
-              });
+        await processBatch({
+          items: imageFilesToProcess,
+          batchSize: isLargeImport ? 15 : 20,
+          delayBetweenBatches: isLargeImport ? 100 : 50,
+          lowMemoryMode: isLargeImport, // No acumular todos los resultados en un array
+          processor: async ({ file, fileItem }, globalIndex) => {
+            // Usar buffer en vez de setFiles() directo (evita N re-renders)
+            scheduleFileUpdate(fileItem.id, { status: 'processing' as const, progress: 0 });
 
-              return foto;
-            } else {
-              scheduleFileUpdate(fileItem.id, {
-                status: 'error' as const,
-                message: 'Error al procesar imagen'
-              });
+            // Validar archivo
+            const validation = await validateFile(file);
+
+            if (!validation.isValid) {
+              const errorMsg = validation.errors[0]?.userMessage || 'Archivo no válido';
+              scheduleFileUpdate(fileItem.id, { status: 'error' as const, message: errorMsg });
               newStats.errors++;
               return null;
             }
-          } catch (error) {
-            const message = error instanceof Error ? error.message : 'Error desconocido';
-            scheduleFileUpdate(fileItem.id, { status: 'error' as const, message });
-            newStats.errors++;
-            return null;
-          }
-        },
-        onProgress: (processed, total) => {
-          newStats.processedFiles = excelFiles.length + processed;
-          const progressPercent = ((excelFiles.length + processed) / filteredFiles.length) * 100;
-          setProgress(progressPercent);
-          setStats({ ...newStats });
-          setProcessingMessage(`Procesando imágenes: ${processed}/${total}`);
-        },
-      });
+
+            if (validation.warnings.length > 0) {
+              newStats.warnings += validation.warnings.length;
+            }
+
+            try {
+              const foto = await processImageFile(file);
+
+              if (foto) {
+                allPhotos.push(foto);
+                newStats.totalPhotos++;
+
+                // NO generar ObjectURL para preview durante importación masiva
+                // Las previews se cargan bajo demanda cuando el usuario las ve
+                scheduleFileUpdate(fileItem.id, {
+                  status: 'success' as const,
+                  message: foto.categoria !== 'OTRO' ? `Asociada: ${foto.descripcion}` : 'Sin asociar',
+                  // preview: omitido intencionalmente — se carga bajo demanda
+                });
+
+                return foto;
+              } else {
+                scheduleFileUpdate(fileItem.id, {
+                  status: 'error' as const,
+                  message: 'Error al procesar imagen'
+                });
+                newStats.errors++;
+                return null;
+              }
+            } catch (error) {
+              const message = error instanceof Error ? error.message : 'Error desconocido';
+              scheduleFileUpdate(fileItem.id, { status: 'error' as const, message });
+              newStats.errors++;
+              return null;
+            }
+          },
+          onProgress: (processed, total) => {
+            newStats.processedFiles = excelFiles.length + processed;
+            const progressPercent = ((excelFiles.length + processed) / filteredFiles.length) * 100;
+            setProgress(progressPercent);
+            setStats({ ...newStats });
+            setProcessingMessage(`Procesando imágenes: ${processed}/${total}`);
+          },
+        });
+
+      } // fin else modo browser
 
       // Flush final de actualizaciones pendientes
       if (flushTimerRef.current) {
@@ -675,6 +793,28 @@ export default function UploadPage() {
         {canContinue && (
           <NextStepIndicator className="mb-6" variant="banner" />
         )}
+
+        {/* Indicador de modo de procesamiento */}
+        <div className={`mb-4 px-4 py-2 rounded-lg text-sm flex items-center gap-2 ${serverAvailable === null
+            ? 'bg-gray-50 text-gray-500 border border-gray-200'
+            : serverAvailable
+              ? 'bg-green-50 text-green-800 border border-green-200'
+              : 'bg-yellow-50 text-yellow-800 border border-yellow-200'
+          }`}>
+          {serverAvailable === null && <span>⏳ Verificando modo de procesamiento...</span>}
+          {serverAvailable === true && (
+            <>
+              <span className="text-lg">⚡</span>
+              <span><strong>Modo servidor activo</strong> — Sharp procesa las fotos 10-20x más rápido en el servidor</span>
+            </>
+          )}
+          {serverAvailable === false && (
+            <>
+              <span className="text-lg">🌐</span>
+              <span><strong>Modo browser</strong> — procesamiento en tu equipo (instala Sharp para mayor velocidad)</span>
+            </>
+          )}
+        </div>
 
         {/* Monitor de rendimiento */}
         {(isProcessing || files.length > 100) && (
