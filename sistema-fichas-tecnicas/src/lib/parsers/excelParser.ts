@@ -1090,6 +1090,20 @@ export async function parseExcelFileContent(workbook: any): Promise<ExcelParseRe
       });
     });
 
+    // Reorganizar tuberías por tipo y orden para cada pozo
+    pozosMap.forEach((pozo, pozoId) => {
+      const beforeCount = pozo.tuberias.tuberias.length;
+      pozo.tuberias.tuberias = reorganizeTuberias(pozo.tuberias.tuberias);
+      const afterCount = pozo.tuberias.tuberias.length;
+      
+      if (beforeCount > 0) {
+        console.log(`[ExcelParser] Pozo ${pozoId}: Reorganizadas ${beforeCount} tuberías`);
+        pozo.tuberias.tuberias.forEach((tub, idx) => {
+          console.log(`  [${idx}] Tipo: ${tub.tipoTuberia?.value}, Orden: ${tub.orden?.value}, ID: ${tub.idTuberia?.value}`);
+        });
+      }
+    });
+
     // 4. Parsear SUMIDEROS
     if (sumiderosSheetName && workbook.Sheets[sumiderosSheetName]) {
       const worksheet = workbook.Sheets[sumiderosSheetName];
@@ -1111,6 +1125,20 @@ export async function parseExcelFileContent(workbook: any): Promise<ExcelParseRe
         }
       });
     }
+
+    // Reorganizar sumideros por orden para cada pozo
+    pozosMap.forEach((pozo, pozoId) => {
+      const beforeCount = pozo.sumideros.sumideros.length;
+      pozo.sumideros.sumideros = reorganizeSumideros(pozo.sumideros.sumideros);
+      const afterCount = pozo.sumideros.sumideros.length;
+      
+      if (beforeCount > 0) {
+        console.log(`[ExcelParser] Pozo ${pozoId}: Reorganizados ${beforeCount} sumideros`);
+        pozo.sumideros.sumideros.forEach((sum, idx) => {
+          console.log(`  [${idx}] Esquema: ${sum.numeroEsquema?.value}, ID: ${sum.idSumidero?.value}`);
+        });
+      }
+    });
 
     // 5. Parsear FOTOS
     if (fotosSheetName && workbook.Sheets[fotosSheetName]) {
@@ -1168,6 +1196,73 @@ export function parseTuberiaRow(row: Record<string, unknown>, map: Record<string
   };
 }
 
+/**
+ * Reorganiza las tuberías por tipo y orden
+ * IMPORTANTE: Solo ordena por la columna "orden" dentro de cada tipo
+ * No mezcla tipos diferentes - cada tipo mantiene su propio orden
+ * 
+ * Ejemplo:
+ * Entrada Orden=2 → tuberias[0] (primera entrada)
+ * Entrada Orden=1 → tuberias[1] (segunda entrada)
+ * Salida Orden=1 → tuberias[2] (primera salida)
+ * 
+ * Resultado después de reorganizar:
+ * Entrada Orden=1 → tuberias[0]
+ * Entrada Orden=2 → tuberias[1]
+ * Salida Orden=1 → tuberias[2]
+ */
+function reorganizeTuberias(tuberias: TuberiaInfo[]): TuberiaInfo[] {
+  if (!tuberias || tuberias.length === 0) return tuberias;
+
+  // Normalizar tipos de tubería
+  const normalizeType = (type: string): string => {
+    if (!type) return 'entrada';
+    const normalized = String(type).toLowerCase().trim();
+    if (normalized.includes('salida')) return 'salida';
+    if (normalized.includes('entrada')) return 'entrada';
+    return normalized;
+  };
+
+  // Agrupar por tipo
+  const byType: Record<string, TuberiaInfo[]> = {};
+  tuberias.forEach(tub => {
+    const type = normalizeType(tub.tipoTuberia?.value as string);
+    if (!byType[type]) {
+      byType[type] = [];
+    }
+    byType[type].push(tub);
+  });
+
+  // Ordenar CADA GRUPO por la columna "orden" de forma independiente
+  Object.keys(byType).forEach(type => {
+    byType[type].sort((a, b) => {
+      const ordenA = parseInt(String(a.orden?.value || 0)) || 0;
+      const ordenB = parseInt(String(b.orden?.value || 0)) || 0;
+      return ordenA - ordenB;
+    });
+  });
+
+  // Reconstruir el array: primero entradas, luego salidas, luego otros
+  // CADA TIPO MANTIENE SU PROPIO ORDEN INDEPENDIENTE
+  const result: TuberiaInfo[] = [];
+  const order = ['entrada', 'salida'];
+  
+  order.forEach(type => {
+    if (byType[type]) {
+      result.push(...byType[type]);
+    }
+  });
+
+  // Agregar otros tipos
+  Object.keys(byType).forEach(type => {
+    if (!order.includes(type)) {
+      result.push(...byType[type]);
+    }
+  });
+
+  return result;
+}
+
 export function parseSumideroRow(row: Record<string, unknown>, map: Record<string, string>, index: number, result: ExcelParseResult): SumideroInfo | null {
   const getValue = (f: string) => getMappedValue(row, f, SUMIDERO_MAPPING, map);
 
@@ -1184,6 +1279,20 @@ export function parseSumideroRow(row: Record<string, unknown>, map: Record<strin
     alturaSalida: { value: getValue('alturaSalida'), source: 'excel' },
     alturaLlegada: { value: getValue('alturaLlegada'), source: 'excel' },
   };
+}
+
+/**
+ * Reorganiza los sumideros por orden
+ * Ordena por la columna "numeroEsquema" o "orden" para asegurar secuencia correcta
+ */
+function reorganizeSumideros(sumideros: SumideroInfo[]): SumideroInfo[] {
+  if (!sumideros || sumideros.length === 0) return sumideros;
+
+  return sumideros.sort((a, b) => {
+    const ordenA = parseInt(String(a.numeroEsquema?.value || 0)) || 0;
+    const ordenB = parseInt(String(b.numeroEsquema?.value || 0)) || 0;
+    return ordenA - ordenB;
+  });
 }
 
 export function parseFotoRow(row: Record<string, unknown>, map: Record<string, string>, index: number, result: ExcelParseResult): FotoInfo | null {
