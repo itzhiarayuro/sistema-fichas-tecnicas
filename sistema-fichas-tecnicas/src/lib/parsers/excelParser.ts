@@ -1095,7 +1095,7 @@ export async function parseExcelFileContent(workbook: any): Promise<ExcelParseRe
       const beforeCount = pozo.tuberias.tuberias.length;
       pozo.tuberias.tuberias = reorganizeTuberias(pozo.tuberias.tuberias);
       const afterCount = pozo.tuberias.tuberias.length;
-      
+
       if (beforeCount > 0) {
         console.log(`[ExcelParser] Pozo ${pozoId}: Reorganizadas ${beforeCount} tuberías`);
         pozo.tuberias.tuberias.forEach((tub, idx) => {
@@ -1131,7 +1131,7 @@ export async function parseExcelFileContent(workbook: any): Promise<ExcelParseRe
       const beforeCount = pozo.sumideros.sumideros.length;
       pozo.sumideros.sumideros = reorganizeSumideros(pozo.sumideros.sumideros);
       const afterCount = pozo.sumideros.sumideros.length;
-      
+
       if (beforeCount > 0) {
         console.log(`[ExcelParser] Pozo ${pozoId}: Reorganizados ${beforeCount} sumideros`);
         pozo.sumideros.sumideros.forEach((sum, idx) => {
@@ -1214,7 +1214,6 @@ export function parseTuberiaRow(row: Record<string, unknown>, map: Record<string
 function reorganizeTuberias(tuberias: TuberiaInfo[]): TuberiaInfo[] {
   if (!tuberias || tuberias.length === 0) return tuberias;
 
-  // Normalizar tipos de tubería
   const normalizeType = (type: string): string => {
     if (!type) return 'entrada';
     const normalized = String(type).toLowerCase().trim();
@@ -1223,42 +1222,30 @@ function reorganizeTuberias(tuberias: TuberiaInfo[]): TuberiaInfo[] {
     return normalized;
   };
 
-  // Agrupar por tipo
-  const byType: Record<string, TuberiaInfo[]> = {};
+  // Crear arrays de 8 posiciones (según el límite del sistema) inicializados con null
+  const entradas = new Array(8).fill(null);
+  const salidas = new Array(8).fill(null);
+  const otros: TuberiaInfo[] = [];
+
   tuberias.forEach(tub => {
     const type = normalizeType(tub.tipoTuberia?.value as string);
-    if (!byType[type]) {
-      byType[type] = [];
+    const orden = parseInt(String(tub.orden?.value || 0)) || 0;
+
+    if (type === 'entrada' && orden >= 1 && orden <= 8) {
+      entradas[orden - 1] = tub;
+    } else if (type === 'salida' && orden >= 1 && orden <= 8) {
+      salidas[orden - 1] = tub;
+    } else {
+      otros.push(tub);
     }
-    byType[type].push(tub);
   });
 
-  // Ordenar CADA GRUPO por la columna "orden" de forma independiente
-  Object.keys(byType).forEach(type => {
-    byType[type].sort((a, b) => {
-      const ordenA = parseInt(String(a.orden?.value || 0)) || 0;
-      const ordenB = parseInt(String(b.orden?.value || 0)) || 0;
-      return ordenA - ordenB;
-    });
-  });
-
-  // Reconstruir el array: primero entradas, luego salidas, luego otros
-  // CADA TIPO MANTIENE SU PROPIO ORDEN INDEPENDIENTE
+  // Retornamos un array denso pero respetando los vacíos (null) para que el mapeador 
+  // encuentre el dato en el índice correcto (ej: tub_3_... busca índice 2)
   const result: TuberiaInfo[] = [];
-  const order = ['entrada', 'salida'];
-  
-  order.forEach(type => {
-    if (byType[type]) {
-      result.push(...byType[type]);
-    }
-  });
-
-  // Agregar otros tipos
-  Object.keys(byType).forEach(type => {
-    if (!order.includes(type)) {
-      result.push(...byType[type]);
-    }
-  });
+  result.push(...entradas.map(e => e || { idTuberia: { value: '', source: 'excel' } }));
+  result.push(...salidas.map(s => s || { idTuberia: { value: '', source: 'excel' } }));
+  result.push(...otros);
 
   return result;
 }
@@ -1288,11 +1275,15 @@ export function parseSumideroRow(row: Record<string, unknown>, map: Record<strin
 function reorganizeSumideros(sumideros: SumideroInfo[]): SumideroInfo[] {
   if (!sumideros || sumideros.length === 0) return sumideros;
 
-  return sumideros.sort((a, b) => {
-    const ordenA = parseInt(String(a.numeroEsquema?.value || 0)) || 0;
-    const ordenB = parseInt(String(b.numeroEsquema?.value || 0)) || 0;
-    return ordenA - ordenB;
+  const slots = new Array(8).fill(null);
+  sumideros.forEach(sum => {
+    const orden = parseInt(String(sum.numeroEsquema?.value || 0)) || 0;
+    if (orden >= 1 && orden <= 8) {
+      slots[orden - 1] = sum;
+    }
   });
+
+  return slots.map(s => s || { idSumidero: { value: '', source: 'excel' } });
 }
 
 export function parseFotoRow(row: Record<string, unknown>, map: Record<string, string>, index: number, result: ExcelParseResult): FotoInfo | null {
