@@ -29,6 +29,8 @@ import { useUIStore } from '@/stores/uiStore';
 import { blobStore } from '@/lib/storage/blobStore';
 import { LimitManager } from '@/lib/managers/limitManager';
 import { processBatch } from '@/lib/utils/batchProcessor';
+import { buildExpectedPhotoIndex, filterPhotoFiles, getFiltradoSummary } from '@/lib/utils/smartPhotoFilter';
+import type { IndiceFotosEsperadas } from '@/lib/utils/smartPhotoFilter';
 import type { Pozo, FotoInfo } from '@/types';
 
 export default function UploadPage() {
@@ -57,6 +59,11 @@ export default function UploadPage() {
   const [canContinue, setCanContinue] = useState(false);
   const [showChunkedUploader, setShowChunkedUploader] = useState(false);
   const [performanceRecommendation, setPerformanceRecommendation] = useState<string>('');
+
+  // Índice de fotos esperadas (se construye cuando se carga el Excel)
+  const expectedIndexRef = useRef<IndiceFotosEsperadas | null>(null);
+  const [filtradoInfo, setFiltradoInfo] = useState<string>('');
+
 
   // Refs para importación masiva optimizada
   const realFilesRef = useRef<File[]>([]); // Archivos reales para ChunkedUploader
@@ -121,6 +128,18 @@ export default function UploadPage() {
     };
   }, [flushFileUpdates]);
 
+  // ✅ NUEVO: Si ya hay pozos cargados en el store, construir el índice automáticamente
+  // Esto cubre el caso donde el Excel se cargó en una sesión anterior
+  useEffect(() => {
+    if (pozos.size > 0 && !expectedIndexRef.current) {
+      expectedIndexRef.current = buildExpectedPhotoIndex(pozos);
+      console.log(
+        `📋 Índice restaurado desde store: ${expectedIndexRef.current.totalPozos} pozos, ` +
+        `${expectedIndexRef.current.totalEsperadas} fotos esperadas`
+      );
+    }
+  }, [pozos]);
+
   /**
    * Genera un ID único para archivos
    */
@@ -184,13 +203,14 @@ export default function UploadPage() {
       const nomenclatura = parseNomenclatura(file.name);
 
       // --- OPTIMIZACIÓN: Compresión en Worker ---
-      // Si la foto es grande (> 1MB), comprimirla antes de guardar
+      // Solo reduce el PESO (bytes), NUNCA las dimensiones (píxeles)
+      // maxSizeMB: límite de tamaño en MB — la resolución queda intacta
       let finalFile: File | Blob = file;
-      if (file.size > 1024 * 1024) {
+      if (file.size > 2 * 1024 * 1024) { // Solo comprimir si pesa más de 2MB
         try {
           const result = await workerRegistry.runPhotoTask<any>(file, {
-            maxWidth: 1200,
-            quality: 0.75,
+            maxSizeMB: 2.0,  // Límite en peso, NO en píxeles
+            quality: 0.92,   // Alta calidad — antes era 0.75 (muy malo)
             generateHash: false
           });
           if (result && result.blob) {
@@ -237,36 +257,28 @@ export default function UploadPage() {
   const handleFilesAccepted = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
 
-    // Si hay más de 500 archivos, sugerir el uploader chunked
-    if (acceptedFiles.length > 500) {
-      const useChunked = confirm(
-        `Detectamos ${acceptedFiles.length} archivos. Para un mejor rendimiento, ¿deseas usar el modo de carga optimizada para grandes volúmenes?`
-      );
+    // Si hay más de 200 archivos, activar automáticamente el modo chunked optimizado
+    if (acceptedFiles.length > 200) {
+      realFilesRef.current = acceptedFiles;
 
-      if (useChunked) {
-        realFilesRef.current = acceptedFiles; // Guardar archivos reales
-
-        // Inicializar FileItems para que aparezcan en la lista como "pendientes"
-        const initialFileItems: FileItem[] = acceptedFiles.map(file => ({
-          id: generateFileId(),
-          name: file.name,
-          size: file.size,
-          type: file.type || 'image/jpeg',
-          status: 'pending' as const,
-        }));
-        setFiles(initialFileItems);
-        setStats({
-          totalFiles: acceptedFiles.length,
-          processedFiles: 0,
-          totalPozos: 0,
-          totalPhotos: 0,
-          warnings: 0,
-          errors: 0,
-        });
-
-        setShowChunkedUploader(true);
-        return;
-      }
+      const initialFileItems: FileItem[] = acceptedFiles.map(file => ({
+        id: generateFileId(),
+        name: file.name,
+        size: file.size,
+        type: file.type || 'image/jpeg',
+        status: 'pending' as const,
+      }));
+      setFiles(initialFileItems);
+      setStats({
+        totalFiles: acceptedFiles.length,
+        processedFiles: 0,
+        totalPozos: 0,
+        totalPhotos: 0,
+        warnings: 0,
+        errors: 0,
+      });
+      setShowChunkedUploader(true);
+      return;
     }
 
     // Filtrar archivos no deseados según solicitud del usuario (Requirement: Eliminar -T, AT, -Z)
@@ -369,6 +381,23 @@ export default function UploadPage() {
         allPozos.push(...pozos);
         newStats.totalPozos += pozos.length;
 
+        // ✅ NUEVO: Construir índice de fotos esperadas desde los pozos del Excel
+        // Esto permite filtrar fotos inteligentemente ANTES de procesarlas
+        if (pozos.length > 0) {
+          // Convertir array a Map para el índice
+          const pozosMap = new Map<string, Pozo>();
+          pozos.forEach(p => pozosMap.set(p.id, p));
+          // También incluir pozos ya cargados antes
+          for (const [id, p] of pozos as any) pozosMap.set(id, p);
+          
+          expectedIndexRef.current = buildExpectedPhotoIndex(pozosMap);
+          showInfo(
+            `📋 Índice creado: ${expectedIndexRef.current.totalPozos} pozos, ` +
+            `${expectedIndexRef.current.totalEsperadas} fotos esperadas`,
+            'Filtro inteligente activado'
+          );
+        }
+
         setFiles(prev => prev.map(f =>
           f.id === fileItem.id ? {
             ...f,
@@ -390,13 +419,56 @@ export default function UploadPage() {
 
     // Procesar imágenes en lotes (batch processing optimizado)
     if (imageFiles.length > 0) {
-      console.log(`📸 Procesando ${imageFiles.length} imágenes en lotes optimizados...`);
+      console.log(`📸 ${imageFiles.length} imágenes recibidas...`);
 
-      // Para grandes volúmenes, usar modo bajo memoria
-      const isLargeImport = imageFiles.length > 200;
+      // ─── FILTRO INTELIGENTE ───────────────────────────────────────────────
+      // Si ya hay un Excel cargado, filtrar ANTES de procesar
+      // Solo pasan las fotos que pertenecen a pozos conocidos
+      let imageFilesToProcess = imageFiles;
+
+      if (expectedIndexRef.current && expectedIndexRef.current.totalPozos > 0) {
+        const rawFiles = imageFiles.map(({ file }) => file);
+        const filtrado = filterPhotoFiles(rawFiles, expectedIndexRef.current);
+
+        // Reconstruir array con el mismo formato original (file + fileItem)
+        const aceptadasSet = new Set(filtrado.aceptadas);
+        imageFilesToProcess = imageFiles.filter(({ file }) => aceptadasSet.has(file));
+
+        // Marcar las descartadas como "ignoradas" en la UI
+        const descartadasSet = new Set([
+          ...filtrado.descartadasPozoInexistente,
+          ...filtrado.descartadasNomenclaturaInvalida,
+        ]);
+        for (const { file, fileItem } of imageFiles) {
+          if (descartadasSet.has(file)) {
+            scheduleFileUpdate(fileItem.id, {
+              status: 'warning' as const,
+              message: filtrado.descartadasPozoInexistente.includes(file)
+                ? '⏭️ Pozo no encontrado en Excel'
+                : '⏭️ Nombre de archivo no reconocido',
+            });
+          }
+        }
+
+        const summary = getFiltradoSummary(filtrado, expectedIndexRef.current);
+        setFiltradoInfo(summary);
+        console.log(summary);
+
+        if (filtrado.stats.descartadas > 0) {
+          showInfo(
+            `Filtro inteligente: ${filtrado.stats.aceptadas} fotos a procesar, ` +
+            `${filtrado.stats.descartadas} descartadas (no corresponden a ningún pozo del Excel)`,
+            '⚡ Optimización aplicada'
+          );
+        }
+      }
+      // ─── FIN FILTRO ────────────────────────────────────────────────────────
+
+      const isLargeImport = imageFilesToProcess.length > 200;
+      console.log(`📸 Procesando ${imageFilesToProcess.length} imágenes en lotes optimizados...`);
 
       await processBatch({
-        items: imageFiles,
+        items: imageFilesToProcess,
         batchSize: isLargeImport ? 15 : 20,
         delayBetweenBatches: isLargeImport ? 100 : 50,
         lowMemoryMode: isLargeImport, // No acumular todos los resultados en un array
@@ -621,6 +693,19 @@ export default function UploadPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               <span className="text-sm font-medium">{performanceRecommendation}</span>
+            </div>
+          </div>
+        )}
+
+        {/* ✅ NUEVO: Banner de filtro inteligente */}
+        {filtradoInfo && (
+          <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
+            <div className="flex items-start gap-2">
+              <span className="text-xl">⚡</span>
+              <div>
+                <p className="text-sm font-semibold text-emerald-800 mb-1">Filtro inteligente activo</p>
+                <pre className="text-xs text-emerald-700 whitespace-pre-wrap font-mono">{filtradoInfo}</pre>
+              </div>
             </div>
           </div>
         )}

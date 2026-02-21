@@ -1,95 +1,129 @@
 /**
- * Photo Worker - Procesamiento de imágenes en segundo plano (Hashing y Compresión)
+ * Photo Worker v2 — Procesamiento de imágenes SIN perder resolución
  * 
- * Implementa el principio: "Nunca bloquear la UI con procesamiento de imágenes".
- * Requirements: 20.5, 32.2
+ * Cambios vs versión anterior:
+ * - ELIMINADO maxWidth/maxHeight — nunca reduce dimensiones
+ * - Solo controla el peso en bytes (calidad JPEG), no los píxeles
+ * - Transferibles correctos para zero-copy memory
+ * - Calidad 0.92 en lugar de 0.75 — fotos más nítidas
  */
 
 interface PhotoTask {
-    id: string;
-    file: File | Blob;
-    options: {
-        maxWidth?: number;
-        maxHeight?: number;
-        quality?: number;
-        generateHash?: boolean;
-    };
+  id: string;
+  buffer?: ArrayBuffer;  // Preferido — transferible zero-copy
+  file?: File | Blob;    // Fallback si buffer no disponible
+  options: {
+    maxSizeMB?: number;    // Solo controla PESO, no dimensiones
+    quality?: number;      // 0-1, default 0.92
+    generateHash?: boolean;
+  };
 }
 
 self.onmessage = async (e: MessageEvent<PhotoTask>) => {
-    const { id, file, options } = e.data;
+  const { id, buffer, file, options } = e.data;
 
-    try {
-        self.postMessage({ type: 'PROGRESS', id, progress: 10, message: 'Iniciando procesamiento de imagen...' });
+  try {
+    self.postMessage({ type: 'PROGRESS', id, progress: 10, message: 'Iniciando...' });
 
-        let processedBlob = file;
-        let hash: string | undefined;
-
-        // 1. Generar Hash (para deduplicación)
-        if (options.generateHash) {
-            self.postMessage({ type: 'PROGRESS', id, progress: 30, message: 'Generando identificador único...' });
-            const arrayBuffer = await file.arrayBuffer();
-            const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
-            const hashArray = Array.from(new Uint8Array(hashBuffer));
-            hash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-        }
-
-        // 2. Compresión básica (si es posible en el entorno del worker)
-        // Nota: OffscreenCanvas no está disponible en todos los navegadores para workers
-        // pero es el estándar moderno.
-        if (typeof OffscreenCanvas !== 'undefined' && (options.maxWidth || options.maxHeight)) {
-            self.postMessage({ type: 'PROGRESS', id, progress: 60, message: 'Optimizando resolución...' });
-
-            try {
-                const img = await createImageBitmap(file);
-                let width = img.width;
-                let height = img.height;
-
-                if (options.maxWidth && width > options.maxWidth) {
-                    height = (height * options.maxWidth) / width;
-                    width = options.maxWidth;
-                }
-
-                if (options.maxHeight && height > options.maxHeight) {
-                    width = (width * options.maxHeight) / height;
-                    height = options.maxHeight;
-                }
-
-                const canvas = new OffscreenCanvas(width, height);
-                const ctx = canvas.getContext('2d');
-                if (ctx) {
-                    ctx.drawImage(img, 0, 0, width, height);
-                    processedBlob = await canvas.convertToBlob({
-                        type: 'image/jpeg',
-                        quality: options.quality || 0.8
-                    });
-                }
-            } catch (canvasError) {
-                console.warn('Error al usar OffscreenCanvas, se usará el archivo original:', canvasError);
-            }
-        }
-
-        self.postMessage({ type: 'PROGRESS', id, progress: 90, message: 'Finalizando...' });
-
-        // 3. Retornar resultado
-        self.postMessage({
-            type: 'SUCCESS',
-            id,
-            result: {
-                blob: processedBlob,
-                hash,
-                originalSize: file.size,
-                processedSize: processedBlob.size,
-                width: (processedBlob as any).width, // Si pudiéramos extraerlo fácilmente
-                height: (processedBlob as any).height
-            }
-        });
-
-    } catch (error) {
-        self.postMessage({
-            type: 'ERROR',
-            id,
-            error: error instanceof Error ? error.message : 'Error desconocido procesando imagen'
-        });
+    // Obtener el blob de entrada (desde buffer transferible o desde File)
+    let inputBlob: Blob;
+    if (buffer) {
+      inputBlob = new Blob([buffer], { type: 'image/jpeg' });
+    } else if (file) {
+      inputBlob = file;
+    } else {
+      throw new Error('No se recibió imagen');
     }
+
+    let processedBlob = inputBlob;
+    let hash: string | undefined;
+
+    // 1. Generar hash si se pide (para deduplicación)
+    if (options.generateHash) {
+      self.postMessage({ type: 'PROGRESS', id, progress: 25, message: 'Generando hash...' });
+      const hashBuffer = await crypto.subtle.digest('SHA-256', buffer || await inputBlob.arrayBuffer());
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      hash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    // 2. Optimización SOLO si la foto pesa más de 2MB
+    //    NUNCA cambiamos dimensiones — solo calidad JPEG
+    const maxSizeMB = options.maxSizeMB || 2.0;
+    const maxSizeBytes = maxSizeMB * 1024 * 1024;
+    const quality = options.quality || 0.92; // Alta calidad por defecto
+
+    if (inputBlob.size > maxSizeBytes && typeof OffscreenCanvas !== 'undefined') {
+      self.postMessage({ type: 'PROGRESS', id, progress: 50, message: 'Optimizando peso...' });
+
+      try {
+        const img = await createImageBitmap(inputBlob);
+        
+        // *** CLAVE: Usar dimensiones ORIGINALES — no tocar width/height ***
+        const originalWidth = img.width;
+        const originalHeight = img.height;
+
+        const canvas = new OffscreenCanvas(originalWidth, originalHeight);
+        const ctx = canvas.getContext('2d');
+
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, originalWidth, originalHeight);
+          
+          // Reducir calidad JPEG progresivamente hasta que el peso sea aceptable
+          // NUNCA reducimos dimensiones
+          let currentQuality = quality;
+          let attempt = 0;
+          
+          processedBlob = await canvas.convertToBlob({
+            type: 'image/jpeg',
+            quality: currentQuality,
+          });
+
+          // Si sigue siendo muy grande, reducir calidad un poco más (máximo 2 intentos)
+          while (processedBlob.size > maxSizeBytes && attempt < 2) {
+            currentQuality = currentQuality * 0.85; // Reducir calidad 15%
+            processedBlob = await canvas.convertToBlob({
+              type: 'image/jpeg',
+              quality: currentQuality,
+            });
+            attempt++;
+          }
+
+          console.log(
+            `✅ ${id}: ${(inputBlob.size / 1024).toFixed(0)}KB → ${(processedBlob.size / 1024).toFixed(0)}KB ` +
+            `(${originalWidth}×${originalHeight}px — resolución intacta)`
+          );
+        }
+      } catch (canvasError) {
+        console.warn('OffscreenCanvas falló, usando original:', canvasError);
+        processedBlob = inputBlob;
+      }
+    }
+
+    self.postMessage({ type: 'PROGRESS', id, progress: 90, message: 'Finalizando...' });
+
+    // 3. Transferir resultado como ArrayBuffer (zero-copy de vuelta al main thread)
+    const resultBuffer = await processedBlob.arrayBuffer();
+
+    self.postMessage(
+      {
+        type: 'SUCCESS',
+        id,
+        result: {
+          buffer: resultBuffer,      // ArrayBuffer transferible
+          blob: processedBlob,       // Blob por compatibilidad
+          hash,
+          originalSize: inputBlob.size,
+          processedSize: processedBlob.size,
+        },
+      },
+      [resultBuffer] // Transferir sin copiar
+    );
+
+  } catch (error) {
+    self.postMessage({
+      type: 'ERROR',
+      id,
+      error: error instanceof Error ? error.message : 'Error desconocido',
+    });
+  }
 };

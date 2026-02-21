@@ -1,23 +1,21 @@
 /**
- * BatchProcessor - Procesamiento por lotes para evitar saturación
+ * BatchProcessor v2 — Procesamiento por lotes sin delays artificiales
  * 
- * Procesa grandes cantidades de archivos en lotes pequeños
- * para evitar bloquear el navegador y saturar la memoria.
- * 
- * Optimizaciones v2:
- * - Usa requestIdleCallback entre lotes para no bloquear UI
- * - Libera referencias intermedias después de cada lote
- * - Reporta progreso con debounce para evitar re-renders excesivos
+ * Cambios vs versión anterior:
+ * - SIN delays fijos — solo pausa si la memoria está alta (>80%)
+ * - requestIdleCallback real entre lotes para no bloquear UI
+ * - Import estático del memoryManager (sin overhead de import dinámico)
  */
+
+import { memoryManager } from '@/lib/managers/memoryManager';
 
 export interface BatchProcessorOptions<T, R> {
   items: T[];
-  batchSize?: number; // Tamaño del lote (default: 10)
-  delayBetweenBatches?: number; // Delay en ms entre lotes (default: 100ms)
+  batchSize?: number;
+  delayBetweenBatches?: number; // Ignorado si memoria < 80% — es adaptativo ahora
   processor: (item: T, index: number) => Promise<R>;
   onProgress?: (processed: number, total: number) => void;
   onBatchComplete?: (batchResults: R[], batchIndex: number) => void;
-  /** Si true, no acumula todos los resultados (ahorra memoria para miles de items) */
   lowMemoryMode?: boolean;
 }
 
@@ -28,38 +26,43 @@ export interface BatchProcessorResult<R> {
   totalErrors: number;
 }
 
-/**
- * Espera a que el navegador esté idle usando requestIdleCallback
- * Fallback a setTimeout si no está disponible
- */
-function waitForIdle(timeoutMs: number = 100): Promise<void> {
+/** Cede el hilo al navegador entre lotes — no bloquea UI */
+function yieldToUI(): Promise<void> {
   return new Promise((resolve) => {
     if (typeof requestIdleCallback === 'function') {
-      requestIdleCallback(() => resolve(), { timeout: timeoutMs });
+      requestIdleCallback(() => resolve(), { timeout: 50 });
     } else {
-      setTimeout(resolve, timeoutMs);
+      setTimeout(resolve, 0); // Sin delay — solo cede el hilo
     }
   });
 }
 
+/** Calcula delay basado en memoria real — cero si todo está bien */
+function getAdaptiveDelay(): number {
+  const stats = memoryManager.getMemoryStats();
+  if (!stats) return 0;
+
+  if (stats.usagePercentage > 0.90) return 2000; // Memoria crítica — pausa larga
+  if (stats.usagePercentage > 0.80) return 500;  // Memoria alta — pausa corta
+  if (stats.usagePercentage > 0.70) return 100;  // Memoria moderada — pausa mínima
+  return 0; // Memoria normal — SIN delay
+}
+
 /**
- * Procesa items en lotes para evitar saturación
+ * Procesa items en lotes sin delays artificiales.
+ * Solo pausa cuando la memoria del dispositivo realmente lo necesita.
  */
 export async function processBatch<T, R>(
   options: BatchProcessorOptions<T, R>
 ): Promise<BatchProcessorResult<R>> {
   const {
     items,
-    batchSize = 10,
-    delayBetweenBatches = 100,
+    batchSize = 20,
     processor,
     onProgress,
     onBatchComplete,
     lowMemoryMode = false,
   } = options;
-
-  // Importar memoryManager dinámicamente para evitar dependencias circulares
-  const { memoryManager } = await import('@/lib/managers/memoryManager');
 
   const results: R[] = [];
   const errors: Array<{ index: number; error: Error }> = [];
@@ -71,79 +74,61 @@ export async function processBatch<T, R>(
     batches.push(items.slice(i, i + batchSize));
   }
 
-  console.log(`📦 Procesando ${totalItems} items en ${batches.length} lotes de ${batchSize}${lowMemoryMode ? ' (modo bajo memoria)' : ''}`);
+  console.log(`📦 Procesando ${totalItems} items en ${batches.length} lotes de ${batchSize}`);
 
-  // Variables para debounce de progreso (evitar re-renders excesivos)
+  // Debounce de progreso — máximo cada 200ms para no saturar React
   let lastProgressReport = 0;
-  const PROGRESS_DEBOUNCE_MS = 250; // Reportar máximo cada 250ms
-
   const reportProgress = (processed: number) => {
     const now = Date.now();
-    if (now - lastProgressReport >= PROGRESS_DEBOUNCE_MS || processed === totalItems) {
+    if (now - lastProgressReport >= 200 || processed === totalItems) {
       lastProgressReport = now;
       onProgress?.(Math.min(processed, totalItems), totalItems);
     }
   };
 
-  // Procesar cada lote
+  let totalProcessed = 0;
+
   for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
     const batch = batches[batchIndex];
 
-    // Verificar memoria antes de procesar el lote
-    if (!memoryManager.isSafeToProcess()) {
-      console.warn(`⚠️ Memoria alta detectada. Pausando 2 segundos antes del lote ${batchIndex + 1}`);
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
-      // Forzar garbage collection si es posible
-      memoryManager.forceGarbageCollection();
+    // Verificar memoria REAL — si está alta, pausar
+    const delay = getAdaptiveDelay();
+    if (delay > 0) {
+      console.warn(`⚠️ Memoria alta, pausando ${delay}ms antes del lote ${batchIndex + 1}`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      if (delay > 500) memoryManager.forceGarbageCollection();
     }
 
-    // Ajustar parámetros dinámicamente según memoria
-    const adjustedBatchSize = memoryManager.getRecommendedBatchSize(batchSize);
-    const adjustedDelay = memoryManager.getRecommendedDelay(delayBetweenBatches);
-
-    if (adjustedBatchSize !== batchSize) {
-      const stats = memoryManager.getMemoryStats();
-      console.log(`🔧 Ajustando tamaño de lote: ${batchSize} → ${adjustedBatchSize} (memoria: ${((stats?.usagePercentage || 0) * 100).toFixed(1)}%)`);
-    }
-
-    // Procesar items del lote en paralelo
+    // Procesar lote en paralelo
     const batchResults: R[] = [];
     const batchPromises = batch.map(async (item, indexInBatch) => {
       const globalIndex = batchIndex * batchSize + indexInBatch;
       try {
         const result = await processor(item, globalIndex);
         batchResults.push(result);
-        if (!lowMemoryMode) {
-          results.push(result);
-        }
+        if (!lowMemoryMode) results.push(result);
         return result;
       } catch (error) {
         const err = error instanceof Error ? error : new Error(String(error));
         errors.push({ index: globalIndex, error: err });
-        console.error(`❌ Error procesando item ${globalIndex}:`, err);
-        throw err;
+        return null;
       }
     });
 
-    // Esperar a que termine el lote
     await Promise.allSettled(batchPromises);
 
-    // Reportar progreso (con debounce)
-    const processed = (batchIndex + 1) * batchSize;
-    reportProgress(processed);
+    totalProcessed += batch.length;
+    reportProgress(totalProcessed);
     onBatchComplete?.(batchResults, batchIndex);
 
-    // Delay entre lotes usando idle callback para no bloquear UI
+    // Ceder hilo al navegador entre lotes — sin delay real
     if (batchIndex < batches.length - 1) {
-      await waitForIdle(adjustedDelay);
+      await yieldToUI();
     }
   }
 
-  // Reporte final de progreso
   reportProgress(totalItems);
-
-  console.log(`✅ Procesamiento completo: ${lowMemoryMode ? '(low memory mode)' : results.length + ' exitosos'}, ${errors.length} errores`);
+  console.log(`✅ Listo: ${totalItems - errors.length} exitosos, ${errors.length} errores`);
 
   return {
     results,
@@ -153,15 +138,11 @@ export async function processBatch<T, R>(
   };
 }
 
-/**
- * Procesa items secuencialmente (uno por uno)
- * Útil cuando el orden importa o hay dependencias
- */
+/** Procesa items uno por uno cuando el orden importa */
 export async function processSequential<T, R>(
   options: Omit<BatchProcessorOptions<T, R>, 'batchSize'>
 ): Promise<BatchProcessorResult<R>> {
   const { items, processor, onProgress } = options;
-
   const results: R[] = [];
   const errors: Array<{ index: number; error: Error }> = [];
 
@@ -173,14 +154,8 @@ export async function processSequential<T, R>(
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       errors.push({ index: i, error: err });
-      console.error(`❌ Error procesando item ${i}:`, err);
     }
   }
 
-  return {
-    results,
-    errors,
-    totalProcessed: results.length,
-    totalErrors: errors.length,
-  };
+  return { results, errors, totalProcessed: results.length, totalErrors: errors.length };
 }
