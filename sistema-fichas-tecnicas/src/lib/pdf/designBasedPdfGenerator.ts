@@ -14,11 +14,19 @@ import {
     DEFAULT_STYLES
 } from './designHelpers';
 
+const TRANSLIT_MAP: Record<string, string> = {
+    '\u00E1': 'a', '\u00E9': 'e', '\u00ED': 'i', '\u00F3': 'o', '\u00FA': 'u',
+    '\u00C1': 'A', '\u00C9': 'E', '\u00CD': 'I', '\u00D3': 'O', '\u00DA': 'U',
+    '\u00F1': 'n', '\u00D1': 'N', '\u00FC': 'u', '\u00DC': 'U'
+};
+
 function sanitizeTextForPDF(text: string): string {
     if (!text) return '';
     try {
-        // Normalizar a NFC y devolver tal cual — Helvetica soporta Latin-1 (ñ, tildes, ü)
-        return String(text).normalize('NFC');
+        let result = String(text).normalize('NFC');
+        return result.replace(/[\u00E1\u00E9\u00ED\u00F3\u00FA\u00C1\u00C9\u00CD\u00D3\u00DA\u00F1\u00D1\u00FC\u00DC]/g, (char) => {
+            return TRANSLIT_MAP[char] || char;
+        });
     } catch (e) {
         return String(text);
     }
@@ -62,102 +70,14 @@ const getValueByPath = (obj: any, path: string) => {
 
 export async function generatePdfFromDesign(
     design: FichaDesignVersion,
-    pozo: Pozo,
-    options: { isFlexible?: boolean; skipGroupVisibility?: boolean } = {}
+    pozo: Pozo
 ): Promise<{ success: boolean; blob?: Blob; error?: string }> {
     try {
-        const isFlexible = options.isFlexible === true;
-        const skipGroupVisibility = options.skipGroupVisibility === true;
-        console.log('🎨 Generando PDF:', {
+        console.log('🎨 Generando PDF con diseño personalizado:', {
             nombre: design.name,
-            flexible: isFlexible,
-            placements: design.placements?.length || 0
+            placements: design.placements?.length || 0,
+            pageSize: design.pageSize
         });
-
-        // LÓGICA DE FLEXIBILIDAD (Colapsar espacios vacíos)
-        // Si skipGroupVisibility es true, el layoutEngine ya hizo todo el trabajo
-        // de ocultar grupos sin datos y reubicar los visibles.
-        const groupVisibilityMap = new Map<string, boolean>();
-        const hiddenStrips: Array<{ yMin: number; yMax: number; height: number }> = [];
-
-        if (design.groups && !skipGroupVisibility) {
-            design.groups.forEach(group => {
-                const name = (group.name || '').toLowerCase();
-                let shouldHide = false;
-
-                if (name.includes('entrada') || name.includes('salida')) {
-                    const match = name.match(/(entrada|salida)\s*(\d+)/);
-                    if (match) {
-                        const type = match[1];
-                        const num = match[2];
-                        const pipe = pozo.tuberias?.tuberias?.find(t =>
-                            String(t.tipoTuberia?.value || '').toLowerCase() === (type === 'entrada' ? 'entrada' : 'salida') &&
-                            String(t.orden?.value) === num
-                        );
-                        if (!pipe) shouldHide = true;
-                    }
-                } else if (name.includes('sumidero')) {
-                    const match = name.match(/sumidero\s*(\d+)/);
-                    if (match) {
-                        const num = parseInt(match[1]);
-                        const sumidero = pozo.sumideros?.sumideros?.[num - 1];
-                        if (!sumidero) shouldHide = true;
-                    }
-                }
-
-                groupVisibilityMap.set(group.id, !shouldHide);
-
-                if (shouldHide && isFlexible) {
-                    const members = [
-                        ...(design.shapes || []).filter(s => (s as any).groupId === group.id && ((s as any).pageNumber || 1) === 2),
-                        ...(design.placements || []).filter(p => (p as any).groupId === group.id && ((p as any).pageNumber || 1) === 2)
-                    ];
-                    if (members.length > 0) {
-                        const yMin = Math.min(...members.map(m => m.y));
-                        const yMax = Math.max(...members.map(m => m.y + (m.height || 0)));
-                        hiddenStrips.push({ yMin, yMax, height: yMax - yMin });
-                    }
-                }
-            });
-        } else if (skipGroupVisibility && design.groups) {
-            // Cuando el layoutEngine ya procesó, marcamos todos los grupos como visibles
-            // (los que no tenían datos ya fueron ocultados por el layoutEngine)
-            design.groups.forEach(group => {
-                groupVisibilityMap.set(group.id, group.isVisible !== false);
-            });
-        }
-
-        // Filtrar franjas colapsables (solo aplica al modo acordeón estándar, NO al layoutEngine)
-        const finalCompressibleStrips: Array<{ yMin: number; yMax: number; height: number }> = [];
-        if (isFlexible && !skipGroupVisibility) {
-            const page2Els = [
-                ...(design.shapes || []).filter(s => ((s as any).pageNumber || 1) === 2),
-                ...(design.placements || []).filter(p => ((p as any).pageNumber || 1) === 2)
-            ];
-            hiddenStrips.sort((a, b) => a.yMin - b.yMin).forEach(strip => {
-                const isClear = !page2Els.some(el => {
-                    const gVisible = !el.groupId || groupVisibilityMap.get(el.groupId) !== false;
-                    if (!gVisible) return false;
-                    const top = el.y;
-                    const bottom = el.y + (el.height || 0);
-                    return (top < strip.yMax && bottom > strip.yMin);
-                });
-                if (isClear) finalCompressibleStrips.push(strip);
-            });
-        }
-
-        const getShiftedY = (originalY: number, originalHeight: number) => {
-            // Si skipGroupVisibility está activo, el layoutEngine ya colocó todo
-            // en su posición final. No desplazar nada.
-            if (skipGroupVisibility) return originalY;
-            if (!isFlexible) return originalY;
-            const mid = originalY + (originalHeight / 2);
-            let shift = 0;
-            finalCompressibleStrips.forEach(strip => {
-                if (mid > strip.yMax) shift += strip.height;
-            });
-            return originalY - shift;
-        };
 
         const orientation = design.orientation === 'portrait' ? 'p' : 'l';
         const doc = new jsPDF({
@@ -244,33 +164,18 @@ export async function generatePdfFromDesign(
         for (let pIdx = 1; pIdx <= numPages; pIdx++) {
             if (pIdx > 1) doc.addPage();
 
-            // ¿Aplicar efecto acordeón en esta página?
-            const applyAccordion = isFlexible && pIdx >= 2;
-
             for (const el of allElements) {
-                // Saltar grupos ocultos SOLO en página 2+ con modo Flexible
-                if (applyAccordion && el.groupId && groupVisibilityMap.has(el.groupId)) {
-                    if (!groupVisibilityMap.get(el.groupId)) continue;
-                }
-
                 if (el.isVisible === false) continue;
                 const isHeader = (el as any).repeatOnEveryPage;
                 const elementPage = (el as any).pageNumber || 1;
                 if (!isHeader && elementPage !== pIdx) continue;
-
-                // Calcular posición vertical:
-                // Página 1 = posición original (sin cambios)
-                // Página 2+ con Flexible = posición desplazada por acordeón
-                const shiftedY = applyAccordion
-                    ? getShiftedY(el.y, (el as any).height || 0)
-                    : el.y;
 
                 // Opacidad
                 const opacity = (el as any).opacity ?? 1;
                 doc.setGState(new (doc as any).GState({ opacity }));
 
                 if (el.isShape) {
-                    await renderShape(doc, el as ShapeElement, shiftedY);
+                    await renderShape(doc, el as ShapeElement);
                 } else {
                     const placement = el as FieldPlacement;
                     let value: any = '-';
@@ -333,42 +238,7 @@ export async function generatePdfFromDesign(
                     } else {
                         // Campos de datos
                         const path = FIELD_PATHS[placement.fieldId];
-
-                        // REGLA ESPECIAL: Campos de Entradas/Salidas específicas
-                        if (placement.fieldId.startsWith('ent_') || placement.fieldId.startsWith('sal_')) {
-                            const parts = placement.fieldId.split('_'); // [ent, 1, diametro]
-                            const typePrefix = parts[0]; // ent o sal
-                            const orderNum = parts[1]; // 1, 2, ...
-                            const fieldName = parts.slice(2).join('_'); // id, diametro, etc.
-
-                            const targetType = typePrefix === 'ent' ? 'entrada' : 'salida';
-
-                            // Buscar la tubería que coincida con el tipo y el orden
-                            const pipe = pozo.tuberias?.tuberias?.find(t =>
-                                String(t.tipoTuberia?.value || '').toLowerCase() === targetType &&
-                                String(t.orden?.value) === orderNum
-                            );
-
-                            if (pipe) {
-                                // Mapeo interno de campos de TuberiaInfo a la propiedad correspondiente
-                                const pipeFieldMap: Record<string, string> = {
-                                    'id': 'idTuberia',
-                                    'diametro': 'diametro',
-                                    'material': 'material',
-                                    'estado': 'estado',
-                                    'batea': 'batea',
-                                    'z': 'cota',
-                                    'emboquillado': 'emboquillado'
-                                };
-
-                                const targetField = pipeFieldMap[fieldName] || fieldName;
-                                const fieldValueObj = (pipe as any)[targetField];
-                                value = fieldValueObj?.value ?? '-';
-                                link = fieldValueObj?.link;
-                            } else {
-                                value = '-';
-                            }
-                        } else if (path) {
+                        if (path) {
                             const basePath = path.endsWith('.value') ? path.substring(0, path.length - 6) : path;
                             const fieldObj = getValueByPath(pozo, basePath);
                             if (fieldObj && typeof fieldObj === 'object') {
@@ -388,13 +258,12 @@ export async function generatePdfFromDesign(
                     // ADAPTACIÓN DINÁMICA
                     const isTechnicalSlot = placement.fieldId.startsWith('foto_entrada_') || placement.fieldId.startsWith('foto_salida_') ||
                         placement.fieldId.startsWith('foto_sumidero_') || placement.fieldId.startsWith('foto_descarga_') ||
-                        placement.fieldId.startsWith('tub_') || placement.fieldId.startsWith('ent_') ||
-                        placement.fieldId.startsWith('sal_') || placement.fieldId.startsWith('sum_');
+                        placement.fieldId.startsWith('tub_') || placement.fieldId.startsWith('sum_');
 
                     const hasNoData = !value || value === '-' || value === '' || value === 'Sin foto';
 
                     if (!(isTechnicalSlot && hasNoData)) {
-                        await renderField(doc, placement, pozo, value, link, shiftedY);
+                        await renderField(doc, placement, pozo, value, link);
                     }
                 }
             }
@@ -407,8 +276,7 @@ export async function generatePdfFromDesign(
     }
 }
 
-async function renderShape(doc: jsPDF, shape: ShapeElement, shiftedY?: number) {
-    const yVal = shiftedY !== undefined ? shiftedY : shape.y;
+async function renderShape(doc: jsPDF, shape: ShapeElement) {
     if (shape.type === 'rectangle' || shape.type === 'circle' || shape.type === 'triangle') {
         const style = (shape.fillColor && shape.fillColor !== 'transparent' && shape.strokeColor && shape.strokeColor !== 'transparent') ? 'FD' :
             (shape.fillColor && shape.fillColor !== 'transparent') ? 'F' : 'D';
@@ -421,23 +289,23 @@ async function renderShape(doc: jsPDF, shape: ShapeElement, shiftedY?: number) {
 
         if (shape.type === 'circle') {
             const radius = Math.min(shape.width, shape.height) / 2;
-            doc.ellipse(shape.x + radius, yVal + radius, radius, radius, style);
+            doc.ellipse(shape.x + radius, shape.y + radius, radius, radius, style);
         } else if (shape.type === 'rectangle') {
             if (shape.borderRadius && shape.borderRadius > 0) {
                 const r = shape.borderRadius / 3.78;
-                (doc as any).roundedRect(shape.x, yVal, shape.width, shape.height, r, r, style);
+                (doc as any).roundedRect(shape.x, shape.y, shape.width, shape.height, r, r, style);
             } else {
-                doc.rect(shape.x, yVal, shape.width, shape.height, style);
+                doc.rect(shape.x, shape.y, shape.width, shape.height, style);
             }
         } else if (shape.type === 'triangle') {
-            doc.triangle(shape.x + shape.width / 2, yVal, shape.x + shape.width, yVal + shape.height, shape.x, yVal + shape.height, style);
+            doc.triangle(shape.x + shape.width / 2, shape.y, shape.x + shape.width, shape.y + shape.height, shape.x, shape.y + shape.height, style);
         }
     }
 
     if (shape.type === 'line') {
         doc.setDrawColor(shape.strokeColor || '#000000');
         doc.setLineWidth((shape.strokeWidth || 0.5) * PX_TO_MM);
-        doc.line(shape.x, yVal, shape.x + shape.width, yVal + shape.height);
+        doc.line(shape.x, shape.y, shape.x + shape.width, shape.y + shape.height);
     }
 
     if (shape.type === 'text' && shape.content) {
@@ -450,8 +318,8 @@ async function renderShape(doc: jsPDF, shape: ShapeElement, shiftedY?: number) {
         if (align === 'center') x = shape.x + (shape.width / 2);
         if (align === 'right') x = shape.x + shape.width;
         const lineHeight = fontSize * 0.3527;
-        const textY = yVal + (shape.height / 2) + (lineHeight / 2) - 0.2;
-        doc.text(sanitizeTextForPDF(shape.content), x, textY, { maxWidth: shape.width, align: align });
+        const y = shape.y + (shape.height / 2) + (lineHeight / 2) - 0.2;
+        doc.text(sanitizeTextForPDF(shape.content), x, y, { maxWidth: shape.width, align: align });
     }
 
     if (shape.type === 'image' && shape.imageUrl) {
@@ -466,10 +334,10 @@ async function renderShape(doc: jsPDF, shape: ShapeElement, shiftedY?: number) {
             if (img.width > 0) {
                 const imgAspect = img.width / img.height;
                 const boxAspect = shape.width / shape.height;
-                let drawW = shape.width, drawH = shape.height, drawX = shape.x, drawY = yVal;
+                let drawW = shape.width, drawH = shape.height, drawX = shape.x, drawY = shape.y;
                 if (imgAspect > boxAspect) {
                     drawH = shape.width / imgAspect;
-                    drawY = yVal + (shape.height - drawH) / 2;
+                    drawY = shape.y + (shape.height - drawH) / 2;
                 } else {
                     drawW = shape.height * imgAspect;
                     drawX = shape.x + (shape.width - drawW) / 2;
@@ -481,8 +349,7 @@ async function renderShape(doc: jsPDF, shape: ShapeElement, shiftedY?: number) {
     }
 }
 
-async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, value: any, link?: string, shiftedY?: number) {
-    const yVal = shiftedY !== undefined ? shiftedY : placement.y;
+async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, value: any, link?: string) {
     const isPhoto = placement.fieldId.startsWith('foto_');
     const isWidget = placement.fieldId.startsWith('widget_');
 
@@ -497,9 +364,9 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
         if (style !== 'S' || (placement.borderWidth && placement.borderWidth > 0)) {
             if (placement.borderRadius && placement.borderRadius > 0) {
                 const r = placement.borderRadius / 3.78;
-                (doc as any).roundedRect(placement.x, yVal, placement.width, placement.height, r, r, style);
+                (doc as any).roundedRect(placement.x, placement.y, placement.width, placement.height, r, r, style);
             } else {
-                doc.rect(placement.x, yVal, placement.width, placement.height, style);
+                doc.rect(placement.x, placement.y, placement.width, placement.height, style);
             }
         }
     }
@@ -517,7 +384,7 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
         const labelWidthMM = placement.labelWidth || placement.width;
         if (placement.labelBackgroundColor && placement.labelBackgroundColor !== 'transparent') {
             doc.setFillColor(placement.labelBackgroundColor);
-            doc.rect(placement.x, yVal, labelWidthMM, labelAreaHeight, 'F');
+            doc.rect(placement.x, placement.y, labelWidthMM, labelAreaHeight, 'F');
         }
         doc.setFontSize(labelFontSize);
         doc.setFont(font, (placement.labelFontWeight === 'bold') ? 'bold' : 'normal');
@@ -526,7 +393,7 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
         let labelX = placement.x + labelPadding;
         if (labelAlign === 'center') labelX = placement.x + (labelWidthMM / 2);
         if (labelAlign === 'right') labelX = placement.x + labelWidthMM - labelPadding;
-        doc.text(labelText, labelX, yVal + labelPadding + (labelFontSize * 0.28), { align: labelAlign, maxWidth: labelWidthMM - (labelPadding * 2) });
+        doc.text(labelText, labelX, placement.y + labelPadding + (labelFontSize * 0.28), { align: labelAlign, maxWidth: labelWidthMM - (labelPadding * 2) });
         availableContentHeight -= labelAreaHeight;
     }
 
@@ -540,7 +407,7 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
                 setTimeout(() => resolve(), 2000);
             });
             const imgAspect = img.width / img.height;
-            const contentAreaY = yVal + labelAreaHeight;
+            const contentAreaY = placement.y + labelAreaHeight;
             const boxAspect = placement.width / availableContentHeight;
             let drawW = placement.width, drawH = availableContentHeight, drawX = placement.x, drawY = contentAreaY;
             if (imgAspect > boxAspect) {
@@ -560,7 +427,7 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
         const tuberias = (pozo.tuberias?.tuberias || []).slice(0, 10);
         const headers = ['#', 'Ø (")', 'Material', 'Estado', 'Batea'];
         const headerH = 5;
-        const contentAreaY = yVal + labelAreaHeight;
+        const contentAreaY = placement.y + labelAreaHeight;
         const rowH = (availableContentHeight - headerH) / Math.max(tuberias.length, 1);
         doc.setFillColor('#e5e7eb');
         doc.rect(placement.x, contentAreaY, placement.width, headerH, 'F');
@@ -593,15 +460,15 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
     if (align === 'center') tx = placement.x + (placement.width / 2);
     if (align === 'right') tx = placement.x + placement.width - padding;
     const lh = fontSize * 0.3527;
-    const textYFinal = yVal + labelAreaHeight + (availableContentHeight / 2) + (lh / 2.5);
+    const ty = placement.y + labelAreaHeight + (availableContentHeight / 2) + (lh / 2.5);
     const textContent = sanitizeTextForPDF(content);
-    doc.text(textContent, tx, textYFinal, { maxWidth: placement.width - (padding * 2), align: align });
+    doc.text(textContent, tx, ty, { maxWidth: placement.width - (padding * 2), align: align });
     if (link && content && content !== '-') {
         const tw = doc.getTextWidth(textContent);
         let lx = tx;
         if (align === 'center') lx = tx - (tw / 2);
         if (align === 'right') lx = tx - tw;
-        doc.link(lx, textYFinal - (fontSize * 0.4), tw, fontSize * 0.4, { url: link });
-        doc.setDrawColor('#0000FF'); doc.setLineWidth(0.1); doc.line(lx, textYFinal + 0.5, lx + tw, textYFinal + 0.5);
+        doc.link(lx, ty - (fontSize * 0.4), tw, fontSize * 0.4, { url: link });
+        doc.setDrawColor('#0000FF'); doc.setLineWidth(0.1); doc.line(lx, ty + 0.5, lx + tw, ty + 0.5);
     }
 }
