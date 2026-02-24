@@ -25,6 +25,7 @@ import {
   IdentificacionSection,
   EstructuraSection,
   TuberiasSection,
+  SumiderosSection,
   FotosSection,
   ObservacionesSection,
   CustomizationPanel,
@@ -242,6 +243,13 @@ export default function EditorPage() {
     debug: process.env.NODE_ENV === 'development',
   });
 
+  // Helper para mezclar datos de pozo con ediciones en tiempo real de SyncEngine
+  const mergeFieldEdits = useCallback((sectionId: string, field: string, baseValue: FieldValue): FieldValue => {
+    const section = syncedState?.sections.find(s => s.id === sectionId);
+    if (!section || !section.content || !section.content[field]) return baseValue;
+    return section.content[field];
+  }, [syncedState]);
+
   // Datos de identificación
   const identificacionData = useMemo(() => {
     if (!pozo) {
@@ -277,7 +285,23 @@ export default function EditorPage() {
       elevacion: createFieldValue(String(pozo.ubicacion.elevacion?.value || '')),
       profundidad: createFieldValue(String(pozo.ubicacion.profundidad?.value || '')),
     };
-  }, [pozo]);
+
+    // Mezclar con ediciones manuales
+    return {
+      idPozo: mergeFieldEdits('identificacion', 'idPozo', base.idPozo),
+      coordenadaX: mergeFieldEdits('identificacion', 'coordenadaX', base.coordenadaX),
+      coordenadaY: mergeFieldEdits('identificacion', 'coordenadaY', base.coordenadaY),
+      fecha: mergeFieldEdits('identificacion', 'fecha', base.fecha),
+      levanto: mergeFieldEdits('identificacion', 'levanto', base.levanto),
+      estado: mergeFieldEdits('identificacion', 'estado', base.estado),
+      codigo: mergeFieldEdits('identificacion', 'codigo', base.codigo),
+      direccion: mergeFieldEdits('identificacion', 'direccion', base.direccion),
+      barrio: mergeFieldEdits('identificacion', 'barrio', base.barrio),
+      sistema: mergeFieldEdits('identificacion', 'sistema', base.sistema),
+      elevacion: mergeFieldEdits('identificacion', 'elevacion', base.elevacion),
+      profundidad: mergeFieldEdits('identificacion', 'profundidad', base.profundidad),
+    };
+  }, [pozo, mergeFieldEdits]);
 
   // Datos de estructura
   const estructuraData = useMemo(() => {
@@ -356,7 +380,14 @@ export default function EditorPage() {
       peldanosCantidad: createFieldValue(String(pozo.componentes.numeroPeldanos?.value || '')),
       peldanosMaterial: createFieldValue(String(pozo.componentes.materialPeldanos?.value || '')),
     };
-  }, [pozo]);
+
+    // Mezclar con ediciones manuales
+    const merged: any = {};
+    Object.keys(base).forEach(key => {
+      merged[key] = mergeFieldEdits('estructura', key, (base as any)[key]);
+    });
+    return merged;
+  }, [pozo, mergeFieldEdits]);
 
   // Datos de tuberías
   const tuberiasData = useMemo(() => {
@@ -364,33 +395,34 @@ export default function EditorPage() {
       return { entradas: [], salidas: [] };
     }
     const tuberias = pozo.tuberias.tuberias || [];
-    return {
-      entradas: tuberias.filter(t => String(t.tipoTuberia?.value).toLowerCase() === 'entrada').map((t) => ({
-        id: String(t.idTuberia?.value || ''),
-        idTuberia: createFieldValue(String(t.idTuberia?.value || '')),
-        idPozo: createFieldValue(String(t.idPozo?.value || '')),
-        tipoTuberia: createFieldValue(String(t.tipoTuberia?.value || '')),
-        diametro: createFieldValue(String(t.diametro?.value || '')),
-        material: createFieldValue(String(t.material?.value || '')),
-        cota: createFieldValue(String(t.cota?.value || '')),
-        estado: createFieldValue(String(t.estado?.value || '')),
-        emboquillado: createFieldValue(String(t.emboquillado?.value || '')),
-        longitud: createFieldValue(String(t.longitud?.value || '')),
-      })),
-      salidas: tuberias.filter(t => String(t.tipoTuberia?.value).toLowerCase() === 'salida').map((t) => ({
-        id: String(t.idTuberia?.value || ''),
-        idTuberia: createFieldValue(String(t.idTuberia?.value || '')),
-        idPozo: createFieldValue(String(t.idPozo?.value || '')),
-        tipoTuberia: createFieldValue(String(t.tipoTuberia?.value || '')),
-        diametro: createFieldValue(String(t.diametro?.value || '')),
-        material: createFieldValue(String(t.material?.value || '')),
-        cota: createFieldValue(String(t.cota?.value || '')),
-        estado: createFieldValue(String(t.estado?.value || '')),
-        emboquillado: createFieldValue(String(t.emboquillado?.value || '')),
-        longitud: createFieldValue(String(t.longitud?.value || '')),
-      })),
+
+    const buildTuberiaData = (t: any, tipo: 'ent' | 'sal', index: number) => {
+      const order = t.orden?.value || (index + 1);
+      const prefix = `${tipo}_${order}`;
+
+      return {
+        id: String(t.idTuberia?.value || `${prefix}_${index}`),
+        idTuberia: mergeFieldEdits('tuberias', `${prefix}_id`, createFieldValue(String(t.idTuberia?.value || ''))),
+        idPozo: mergeFieldEdits('tuberias', `${prefix}_idPozo`, createFieldValue(String(t.idPozo?.value || ''))),
+        tipoTuberia: mergeFieldEdits('tuberias', `${prefix}_tipo`, createFieldValue(String(t.tipoTuberia?.value || ''))),
+        diametro: mergeFieldEdits('tuberias', `${prefix}_diametro`, createFieldValue(String(t.diametro?.value || ''))),
+        material: mergeFieldEdits('tuberias', `${prefix}_material`, createFieldValue(String(t.material?.value || ''))),
+        cota: mergeFieldEdits('tuberias', `${prefix}_z`, createFieldValue(String(t.cota?.value || t.z?.value || ''))),
+        estado: mergeFieldEdits('tuberias', `${prefix}_estado`, createFieldValue(String(t.estado?.value || ''))),
+        emboquillado: mergeFieldEdits('tuberias', `${prefix}_emboquillado`, createFieldValue(String(t.emboquillado?.value || ''))),
+        longitud: mergeFieldEdits('tuberias', `${prefix}_longitud`, createFieldValue(String(t.longitud?.value || ''))),
+      };
     };
-  }, [pozo]);
+
+    return {
+      entradas: tuberias
+        .filter(t => String(t.tipoTuberia?.value).toLowerCase() === 'entrada')
+        .map((t, i) => buildTuberiaData(t, 'ent', i)),
+      salidas: tuberias
+        .filter(t => String(t.tipoTuberia?.value).toLowerCase() === 'salida')
+        .map((t, i) => buildTuberiaData(t, 'sal', i)),
+    };
+  }, [pozo, mergeFieldEdits]);
 
   // Datos de fotos organizadas por categoría
   const getPhotosByPozoId = useGlobalStore((state) => state.getPhotosByPozoId);
@@ -429,18 +461,97 @@ export default function EditorPage() {
     };
   }, [pozo, pozoId, getPhotosByPozoId]);
 
+  // Datos de sumideros
+  const sumiderosData = useMemo(() => {
+    if (!pozo) return [];
+    const sumideros = pozo.sumideros?.sumideros || [];
+
+    return sumideros.map((s, i) => {
+      const order = s.numeroEsquema?.value || (i + 1);
+      const prefix = `sum_${order}`;
+
+      return {
+        id: String(s.idSumidero?.value || `${prefix}_${i}`),
+        idSumidero: mergeFieldEdits('sumideros', `${prefix}_id`, createFieldValue(String(s.idSumidero?.value || ''))),
+        idPozo: mergeFieldEdits('sumideros', `${prefix}_idPozo`, createFieldValue(String(s.idPozo?.value || ''))),
+        tipoSumidero: mergeFieldEdits('sumideros', `${prefix}_tipo`, createFieldValue(String(s.tipoSumidero?.value || ''))),
+        numeroEsquema: mergeFieldEdits('sumideros', `${prefix}_esquema`, createFieldValue(String(s.numeroEsquema?.value || ''))),
+        diametro: mergeFieldEdits('sumideros', `${prefix}_diametro`, createFieldValue(String(s.diametro?.value || ''))),
+        materialTuberia: mergeFieldEdits('sumideros', `${prefix}_material`, createFieldValue(String(s.materialTuberia?.value || ''))),
+        alturaSalida: mergeFieldEdits('sumideros', `${prefix}_hSalida`, createFieldValue(String(s.alturaSalida?.value || ''))),
+        alturaLlegada: mergeFieldEdits('sumideros', `${prefix}_hLlegada`, createFieldValue(String(s.alturaLlegada?.value || ''))),
+      };
+    });
+  }, [pozo, mergeFieldEdits]);
+
   // Observaciones
   const observacionesData = useMemo(() => {
     if (!pozo) {
       return createFieldValue('', 'default');
     }
-    return createFieldValue(String(pozo.observaciones.observaciones?.value || ''), 'excel');
-  }, [pozo]);
+    const base = createFieldValue(String(pozo.observaciones.observaciones?.value || ''), 'excel');
+    return mergeFieldEdits('observaciones', 'texto', base);
+  }, [pozo, mergeFieldEdits]);
 
   // Handlers para cambios de campo (sincronizados)
   const handleFieldChange = useCallback((sectionId: string, field: string, value: string) => {
     updateField(sectionId, field, value, 'editor');
   }, [updateField]);
+
+  const handleTuberiaFieldChange = useCallback((tipo: 'entrada' | 'salida', tuberiaId: string, field: string, value: string) => {
+    // Buscar el orden de la tubería para construir el ID de campo técnico
+    const prefix = tipo === 'entrada' ? 'ent' : 'sal';
+
+    // Intentar encontrar el orden por ID en pozo base
+    let order: string | number | undefined;
+    const pipe = pozo?.tuberias.tuberias.find(t => String(t.idTuberia?.value) === tuberiaId);
+    if (pipe) {
+      order = pipe.orden?.value;
+    } else {
+      // Fallback a heredar del ID si contiene el orden (ej: ent_1)
+      const match = tuberiaId.match(/(\d+)/);
+      order = match ? match[0] : '1';
+    }
+
+    // Mapping de campos UI a campos de FichaState compatibles con PDF generator
+    const fieldMapping: Record<string, string> = {
+      'diametro': 'diametro',
+      'material': 'material',
+      'cota': 'z',
+      'estado': 'estado',
+      'emboquillado': 'emboquillado',
+      'longitud': 'longitud',
+      'idTuberia': 'id'
+    };
+
+    const technicalField = `${prefix}_${order}_${fieldMapping[field] || field}`;
+    updateField('tuberias', technicalField, value, 'editor');
+  }, [pozo, updateField]);
+
+  const handleSumideroFieldChange = useCallback((sumideroId: string, field: string, value: string) => {
+    // Buscar el orden del sumidero
+    let order: string | number | undefined;
+    const sum = pozo?.sumideros.sumideros.find(s => String(s.idSumidero?.value) === sumideroId);
+    if (sum) {
+      order = sum.numeroEsquema?.value;
+    } else {
+      const match = sumideroId.match(/(\d+)/);
+      order = match ? match[0] : '1';
+    }
+
+    const fieldMapping: Record<string, string> = {
+      'tipoSumidero': 'tipo',
+      'materialTuberia': 'material',
+      'numeroEsquema': 'esquema',
+      'diametro': 'diametro',
+      'alturaSalida': 'hSalida',
+      'alturaLlegada': 'hLlegada',
+      'idSumidero': 'id'
+    };
+
+    const technicalField = `sum_${order}_${fieldMapping[field] || field}`;
+    updateField('sumideros', technicalField, value, 'editor');
+  }, [pozo, updateField]);
 
   // Handler para resetear formato con confirmación doble
   const handleResetFormat = useCallback(async () => {
@@ -594,6 +705,19 @@ export default function EditorPage() {
             salidas={tuberiasData.salidas}
             locked={section.locked}
             visible={section.visible}
+            onTuberiaFieldChange={handleTuberiaFieldChange}
+            onToggleVisibility={() => toggleSectionVisibility(section.id, !section.visible)}
+            dragHandleProps={dragHandleProps}
+          />
+        );
+      case 'sumideros':
+        return (
+          <SumiderosSection
+            id={section.id}
+            sumideros={sumiderosData}
+            locked={section.locked}
+            visible={section.visible}
+            onSumideroFieldChange={handleSumideroFieldChange}
             onToggleVisibility={() => toggleSectionVisibility(section.id, !section.visible)}
             dragHandleProps={dragHandleProps}
           />
@@ -628,7 +752,7 @@ export default function EditorPage() {
       default:
         return null;
     }
-  }, [identificacionData, estructuraData, tuberiasData, fotosData, observacionesData, handleFieldChange, toggleSectionVisibility]);
+  }, [identificacionData, estructuraData, tuberiasData, sumiderosData, fotosData, observacionesData, handleFieldChange, handleTuberiaFieldChange, handleSumideroFieldChange, toggleSectionVisibility]);
 
   const handleFichaReset = useCallback(() => {
     const store = getFichaStore(`ficha-${pozoId}`);

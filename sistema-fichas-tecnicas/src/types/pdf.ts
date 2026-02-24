@@ -9,6 +9,7 @@ export interface PDFGeneratorOptions {
     includePhotos?: boolean;
     watermark?: string;
     imageQuality?: number;
+    isFlexible?: boolean;
 }
 
 export interface PDFGenerationResult {

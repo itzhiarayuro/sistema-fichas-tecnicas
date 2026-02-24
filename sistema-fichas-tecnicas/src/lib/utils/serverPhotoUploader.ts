@@ -61,14 +61,30 @@ export async function processPhotosOnServer(
       concurrentBatches.map(batch => sendBatchToServer(batch))
     );
 
-    for (const result of batchResults) {
+    // Iterar resultados preservando el ORDEN estrictamente
+    for (let j = 0; j < batchResults.length; j++) {
+      const result = batchResults[j];
+      const originalBatchFiles = concurrentBatches[j];
+
       if (result.status === 'fulfilled') {
         allResults.push(...result.value);
         processed += result.value.length;
       } else {
-        console.error('[Server] Error en lote:', result.reason);
-        // Si el servidor falla, usar las fotos originales como fallback
-        processed += SERVER_BATCH_SIZE;
+        console.error('[Server] Error crítico en lote:', result.reason);
+        // ❌ FALLBACK CRÍTICO: Si el servidor falla, usamos las fotos originales 
+        // para mantener la alineación del array y que no se crucen los datos.
+        const fallbackResults: ServerProcessResult[] = originalBatchFiles.map(file => ({
+          filename: file.name,
+          blob: file, // Usamos el original como fallback
+          originalSize: file.size,
+          processedSize: file.size,
+          width: 0,
+          height: 0,
+          error: result.reason instanceof Error ? result.reason.message : 'Error de red/servidor'
+        }));
+
+        allResults.push(...fallbackResults);
+        processed += originalBatchFiles.length;
       }
       onProgress?.(Math.min(processed, files.length), files.length);
     }

@@ -61,6 +61,22 @@ const getValueByPath = (obj: any, path: string) => {
 };
 
 /**
+ * Obtiene las dimensiones de una imagen de forma asíncrona
+ */
+function getImageDimensions(url: string): Promise<{ width: number, height: number }> {
+    return new Promise((resolve) => {
+        if (typeof window === 'undefined' || !url || url === '-') {
+            resolve({ width: 0, height: 0 });
+            return;
+        }
+        const img = new Image();
+        img.onload = () => resolve({ width: img.width, height: img.height });
+        img.onerror = () => resolve({ width: 0, height: 0 });
+        img.src = url;
+    });
+}
+
+/**
  * Mapa de códigos para fotos basado en el ID del campo del diseño
  */
 const PHOTO_CODE_MAP: Record<string, string> = {
@@ -387,7 +403,29 @@ async function renderShape(doc: jsPDF, shape: ShapeElement) {
     if (shape.type === 'image' && shape.imageUrl) {
         try {
             const format = shape.imageUrl.toLowerCase().includes('png') ? 'PNG' : 'JPEG';
-            doc.addImage(shape.imageUrl, format, shape.x, shape.y, shape.width, shape.height, undefined, 'FAST');
+            const dims = await getImageDimensions(shape.imageUrl);
+
+            let drawX = shape.x;
+            let drawY = shape.y;
+            let drawW = shape.width;
+            let drawH = shape.height;
+
+            if (dims.width > 0 && dims.height > 0) {
+                const imgRatio = dims.width / dims.height;
+                const containerRatio = shape.width / shape.height;
+
+                if (imgRatio > containerRatio) {
+                    drawW = shape.width;
+                    drawH = shape.width / imgRatio;
+                    drawY += (shape.height - drawH) / 2;
+                } else {
+                    drawH = shape.height;
+                    drawW = shape.height * imgRatio;
+                    drawX += (shape.width - drawW) / 2;
+                }
+            }
+
+            doc.addImage(shape.imageUrl, format, drawX, drawY, drawW, drawH, undefined, 'FAST');
         } catch (e) { console.warn('No se pudo añadir imagen al PDF', e); }
     }
 }
@@ -443,9 +481,35 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
     if (isPhoto && value && value !== '-' && value !== '') {
         try {
             const format = String(value).toLowerCase().includes('png') ? 'PNG' : 'JPEG';
-            // jsPDF addImage con ObjectURL requiere que el blob esté cargado. 
-            // Esto ya se garantiza en resolveFieldValue con blobStore.ensureLoaded.
-            doc.addImage(value, format, placement.x, placement.y + labelAreaHeight, placement.width, availableContentHeight, undefined, 'FAST');
+
+            // ✅ CORRECCIÓN: Preservar relación de aspecto (Object-Contain)
+            const dims = await getImageDimensions(value);
+
+            let finalX = placement.x;
+            let finalY = placement.y + labelAreaHeight;
+            let finalW = placement.width;
+            let finalH = availableContentHeight;
+
+            if (dims.width > 0 && dims.height > 0) {
+                const imgRatio = dims.width / dims.height;
+                const containerRatio = placement.width / availableContentHeight;
+
+                if (imgRatio > containerRatio) {
+                    // Imagen es más ancha que el contenedor (relativamente)
+                    finalW = placement.width;
+                    finalH = placement.width / imgRatio;
+                    // Centrar verticalmente en el espacio disponible
+                    finalY += (availableContentHeight - finalH) / 2;
+                } else {
+                    // Imagen es más alta que el contenedor (relativamente)
+                    finalH = availableContentHeight;
+                    finalW = availableContentHeight * imgRatio;
+                    // Centrar horizontalmente
+                    finalX += (placement.width - finalW) / 2;
+                }
+            }
+
+            doc.addImage(value, format, finalX, finalY, finalW, finalH, undefined, 'FAST');
         } catch (e) { console.warn(`Error foto ${placement.fieldId}`, e); }
         return;
     }

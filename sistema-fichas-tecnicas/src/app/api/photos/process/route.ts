@@ -40,11 +40,13 @@ export async function POST(request: NextRequest) {
       error?: string;
     }> = [];
 
-    // Recopilar todos los archivos del FormData
+    // Recopilar todos los archivos del FormData preservando orden
     const files: Array<{ name: string; file: Blob }> = [];
     for (const [key, value] of formData.entries()) {
       if (value instanceof Blob) {
-        files.push({ name: key, file: value });
+        // En Next.js, value suele ser de tipo File (subclase de Blob) que tiene property name
+        const fileName = (value as any).name || key;
+        files.push({ name: fileName, file: value });
       }
     }
 

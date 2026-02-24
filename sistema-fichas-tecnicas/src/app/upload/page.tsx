@@ -217,9 +217,25 @@ export default function UploadPage() {
       // Parsear nomenclatura (Ahora puede devolver ARRAY)
       const nomenclaturas = parseNomenclatura(file.name);
 
-      // --- OPTIMIZACIÓN: Compresión en Worker ---
+      // --- OPTIMIZACIÓN: Servidor (Sharp) o Browser (Worker) ---
       let finalFile: File | Blob = file;
-      if (file.size > 2 * 1024 * 1024) { // Solo comprimir si pesa más de 2MB
+      let serverMetadata: any = null;
+
+      if (serverAvailable) {
+        // ✅ USAR SERVIDOR: 10-20x más rápido
+        try {
+          const serverResults = await processPhotosOnServer([file]);
+          if (serverResults.length > 0 && !serverResults[0].error) {
+            finalFile = serverResults[0].blob;
+            serverMetadata = serverResults[0];
+          }
+        } catch (err) {
+          console.warn(`Fallo en servidor para ${file.name}, usando browser:`, err);
+        }
+      }
+
+      // Fallback a Worker si el servidor no se usó o falló
+      if (finalFile === file && file.size > 2 * 1024 * 1024) {
         try {
           const result = await workerRegistry.runPhotoTask<any>(file, {
             maxSizeMB: 2.0,
@@ -912,7 +928,11 @@ export default function UploadPage() {
                 setProcessingMessage(`Chunk ${currentChunk}/${totalChunks}: ${processed}/${total} archivos`);
               }}
               onComplete={(results) => {
-                const validPhotos = results.filter((r): r is FotoInfo => r !== null);
+                // Aplanar los arrays de FotoInfo[] resultantes
+                const validPhotos = results
+                  .filter((r): r is FotoInfo[] => r !== null && Array.isArray(r))
+                  .flat();
+
                 setProcessedPhotos(prev => [...prev, ...validPhotos]);
                 setCanContinue(true);
                 setShowChunkedUploader(false);
@@ -929,9 +949,16 @@ export default function UploadPage() {
                 const result = await processImageFile(file);
 
                 if (fileId) {
+                  const hasPhotos = result && result.length > 0;
+                  const primary = hasPhotos ? result[0] : null;
+
                   scheduleFileUpdate(fileId, {
-                    status: result ? 'success' : 'error',
-                    message: result ? (result.categoria !== 'OTRO' ? `Asociada: ${result.descripcion}` : 'Sin asociar') : 'Error'
+                    status: hasPhotos ? 'success' : 'error',
+                    message: primary
+                      ? (primary.categoria !== 'OTRO'
+                        ? `✅ ${result.length > 1 ? 'Múltiple: ' : ''}${primary.descripcion}`
+                        : 'Procesada (sin asociar)')
+                      : 'Error al procesar'
                   });
                 }
 

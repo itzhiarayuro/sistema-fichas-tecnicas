@@ -137,8 +137,16 @@ export default function PozosPage() {
 
   // Handle generate PDF for selected pozo(s)
   const handleGeneratePDF = async (batchIds?: string[], isFlexible: boolean = false) => {
-    const idsToProcess = batchIds || (selectedPozoId ? [selectedPozoId] : Array.from(selectedIds));
-    if (idsToProcess.length === 0) return;
+    // PRIORIDAD: 
+    // 1. IDs pasados explícitamente (batchIds)
+    // 2. IDs seleccionados mediante checkboxes (selectedIds)
+    // 3. ID seleccionado para vista previa (selectedPozoId)
+    const idsToProcess = batchIds || (selectedIds.size > 0 ? Array.from(selectedIds) : (selectedPozoId ? [selectedPozoId] : []));
+
+    if (idsToProcess.length === 0) {
+      addToast({ type: 'warning', message: 'Selecciona al menos un pozo para generar el PDF' });
+      return;
+    }
 
     logger.info('Solicitud de generación de PDF', { count: idsToProcess.length, flexible: isFlexible }, 'PozosPage');
     setLoading(true);
@@ -178,7 +186,7 @@ export default function PozosPage() {
 
         if (isCustom && customDesign) {
           // GENERACIÓN CON DISEÑO PERSONALIZADO
-          
+
           let result;
           if (isFlexible) {
             // Modo Flexible: Usa layoutEngine para reorganizar elementos dinámicamente
@@ -187,9 +195,9 @@ export default function PozosPage() {
           } else {
             // Modo Normal: Usa generador estándar con posiciones fijas
             const { generatePdfFromDesign } = await import('@/lib/pdf/designBasedPdfGenerator');
-            result = await generatePdfFromDesign(customDesign, enrichedPozo, { isFlexible: false });
+            result = await generatePdfFromDesign(customDesign, enrichedPozo);
           }
-          
+
           if (result.success && result.blob) {
             pdfBlobs.push({ name: pozoName, blob: result.blob });
           } else {
@@ -225,7 +233,12 @@ export default function PozosPage() {
           }
 
           const { pdfMakeGenerator } = await import('@/lib/pdf/pdfMakeGenerator');
-          const result = await pdfMakeGenerator.generatePDF(ficha, enrichedPozo);
+          const result = await pdfMakeGenerator.generatePDF(ficha, enrichedPozo, {
+            includePhotos: true,
+            pageNumbers: true,
+            includeDate: true,
+            isFlexible
+          });
           if (result.success && result.blob) {
             pdfBlobs.push({ name: pozoName, blob: result.blob });
           }
