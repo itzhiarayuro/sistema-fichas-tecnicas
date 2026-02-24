@@ -49,6 +49,8 @@ export interface IndiceFotosEsperadas {
   pozoIds: Set<string>;
   /** Fotos esperadas por pozoId */
   porPozo: Map<string, FotoEsperada[]>;
+  /** Resolución de IDs de sumidero a su pozo padre y subcategoría técnica */
+  sumideroResolution: Map<string, { pozoId: string; subcategoria: string }>;
   /** Total de fotos esperadas en todo el proyecto */
   totalEsperadas: number;
   /** Cuántos pozos tienen el índice */
@@ -58,12 +60,12 @@ export interface IndiceFotosEsperadas {
 // ─── Fotos estándar que se esperan de CUALQUIER pozo ─────────────────────────
 
 const FOTOS_PRINCIPALES_SIEMPRE: Array<Omit<FotoEsperada, 'pozoId'>> = [
-  { categoria: 'PRINCIPAL', subcategoria: 'P', descripcion: 'Panorámica',   obligatoria: true  },
-  { categoria: 'PRINCIPAL', subcategoria: 'T', descripcion: 'Tapa',         obligatoria: true  },
-  { categoria: 'PRINCIPAL', subcategoria: 'I', descripcion: 'Interior',     obligatoria: true  },
-  { categoria: 'PRINCIPAL', subcategoria: 'A', descripcion: 'Acceso',       obligatoria: false },
-  { categoria: 'PRINCIPAL', subcategoria: 'F', descripcion: 'Fondo',        obligatoria: false },
-  { categoria: 'PRINCIPAL', subcategoria: 'M', descripcion: 'Medición',     obligatoria: false },
+  { categoria: 'PRINCIPAL', subcategoria: 'P', descripcion: 'Panorámica', obligatoria: true },
+  { categoria: 'PRINCIPAL', subcategoria: 'T', descripcion: 'Tapa', obligatoria: true },
+  { categoria: 'PRINCIPAL', subcategoria: 'I', descripcion: 'Interior', obligatoria: true },
+  { categoria: 'PRINCIPAL', subcategoria: 'A', descripcion: 'Acceso', obligatoria: false },
+  { categoria: 'PRINCIPAL', subcategoria: 'F', descripcion: 'Fondo', obligatoria: false },
+  { categoria: 'PRINCIPAL', subcategoria: 'M', descripcion: 'Medición', obligatoria: false },
 ];
 
 // ─── Constructor del índice ───────────────────────────────────────────────────
@@ -83,13 +85,15 @@ const FOTOS_PRINCIPALES_SIEMPRE: Array<Omit<FotoEsperada, 'pozoId'>> = [
 export function buildExpectedPhotoIndex(pozos: Map<string, Pozo>): IndiceFotosEsperadas {
   const pozoIds = new Set<string>();
   const porPozo = new Map<string, FotoEsperada[]>();
+  const sumideroResolution = new Map<string, { pozoId: string; subcategoria: string }>();
   let totalEsperadas = 0;
 
   for (const [, pozo] of pozos) {
-    // Obtener el ID del pozo en mayúsculas (como viene en el nombre de archivo)
-    const pozoId = String(
-      pozo.idPozo || pozo.identificacion?.idPozo || pozo.id || ''
-    ).trim().toUpperCase();
+    // Obtener el ID del pozo de forma segura (manejando FieldValue)
+    const rawId = pozo.idPozo || pozo.identificacion?.idPozo || pozo.id || '';
+    const pozoId = (typeof rawId === 'object' && rawId !== null && 'value' in rawId)
+      ? String(rawId.value).trim().toUpperCase()
+      : String(rawId).trim().toUpperCase();
 
     if (!pozoId) continue;
 
@@ -157,12 +161,23 @@ export function buildExpectedPhotoIndex(pozos: Map<string, Pozo>): IndiceFotosEs
 
     // 4. Sumideros — una foto por cada sumidero
     const sumideros = pozo.sumideros?.sumideros || [];
-    sumideros.forEach((_, i) => {
+    sumideros.forEach((sum, i) => {
       const num = i + 1;
+      const subcategoria = `SUM${num}`;
+
+      // Añadir también el ID del sumidero al índice global para que no se filtre si el archivo empieza por su ID
+      const sumId = sum.idSumidero?.value;
+      if (sumId) {
+        const normalizedSumId = String(sumId).trim().toUpperCase();
+        pozoIds.add(normalizedSumId);
+        // Guardamos cómo se debe resolver este ID de sumidero
+        sumideroResolution.set(normalizedSumId, { pozoId, subcategoria });
+      }
+
       fotosDeEstePozo.push({
         pozoId,
         categoria: 'SUMIDERO',
-        subcategoria: `SUM${num}`,
+        subcategoria,
         descripcion: `Sumidero ${num}`,
         obligatoria: false,
       });
@@ -172,7 +187,7 @@ export function buildExpectedPhotoIndex(pozos: Map<string, Pozo>): IndiceFotosEs
     totalEsperadas += fotosDeEstePozo.length;
   }
 
-  return { pozoIds, porPozo, totalEsperadas, totalPozos: pozoIds.size };
+  return { pozoIds, porPozo, sumideroResolution, totalEsperadas, totalPozos: porPozo.size };
 }
 
 // ─── Filtro principal ─────────────────────────────────────────────────────────
@@ -204,15 +219,19 @@ export function filterPhotoFiles(files: File[], indice: IndiceFotosEsperadas): F
     }
 
     // Parsear nomenclatura del nombre del archivo
-    const nomen = parseNomenclatura(file.name);
+    const nomenclaturas = parseNomenclatura(file.name);
+    const primaryNomen = nomenclaturas[0];
 
-    if (!nomen.isValid || !nomen.pozoId) {
+    if (!primaryNomen.isValid || !primaryNomen.pozoId) {
       descartadasNomenclaturaInvalida.push(file);
       continue;
     }
 
     // Buscar en el índice — O(1) con Set
-    if (indice.pozoIds.has(nomen.pozoId)) {
+    // Si alguna de las nomenclaturas pertenece a un pozo conocido, lo aceptamos
+    const exists = nomenclaturas.some(n => indice.pozoIds.has(n.pozoId));
+
+    if (exists) {
       aceptadas.push(file);
     } else {
       descartadasPozoInexistente.push(file);

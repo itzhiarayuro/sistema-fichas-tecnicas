@@ -1,60 +1,17 @@
 /**
  * Parser de nomenclatura de fotos para pozos de inspección
- * Requirements: 10.1-10.4
- * 
- * Patrones soportados:
- * - Principales: P (Panorámica), I (Interna), T (Tubería)
- * - Entradas: E1-T (Tubería entrada 1), E2-T, E3-T, etc.
- * - Salidas: S-T (Tubería salida), S1-T, S2-T, etc.
- * - Sumideros: SUM1, SUM2, etc.
- * 
- * Reglas de nomenclatura:
- * - Si termina en T = Tubería
- * - I = Interna
- * - P = Panorámica
- * - Si contiene E y T = Tubería (entrada)
- * - Si contiene S y T = Tubería (salida)
- * 
- * Formato general: {POZO_ID}-{TIPO}[-{SUBTIPO}]
- * Ejemplo: M680-P.jpg, M680-I.jpg, M680-T.jpg, M680-E1-T.jpg, M680-S-T.jpg, M680-SUM1.jpg
+ * Rules updated based on user request (Feb 2024)
  */
 
 export interface NomenclaturaResult {
-  /** ID del pozo extraído del nombre */
   pozoId: string;
-  /** Categoría de la foto */
   categoria: 'PRINCIPAL' | 'ENTRADA' | 'SALIDA' | 'SUMIDERO' | 'DESCARGA' | 'OTRO';
-  /** Subcategoría específica (ej: E1-T, S-Z, SUM1, D1) */
   subcategoria: string;
-  /** Descripción legible del tipo de foto */
   tipo: string;
-  /** Si la nomenclatura es válida */
   isValid: boolean;
-  /** Mensaje de error si no es válida */
   error?: string;
 }
 
-/**
- * Patrones de nomenclatura soportados
- * Cada patrón captura: [1] pozoId, [2] tipo, [3] subtipo (opcional)
- */
-const PATTERNS = {
-  // Fotos principales: M680-P (Panorámica), M680-I (Interna), M680-T (Tapa), M680-A/AT (Acceso), M680-F (Fondo), M680-M (Medición)
-  PRINCIPAL: /^(.+)-([PITAFM]|AT)$/i,
-  // Entradas con número: M680-E1, M680-E2-T-S1
-  ENTRADA: /^(.+)-(E\d+)(?:-[TZ])?/i,
-  // Salidas con número opcional: M680-S, M680-S1...
-  SALIDA_CON_NUMERO: /^(.+)-(S\d+)(?:-[TZ])?/i,
-  SALIDA_SIN_NUMERO: /^(.+)-(S)(?:-[TZ])?/i,
-  // Sumideros: M680-SUM1, M680-SUM2...
-  SUMIDERO: /^(.+)-(SUM\d+)/i,
-  // Descargas: M680-D1, M680-DESC1...
-  DESCARGA: /^(.+)-(D\d+|DESC\d*)$/i,
-  // Esquema de localización: M680_ARGIS
-  ARGIS: /^(.+)_ARGIS$/i,
-};
-
-/** Descripciones legibles para tipos de fotos principales */
 const TIPO_DESCRIPCION: Record<string, string> = {
   P: 'Panorámica',
   I: 'Interna',
@@ -65,188 +22,197 @@ const TIPO_DESCRIPCION: Record<string, string> = {
   L: 'Esquema Localización',
 };
 
-/** Descripciones para subtipos de entradas/salidas */
-const SUBTIPO_DESCRIPCION: Record<string, string> = {
-  T: 'Tubería',
-};
-
-/**
- * Parsea el nombre de un archivo de foto según la nomenclatura
- * @param filename - Nombre del archivo (con o sin extensión)
- * @returns Resultado del parsing con información estructurada
- */
-export function parseNomenclatura(filename: string): NomenclaturaResult {
+export function parseNomenclatura(filename: string): NomenclaturaResult[] {
   const nameWithoutExt = filename.replace(/\.[^/.]+$/, '').trim();
 
   if (!nameWithoutExt) {
-    return createInvalidResult(filename, 'Nombre de archivo vacío');
+    return [createInvalidResult(filename, 'Nombre de archivo vacío')];
   }
 
-  // 1. Intentar patrón ENTRADA (Más específico)
-  let match = nameWithoutExt.match(PATTERNS.ENTRADA);
-  if (match) {
-    const entradaNum = match[2].toUpperCase();
-    return {
-      pozoId: match[1].toUpperCase(),
-      categoria: 'ENTRADA',
-      subcategoria: entradaNum,
-      tipo: `Entrada ${entradaNum.slice(1)} - Tubería`,
-      isValid: true,
-    };
-  }
-
-  // 2. Intentar patrón SALIDA con número
-  match = nameWithoutExt.match(PATTERNS.SALIDA_CON_NUMERO);
-  if (match) {
-    const salidaNum = match[2].toUpperCase();
-    return {
-      pozoId: match[1].toUpperCase(),
-      categoria: 'SALIDA',
-      subcategoria: salidaNum,
-      tipo: `Salida ${salidaNum.slice(1)} - Tubería`,
-      isValid: true,
-    };
-  }
-
-  // 3. Intentar patrón SALIDA sin número (Ej: M001-S-T)
-  match = nameWithoutExt.match(PATTERNS.SALIDA_SIN_NUMERO);
-  if (match) {
-    return {
-      pozoId: match[1].toUpperCase(),
-      categoria: 'SALIDA',
-      subcategoria: `S1`,
-      tipo: `Salida 1 - Tubería`,
-      isValid: true,
-    };
-  }
-
-  // 4. Intentar patrón SUMIDERO
-  match = nameWithoutExt.match(PATTERNS.SUMIDERO);
-  if (match) {
-    const sumideroId = match[2].toUpperCase();
-    const numSumidero = sumideroId.replace('SUM', '');
-    return {
-      pozoId: match[1].toUpperCase(),
-      categoria: 'SUMIDERO',
-      subcategoria: sumideroId,
-      tipo: `Sumidero ${numSumidero}`,
-      isValid: true,
-    };
-  }
-
-  // 5. Intentar patrón DESCARGA
-  match = nameWithoutExt.match(PATTERNS.DESCARGA);
-  if (match) {
-    const descId = match[2].toUpperCase();
-    let subcat = descId;
-    if (descId.startsWith('DESC')) {
-      const num = descId.replace('DESC', '');
-      subcat = num ? `D${num}` : 'D1';
-    }
-    return {
-      pozoId: match[1].toUpperCase(),
-      categoria: 'DESCARGA',
-      subcategoria: subcat,
-      tipo: `Descarga ${subcat.slice(1) || '1'}`,
-      isValid: true,
-    };
-  }
-
-  // 6. Intentar patrón ARGIS (Esquema)
-  match = nameWithoutExt.match(PATTERNS.ARGIS);
-  if (match) {
-    return {
-      pozoId: match[1].toUpperCase(),
+  // 1. Caso especial ARGIS
+  if (nameWithoutExt.toUpperCase().endsWith('_ARGIS')) {
+    const pId = nameWithoutExt.toUpperCase().replace('_ARGIS', '');
+    return [{
+      pozoId: pId,
       categoria: 'PRINCIPAL',
       subcategoria: 'L',
       tipo: TIPO_DESCRIPCION['L'],
       isValid: true,
-    };
+    }];
   }
 
-  // 7. Intentar patrón PRINCIPAL (Al final, para evitar capturar falsos positivos de T)
-  match = nameWithoutExt.match(PATTERNS.PRINCIPAL);
-  if (match) {
-    let tipoCode = match[2].toUpperCase();
-    if (tipoCode === 'AT') tipoCode = 'A';
-    return {
-      pozoId: match[1].toUpperCase(),
-      categoria: 'PRINCIPAL',
-      subcategoria: tipoCode,
-      tipo: TIPO_DESCRIPCION[tipoCode] || tipoCode,
-      isValid: true,
-    };
+  const sections = nameWithoutExt.split('-');
+  const rawFirst = sections[0].toUpperCase();
+  const restParts = sections.slice(1).map(p => p.toUpperCase().trim());
+
+  // --- OMISIÓN (Caso Omiso) ---
+  const omitKeywords = ['AT', 'DESCOLE', 'II', 'TT'];
+  if (omitKeywords.includes(rawFirst) || restParts.some(p => omitKeywords.includes(p))) {
+    return [createInvalidResult(filename, 'Caso omiso (Keywords)')];
   }
 
-  // No coincide con ningún patrón
-  return createInvalidResult(filename, `Nomenclatura no reconocida: ${filename}`);
-}
-
-/**
- * Crea un resultado inválido con valores por defecto
- */
-function createInvalidResult(filename: string, error: string): NomenclaturaResult {
-  return {
-    pozoId: '',
-    categoria: 'OTRO',
-    subcategoria: '',
-    tipo: 'Desconocido',
-    isValid: false,
-    error,
-  };
-}
-
-/**
- * Reconstruye el nombre de archivo desde los componentes parseados
- * Usado para validar round-trip (Property 2)
- * @param result - Resultado de parseNomenclatura
- * @returns Nombre reconstruido sin extensión
- */
-export function buildNomenclatura(result: NomenclaturaResult): string {
-  if (!result.isValid || !result.pozoId) {
-    return '';
+  // Omitir si alguna parte contiene 'Z'
+  if (rawFirst.includes('Z') || restParts.some(p => p.includes('Z'))) {
+    return [createInvalidResult(filename, 'Caso omiso (Contiene Z)')];
   }
 
-  switch (result.categoria) {
-    case 'PRINCIPAL':
-      if (result.subcategoria === 'L') {
-        return `${result.pozoId}_ARGIS`;
+  // --- ANALIZAR POZO ID Y COMPONENTES ---
+  let pozoId = rawFirst;
+  let entradaNum: string | null = null;
+  let salidaNum: string | null = null;
+  let sumideroNum: string | null = null;
+  let isTapa = false;
+  let isInterior = false;
+  let isPanoramica = false;
+
+  // Si el primer bloque es un código técnico (ej: P.jpg, E1-T.jpg, S-T.jpg)
+  // lo tratamos como componente si no hay más secciones
+  const handleTechnicalPart = (part: string, isFirst: boolean) => {
+    // Especial: S-P -> Panoramica
+    if (isFirst && part === 'S' && restParts.includes('P')) {
+      isPanoramica = true;
+      return true;
+    }
+
+    const eMatch = part.match(/^E(\d*)$/);
+    if (eMatch) {
+      entradaNum = eMatch[1] || '1';
+      return true;
+    }
+
+    const sMatch = part.match(/^S(\d*)$/);
+    if (sMatch) {
+      // Si empieza por S y tiene 3+ dígitos, es un PozoId de Sumidero (ej: S510)
+      if (isFirst && part.length >= 4) {
+        // No lo tratamos como Salida, se queda como PozoId
+        return false;
       }
-      return `${result.pozoId}-${result.subcategoria}`;
-    case 'ENTRADA':
-    case 'SALIDA':
-      return `${result.pozoId}-${result.subcategoria}`;
-    case 'SUMIDERO':
-      return `${result.pozoId}-${result.subcategoria}`;
-    case 'DESCARGA':
-      return `${result.pozoId}-${result.subcategoria}`;
-    default:
-      return '';
+      salidaNum = sMatch[1] || '1';
+      return true;
+    }
+
+    const sumMatch = part.match(/^SUM(\d*)$/);
+    if (sumMatch) {
+      sumideroNum = sumMatch[1] || '1';
+      return true;
+    }
+
+    if (part === 'P') { isPanoramica = true; return true; }
+    if (part === 'I') { isInterior = true; return true; }
+    if (part === 'T') { isTapa = true; return true; }
+
+    return false;
+  };
+
+  // Si el nombre tiene pocos bloques o detectamos códigos técnicos al inicio
+  // Ejemplo: "E1-T" -> pozoId se vuelve vacío o queda para ser asignado luego
+  // Pero según el sistema, la primera parte SIEMPRE es el PozoId.
+  // Si el usuario sube "M680-E1-T", pozoId = "M680".
+  // Si sube "E1-T", pozoId = "E1". Esto es un problema porque "E1" no existe como pozo.
+  // Asumiremos que si el primer bloque es puramente técnico y restParts está vacío o tiene 'T',
+  // el usuario podría estar subiendo archivos sin prefijo de pozo.
+  // Sin embargo, el SmartFilter filtraría esto.
+
+  // Procesar todas las partes del resto
+  restParts.forEach(p => handleTechnicalPart(p, false));
+
+  // --- REGLA SUMIDERO DIRECTO (S510-T) ---
+  // Si el PozoID empieza por S (sumidero identificado en Excel) y tiene T, es la foto de ese sumidero.
+  // Usamos SUM1 como subcategoría para que el sistema lo asocie al primer slot técnico disponible
+  if (pozoId.startsWith('S') && pozoId.length >= 4 && (isTapa || restParts.includes('T')) && !entradaNum) {
+    return [{
+      pozoId,
+      categoria: 'SUMIDERO',
+      subcategoria: 'SUM1',
+      tipo: 'Sumidero - Foto',
+      isValid: true,
+    }];
   }
+
+  const results: NomenclaturaResult[] = [];
+
+  // PRIORIDADES (Reglas de la tabla)
+  if (entradaNum) {
+    results.push({
+      pozoId,
+      categoria: 'ENTRADA',
+      subcategoria: `E${entradaNum}`,
+      tipo: `Entrada ${entradaNum} - Tubería`,
+      isValid: true,
+    });
+  }
+
+  if (salidaNum) {
+    // Si la parte es S-P, ya se marcó isPanoramica al inicio del handleTechnicalPart
+    if (!isPanoramica) {
+      results.push({
+        pozoId,
+        categoria: 'SALIDA',
+        subcategoria: `S${salidaNum}`,
+        tipo: `Salida ${salidaNum} - Tubería`,
+        isValid: true,
+      });
+    }
+  }
+
+  if (sumideroNum) {
+    results.push({
+      pozoId,
+      categoria: 'SUMIDERO',
+      subcategoria: `SUM${sumideroNum}`,
+      tipo: `Sumidero ${sumideroNum}`,
+      isValid: true,
+    });
+  }
+
+  if (isPanoramica) {
+    results.push({
+      pozoId,
+      categoria: 'PRINCIPAL',
+      subcategoria: 'P',
+      tipo: TIPO_DESCRIPCION['P'],
+      isValid: true,
+    });
+  }
+
+  if (isInterior) {
+    results.push({
+      pozoId,
+      categoria: 'PRINCIPAL',
+      subcategoria: 'I',
+      tipo: TIPO_DESCRIPCION['I'],
+      isValid: true,
+    });
+  }
+
+  if (isTapa && results.length === 0) {
+    results.push({
+      pozoId,
+      categoria: 'PRINCIPAL',
+      subcategoria: 'T',
+      tipo: TIPO_DESCRIPCION['T'],
+      isValid: true,
+    });
+  }
+
+  if (results.length > 0) return results;
+
+  return [createInvalidResult(filename, `Nomenclatura no reconocida: ${filename}`)];
 }
 
-/**
- * Valida si un nombre de archivo sigue la nomenclatura
- * @param filename - Nombre del archivo a validar
- * @returns true si la nomenclatura es válida
- */
+function createInvalidResult(filename: string, error: string): NomenclaturaResult {
+  return { pozoId: '', categoria: 'OTRO', subcategoria: '', tipo: 'Desconocido', isValid: false, error };
+}
+
+export function buildNomenclatura(result: NomenclaturaResult): string {
+  if (!result || !result.isValid || !result.pozoId) return '';
+  if (result.categoria === 'PRINCIPAL' && result.subcategoria === 'L') return `${result.pozoId}_ARGIS`;
+  return `${result.pozoId}-${result.subcategoria}`;
+}
+
 export function isValidNomenclatura(filename: string): boolean {
-  return parseNomenclatura(filename).isValid;
+  return parseNomenclatura(filename).some(r => r.isValid);
 }
 
-/**
- * Obtiene todos los tipos de fotos principales soportados
- * @returns Array de códigos de tipos principales
- */
-export function getTiposPrincipales(): string[] {
-  return Object.keys(TIPO_DESCRIPCION);
-}
-
-/**
- * Obtiene la descripción de un tipo de foto principal
- * @param codigo - Código del tipo (P, T, I, A, F, M)
- * @returns Descripción legible o el código si no existe
- */
-export function getDescripcionTipo(codigo: string): string {
-  return TIPO_DESCRIPCION[codigo.toUpperCase()] || codigo;
-}
+export function getTiposPrincipales(): string[] { return Object.keys(TIPO_DESCRIPCION); }
+export function getDescripcionTipo(codigo: string): string { return TIPO_DESCRIPCION[codigo.toUpperCase()] || codigo; }

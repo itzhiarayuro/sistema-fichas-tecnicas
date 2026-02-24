@@ -138,37 +138,46 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
 
         const path = FIELD_PATHS[fieldId];
 
-        // REGLA ESPECIAL: Campos de Entradas/Salidas específicas
-        if (fieldId.startsWith('ent_') || fieldId.startsWith('sal_')) {
+        // REGLA ESPECIAL: Campos de Entradas/Salidas/Sumideros específicas
+        if (fieldId.startsWith('ent_') || fieldId.startsWith('sal_') || fieldId.startsWith('sum_')) {
             const parts = fieldId.split('_'); // [ent, 1, diametro]
-            const typePrefix = parts[0]; // ent o sal
+            const typePrefix = parts[0]; // ent, sal, sum
             const orderNum = parts[1]; // 1, 2, ...
             const fieldName = parts.slice(2).join('_'); // id, diametro, etc.
 
-            const targetType = typePrefix === 'ent' ? 'entrada' : 'salida';
+            if (typePrefix === 'ent' || typePrefix === 'sal') {
+                const targetType = typePrefix === 'ent' ? 'entrada' : 'salida';
+                const pipe = pozo.tuberias?.tuberias?.find(t =>
+                    String(t.tipoTuberia?.value || '').toLowerCase() === targetType &&
+                    String(t.orden?.value) === orderNum
+                );
+                if (!pipe) return '-';
 
-            // Buscar la tubería que coincida con el tipo y el orden
-            const pipe = pozo.tuberias?.tuberias?.find(t =>
-                String(t.tipoTuberia?.value || '').toLowerCase() === targetType &&
-                String(t.orden?.value) === orderNum
-            );
+                const pipeFieldMap: Record<string, string> = {
+                    'id': 'idTuberia', 'diametro': 'diametro', 'material': 'material',
+                    'estado': 'estado', 'batea': 'batea', 'z': 'cota', 'emboquillado': 'emboquillado'
+                };
+                const targetField = pipeFieldMap[fieldName] || fieldName;
+                return (pipe as any)[targetField]?.value || '-';
+            } else if (typePrefix === 'sum') {
+                // Lógica robusta para sumideros: buscar por numeroEsquema (S1, E1, 1) or index
+                const num = parseInt(orderNum);
+                const sumidero = pozo.sumideros?.sumideros?.find(s => {
+                    const esquema = String(s.numeroEsquema?.value || '').toUpperCase();
+                    if (!esquema) return false;
+                    const esquemaNum = esquema.replace(/\D/g, ''); // "S1" -> "1"
+                    return esquemaNum === orderNum || parseInt(esquemaNum) === num;
+                }) || pozo.sumideros?.sumideros?.[num - 1];
 
-            if (!pipe) return '-';
+                if (!sumidero) return '-';
 
-            // Mapeo interno de campos de TuberiaInfo a la propiedad correspondiente
-            const pipeFieldMap: Record<string, string> = {
-                'id': 'idTuberia',
-                'diametro': 'diametro',
-                'material': 'material',
-                'estado': 'estado',
-                'batea': 'batea',
-                'z': 'cota',
-                'emboquillado': 'emboquillado'
-            };
-
-            const targetField = pipeFieldMap[fieldName] || fieldName;
-            const fieldValueObj = (pipe as any)[targetField];
-            return fieldValueObj?.value || '-';
+                const sumFieldMap: Record<string, string> = {
+                    'id': 'idSumidero', 'tipo': 'tipoSumidero', 'material': 'materialTuberia',
+                    'esquema': 'numeroEsquema', 'diametro': 'diametro', 'hSalida': 'alturaSalida', 'hLlegada': 'alturaLlegada'
+                };
+                const targetField = sumFieldMap[fieldName] || fieldName;
+                return (sumidero as any)[targetField]?.value || '-';
+            }
         }
 
         if (!path) return '-';
@@ -239,8 +248,14 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
             } else if (name.includes('sumidero')) {
                 const match = name.match(/sumidero\s*(\d+)/);
                 if (match) {
-                    const num = parseInt(match[1]);
-                    const sumidero = pozo.sumideros?.sumideros?.[num - 1];
+                    const orderNum = match[1];
+                    const num = parseInt(orderNum);
+                    const sumidero = pozo.sumideros?.sumideros?.find(s => {
+                        const esquema = String(s.numeroEsquema?.value || '').toUpperCase();
+                        if (!esquema) return false;
+                        const esquemaNum = esquema.replace(/\D/g, '');
+                        return esquemaNum === orderNum || parseInt(esquemaNum) === num;
+                    }) || pozo.sumideros?.sumideros?.[num - 1];
                     if (!sumidero) shouldHide = true;
                 }
             } else if (name.includes('foto')) {

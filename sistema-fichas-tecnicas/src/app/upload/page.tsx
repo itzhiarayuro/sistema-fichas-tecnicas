@@ -206,31 +206,28 @@ export default function UploadPage() {
   /**
    * Procesa una imagen y la asocia con un pozo
    */
-  const processImageFile = useCallback(async (file: File): Promise<FotoInfo | null> => {
+  const processImageFile = useCallback(async (file: File): Promise<FotoInfo[]> => {
     try {
       // Validar límites (Requirement 19.3)
       if (!LimitManager.isPhotoSizeAllowed(file.size)) {
         showError(`El archivo ${file.name} excede el límite de 10 MB.`);
-        return null;
+        return [];
       }
 
-      // Parsear nomenclatura
-      const nomenclatura = parseNomenclatura(file.name);
+      // Parsear nomenclatura (Ahora puede devolver ARRAY)
+      const nomenclaturas = parseNomenclatura(file.name);
 
       // --- OPTIMIZACIÓN: Compresión en Worker ---
-      // Solo reduce el PESO (bytes), NUNCA las dimensiones (píxeles)
-      // maxSizeMB: límite de tamaño en MB — la resolución queda intacta
       let finalFile: File | Blob = file;
       if (file.size > 2 * 1024 * 1024) { // Solo comprimir si pesa más de 2MB
         try {
           const result = await workerRegistry.runPhotoTask<any>(file, {
-            maxSizeMB: 2.0,  // Límite en peso, NO en píxeles
-            quality: 0.92,   // Alta calidad — antes era 0.75 (muy malo)
+            maxSizeMB: 2.0,
+            quality: 0.92,
             generateHash: false
           });
           if (result && result.blob) {
             finalFile = result.blob;
-            console.log(`📦 Imagen optimizada: ${file.name} (${(file.size / 1024).toFixed(0)}KB -> ${(finalFile.size / 1024).toFixed(0)}KB)`);
           }
         } catch (workerError) {
           console.warn(`No se pudo comprimir ${file.name}, usando original:`, workerError);
@@ -240,29 +237,41 @@ export default function UploadPage() {
       // Guardar en BlobStore (Principios de Hardening)
       const blobId = await blobStore.store(finalFile);
 
-      // Crear objeto FotoInfo estructural (LIVIANO)
-      const fotoInfo: FotoInfo = {
-        id: generateFileId(),
-        idPozo: nomenclatura.pozoId, // Extraído del nombre del archivo (soporta Pozos y Descargas)
-        tipo: nomenclatura.tipo || 'otro',
-        categoria: nomenclatura.categoria,
-        subcategoria: nomenclatura.subcategoria,
-        descripcion: nomenclatura.tipo,
-        blobId: blobId,
-        filename: file.name,
-        fechaCaptura: Date.now(),
-      };
+      // Crear objetos FotoInfo estructurales (uno por cada interpretación de la nomenclatura)
+      const fotos: FotoInfo[] = nomenclaturas.map(nomen => {
+        let finalPozoId = nomen.pozoId;
+        let finalSubcategoria = nomen.subcategoria;
 
-      // Advertir si la nomenclatura no es válida
-      if (!nomenclatura.isValid) {
-        showWarning(`${file.name}: ${nomenclatura.error || 'Nomenclatura no reconocida'}`);
+        // ✅ NUEVO: Resolver si es un ID de sumidero (S510-T.jpg -> M076 - SUM1)
+        if (expectedIndexRef.current?.sumideroResolution.has(nomen.pozoId)) {
+          const res = expectedIndexRef.current.sumideroResolution.get(nomen.pozoId)!;
+          finalPozoId = res.pozoId;
+          finalSubcategoria = res.subcategoria;
+        }
+
+        return {
+          id: generateFileId(),
+          idPozo: finalPozoId,
+          tipo: nomen.tipo || 'otro',
+          categoria: nomen.categoria,
+          subcategoria: finalSubcategoria,
+          descripcion: nomen.tipo,
+          blobId: blobId,
+          filename: file.name,
+          fechaCaptura: Date.now(),
+        };
+      });
+
+      // Advertir si la nomenclatura principal no es válida
+      if (!nomenclaturas[0].isValid) {
+        showWarning(`${file.name}: ${nomenclaturas[0].error || 'Nomenclatura no reconocida'}`);
       }
 
-      return fotoInfo;
+      return fotos;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Error desconocido';
       showError(`Error al procesar imagen ${file.name}: ${message}`);
-      return null;
+      return [];
     }
   }, [generateFileId, showWarning, showError]);
 
@@ -518,31 +527,44 @@ export default function UploadPage() {
               continue;
             }
 
-            // Parsear nomenclatura para asociar con pozo
-            const nomen = parseNomenclatura(serverResult.filename);
+            // Parsear nomenclatura (Múltiples resultados posibles)
+            const nomenclaturas = parseNomenclatura(serverResult.filename);
 
             // Guardar en BlobStore
             const blobId = await blobStore.store(serverResult.blob);
 
-            const fotoInfo: FotoInfo = {
-              id: generateFileId(),
-              idPozo: nomen.pozoId,
-              tipo: nomen.tipo || 'otro',
-              categoria: nomen.categoria,
-              subcategoria: nomen.subcategoria,
-              descripcion: nomen.tipo,
-              blobId,
-              filename: serverResult.filename,
-              fechaCaptura: Date.now(),
-            };
+            for (const nomen of nomenclaturas) {
+              let finalPozoId = nomen.pozoId;
+              let finalSubcategoria = nomen.subcategoria;
 
-            allPhotos.push(fotoInfo);
-            newStats.totalPhotos++;
+              // ✅ NUEVO: Resolver si es un ID de sumidero
+              if (expectedIndexRef.current?.sumideroResolution.has(nomen.pozoId)) {
+                const res = expectedIndexRef.current.sumideroResolution.get(nomen.pozoId)!;
+                finalPozoId = res.pozoId;
+                finalSubcategoria = res.subcategoria;
+              }
 
+              const fotoInfo: FotoInfo = {
+                id: generateFileId(),
+                idPozo: finalPozoId,
+                tipo: nomen.tipo || 'otro',
+                categoria: nomen.categoria,
+                subcategoria: finalSubcategoria,
+                descripcion: nomen.tipo,
+                blobId,
+                filename: serverResult.filename,
+                fechaCaptura: Date.now(),
+              };
+
+              allPhotos.push(fotoInfo);
+              newStats.totalPhotos++;
+            }
+
+            const primaryNomen = nomenclaturas[0];
             scheduleFileUpdate(fileItem.id, {
               status: 'success',
-              message: nomen.isValid
-                ? `✅ ${nomen.tipo} (${(serverResult.originalSize / 1024).toFixed(0)}KB→${(serverResult.processedSize / 1024).toFixed(0)}KB)`
+              message: primaryNomen.isValid
+                ? `✅ ${nomenclaturas.length > 1 ? 'Múltiple: ' : ''}${primaryNomen.tipo} (${(serverResult.originalSize / 1024).toFixed(0)}KB→${(serverResult.processedSize / 1024).toFixed(0)}KB)`
                 : 'Procesada (sin asociar)',
             });
           }
@@ -561,12 +583,20 @@ export default function UploadPage() {
             lowMemoryMode: isLargeImport,
             processor: async ({ file, fileItem }, globalIndex) => {
               scheduleFileUpdate(fileItem.id, { status: 'processing', progress: 0 });
-              const foto = await processImageFile(file);
-              if (foto) {
-                allPhotos.push(foto);
-                newStats.totalPhotos++;
-                scheduleFileUpdate(fileItem.id, { status: 'success', message: foto.categoria !== 'OTRO' ? `Asociada: ${foto.descripcion}` : 'Sin asociar' });
-                return foto;
+              const fotos = await processImageFile(file);
+              if (fotos.length > 0) {
+                fotos.forEach(foto => {
+                  allPhotos.push(foto);
+                  newStats.totalPhotos++;
+                });
+                const primary = fotos[0];
+                scheduleFileUpdate(fileItem.id, {
+                  status: 'success',
+                  message: primary.categoria !== 'OTRO'
+                    ? `${fotos.length > 1 ? 'Múltiple: ' : ''}${primary.descripcion}`
+                    : 'Sin asociar'
+                });
+                return fotos;
               }
               scheduleFileUpdate(fileItem.id, { status: 'error', message: 'Error al procesar' });
               newStats.errors++;
@@ -607,21 +637,23 @@ export default function UploadPage() {
             }
 
             try {
-              const foto = await processImageFile(file);
+              const fotos = await processImageFile(file);
 
-              if (foto) {
-                allPhotos.push(foto);
-                newStats.totalPhotos++;
-
-                // NO generar ObjectURL para preview durante importación masiva
-                // Las previews se cargan bajo demanda cuando el usuario las ve
-                scheduleFileUpdate(fileItem.id, {
-                  status: 'success' as const,
-                  message: foto.categoria !== 'OTRO' ? `Asociada: ${foto.descripcion}` : 'Sin asociar',
-                  // preview: omitido intencionalmente — se carga bajo demanda
+              if (fotos.length > 0) {
+                fotos.forEach(foto => {
+                  allPhotos.push(foto);
+                  newStats.totalPhotos++;
                 });
 
-                return foto;
+                const primary = fotos[0];
+                scheduleFileUpdate(fileItem.id, {
+                  status: 'success' as const,
+                  message: primary.categoria !== 'OTRO'
+                    ? `${fotos.length > 1 ? 'Múltiple: ' : ''}${primary.descripcion}`
+                    : 'Sin asociar',
+                });
+
+                return fotos;
               } else {
                 scheduleFileUpdate(fileItem.id, {
                   status: 'error' as const,
@@ -796,10 +828,10 @@ export default function UploadPage() {
 
         {/* Indicador de modo de procesamiento */}
         <div className={`mb-4 px-4 py-2 rounded-lg text-sm flex items-center gap-2 ${serverAvailable === null
-            ? 'bg-gray-50 text-gray-500 border border-gray-200'
-            : serverAvailable
-              ? 'bg-green-50 text-green-800 border border-green-200'
-              : 'bg-yellow-50 text-yellow-800 border border-yellow-200'
+          ? 'bg-gray-50 text-gray-500 border border-gray-200'
+          : serverAvailable
+            ? 'bg-green-50 text-green-800 border border-green-200'
+            : 'bg-yellow-50 text-yellow-800 border border-yellow-200'
           }`}>
           {serverAvailable === null && <span>⏳ Verificando modo de procesamiento...</span>}
           {serverAvailable === true && (

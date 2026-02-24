@@ -135,6 +135,7 @@ const TUBERIA_MAPPING: Record<string, string> = {
   'tuberia': 'idTuberia',
   'tipo': 'tipoTuberia',
   'tipo_tuberia': 'tipoTuberia',
+  'tipo_de_tuberia': 'tipoTuberia',
   'orden': 'orden',
   'orden_tuberia': 'orden',
   'diametro': 'diametro',
@@ -1237,7 +1238,10 @@ function reorganizeTuberias(tuberias: TuberiaInfo[]): TuberiaInfo[] {
 
   tuberias.forEach(tub => {
     const type = normalizeType(tub.tipoTuberia?.value as string);
-    const orden = parseInt(String(tub.orden?.value || 0)) || 0;
+    // Extraer solo dígitos de strings como "E1" o "S1"
+    const ordenRaw = String(tub.orden?.value || '');
+    const match = ordenRaw.match(/(\d+)/);
+    const orden = match ? parseInt(match[0]) : 0;
 
     if (type === 'entrada' && orden >= 1 && orden <= 8) {
       entradas[orden - 1] = tub;
@@ -1285,7 +1289,9 @@ function reorganizeSumideros(sumideros: SumideroInfo[]): SumideroInfo[] {
 
   const slots = new Array(8).fill(null);
   sumideros.forEach(sum => {
-    const orden = parseInt(String(sum.numeroEsquema?.value || 0)) || 0;
+    const schemeRaw = String(sum.numeroEsquema?.value || '');
+    const match = schemeRaw.match(/(\d+)/);
+    const orden = match ? parseInt(match[0]) : 0;
     if (orden >= 1 && orden <= 8) {
       slots[orden - 1] = sum;
     }

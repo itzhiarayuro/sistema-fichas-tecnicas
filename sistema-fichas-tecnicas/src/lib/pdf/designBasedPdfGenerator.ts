@@ -2,17 +2,7 @@ import { jsPDF } from 'jspdf';
 import { FichaDesignVersion, FieldPlacement, ShapeElement } from '@/types/fichaDesign';
 import { Pozo } from '@/types/pozo';
 import { FIELD_PATHS } from '@/constants/fieldMapping';
-import {
-    drawSectionHeader,
-    drawDataTable,
-    drawFieldTable,
-    drawPhotoGrid,
-    extractTuberiasData,
-    extractSumiderosData,
-    extractIdentificacionFields,
-    extractEstructuraFields,
-    DEFAULT_STYLES
-} from './designHelpers';
+import { blobStore } from '@/lib/storage/blobStore';
 
 const TRANSLIT_MAP: Record<string, string> = {
     '\u00E1': 'a', '\u00E9': 'e', '\u00ED': 'i', '\u00F3': 'o', '\u00FA': 'u',
@@ -49,8 +39,10 @@ function getSafeFont(fontFamily?: string): string {
 
 const MM_TO_PX = 3.78;
 const PX_TO_MM = 1 / MM_TO_PX;
-const DEFAULT_FONT_SIZE = 10;
 
+/**
+ * Helper para obtener valor de ruta (maneja anidamiento y arrays)
+ */
 const getValueByPath = (obj: any, path: string) => {
     if (!path) return undefined;
     try {
@@ -68,16 +60,166 @@ const getValueByPath = (obj: any, path: string) => {
     }
 };
 
+/**
+ * Mapa de códigos para fotos basado en el ID del campo del diseño
+ */
+const PHOTO_CODE_MAP: Record<string, string> = {
+    'foto_panoramica': 'P', 'foto_tapa': 'T', 'foto_interior': 'I',
+    'foto_acceso': 'A', 'foto_fondo': 'F', 'foto_medicion': 'M',
+    'foto_entrada_1': 'E1', 'foto_entrada_2': 'E2', 'foto_entrada_3': 'E3', 'foto_entrada_4': 'E4', 'foto_entrada_5': 'E5', 'foto_entrada_6': 'E6', 'foto_entrada_7': 'E7',
+    'foto_salida_1': 'S1', 'foto_salida_2': 'S2', 'foto_salida_3': 'S3', 'foto_salida_4': 'S4', 'foto_salida_5': 'S5', 'foto_salida_6': 'S6', 'foto_salida_7': 'S7',
+    'foto_sumidero_1': 'SUM1', 'foto_sumidero_2': 'SUM2', 'foto_sumidero_3': 'SUM3', 'foto_sumidero_4': 'SUM4', 'foto_sumidero_5': 'SUM5', 'foto_sumidero_6': 'SUM6', 'foto_sumidero_7': 'SUM7',
+    'foto_descarga_1': 'D1', 'foto_descarga_2': 'D2', 'foto_descarga_3': 'D3', 'foto_descarga_4': 'D4', 'foto_descarga_5': 'D5', 'foto_descarga_6': 'D6', 'foto_descarga_7': 'D7',
+    'foto_esquema': 'L', 'foto_shape': 'L'
+};
+
+/**
+ * Busca una foto en el pozo que coincida con un código objetivo (P, I, E1, SUM1, etc.)
+ */
+function findPhotoByCode(pozo: Pozo, targetCode: string) {
+    if (!pozo.fotos?.fotos) return null;
+    const upperTarget = targetCode.toUpperCase();
+
+    // 1. Coincidencia exacta por subcategoría (La más fiable)
+    let found = pozo.fotos.fotos.find(f =>
+        String(f.subcategoria || '').toUpperCase() === upperTarget
+    );
+
+    if (found) return found;
+
+    // 2. Fallbacks basados en nomenclatura del nombre de archivo (Sincronizado con DesignRenderer)
+    return pozo.fotos.fotos.find(f => {
+        const filename = String(f.filename || '').toUpperCase().split('.')[0];
+        if (filename.endsWith('-AT') || filename.endsWith('_AT') || filename.endsWith('-Z') || filename.endsWith('_Z')) return false;
+
+        if (upperTarget === 'P') return filename === 'P' || filename === 'F-P' || filename === 'S-P' || filename.includes('-P');
+        if (upperTarget === 'T') return filename === 'T' || filename === 'F-T' || filename === 'TT' || filename.includes('-T');
+        if (upperTarget === 'I') return filename === 'I' || filename === 'F-I' || filename === 'II' || /^I\d?$/.test(filename) || /^I\(\d+\)$/.test(filename) || filename.includes('-I');
+
+        if (upperTarget.startsWith('E')) {
+            const num = upperTarget.replace('E', '');
+            if (num === '1' && (filename === 'E-T' || filename.includes('-E-T'))) return true;
+            return new RegExp(`(^|[\\-_])E${num}([\\-_\\.]|$)`).test(filename) || filename.includes(`F-E${num}`);
+        }
+
+        if (upperTarget.startsWith('S') && !upperTarget.startsWith('SUM')) {
+            const num = upperTarget.replace('S', '');
+            if (num === '1' && (filename === 'S' || filename === 'S-T' || filename === 'S-HS' || filename === 'F-S-T')) return true;
+            if (filename.includes('-E')) return false; // Evitar confundir con Sumideros en nombres E1-S1
+            const regex = new RegExp(`(^|[\\-_])S${num}([\\-_\\.]|$)`);
+            return regex.test(filename) || regex.test(filename.replace(/-/g, '')) || filename.includes(`F-S${num}`);
+        }
+
+        if (upperTarget.startsWith('SUM')) {
+            const num = upperTarget.replace('SUM', '');
+            const regexSum = new RegExp(`(^|[\\-_])SUM${num}([\\-_\\.]|$)`);
+            const regexS = new RegExp(`(^|[\\-_])S${num}([\\-_\\.]|$)`);
+            return regexSum.test(filename) || regexS.test(filename);
+        }
+
+        if (upperTarget === 'L') return filename.includes('_ARGIS') || filename === 'L';
+        return false;
+    });
+}
+
+/**
+ * Resuelve el valor de un campo, manejando casos especiales de tuberías y fotos
+ */
+async function resolveFieldValue(pozo: Pozo, fieldId: string, codeMap: Record<string, string>): Promise<{ value: any, link?: string }> {
+    // CASO ESPECIAL: Fotos específicas por nomenclatura
+    if (fieldId.startsWith('foto_') && !/^\d+$/.test(fieldId.split('_')[1])) {
+        const targetCode = codeMap[fieldId];
+        if (targetCode) {
+            const photo = findPhotoByCode(pozo, targetCode);
+            if (photo) {
+                // ASEGURAR CARGA: En PDF necesitamos la URL real, si no está en RAM la cargamos.
+                const url = await blobStore.ensureLoaded(photo.blobId);
+                return { value: url || (photo as any).dataUrl || '-' };
+            }
+        }
+        return { value: '-' };
+    }
+
+    // CASO ESPECIAL: Campos de tuberías con prefijos ent_/sal_/sum_ (Sincronizado con DesignRenderer)
+    if (fieldId.startsWith('ent_') || fieldId.startsWith('sal_') || fieldId.startsWith('sum_')) {
+        const parts = fieldId.split('_'); // [ent, 1, diametro]
+        const typePrefix = parts[0];
+        const orderNum = parts[1];
+        const fieldName = parts.slice(2).join('_');
+
+        if (typePrefix === 'ent' || typePrefix === 'sal') {
+            const targetType = typePrefix === 'ent' ? 'entrada' : 'salida';
+            const pipe = pozo.tuberias?.tuberias?.find(t =>
+                String(t.tipoTuberia?.value || '').toLowerCase() === targetType &&
+                String(t.orden?.value) === orderNum
+            );
+            if (pipe) {
+                const pipeFieldMap: Record<string, string> = {
+                    'id': 'idTuberia', 'diametro': 'diametro', 'material': 'material',
+                    'estado': 'estado', 'batea': 'batea', 'z': 'cota', 'emboquillado': 'emboquillado'
+                };
+                const targetField = pipeFieldMap[fieldName] || fieldName;
+                const fieldVal = (pipe as any)[targetField];
+                return { value: fieldVal?.value || '-' };
+            }
+        } else if (typePrefix === 'sum') {
+            const num = parseInt(orderNum);
+            const sumidero = pozo.sumideros?.sumideros?.find(s => {
+                const esquema = String(s.numeroEsquema?.value || '').toUpperCase();
+                if (!esquema) return false;
+                const esquemaNum = esquema.replace(/\D/g, ''); // "S1" -> "1"
+                return esquemaNum === orderNum || parseInt(esquemaNum) === num;
+            }) || pozo.sumideros?.sumideros?.[num - 1];
+
+            if (sumidero) {
+                const sumFieldMap: Record<string, string> = {
+                    'id': 'idSumidero', 'tipo': 'tipoSumidero', 'material': 'materialTuberia',
+                    'esquema': 'numeroEsquema', 'diametro': 'diametro', 'hSalida': 'alturaSalida', 'hLlegada': 'alturaLlegada'
+                };
+                const targetField = sumFieldMap[fieldName] || fieldName;
+                const fieldVal = (sumidero as any)[targetField];
+                return { value: fieldVal?.value || '-' };
+            }
+        }
+        return { value: '-' };
+    }
+
+    // Caso general por FIELD_PATHS
+    const path = FIELD_PATHS[fieldId];
+    if (path) {
+        const basePath = path.endsWith('.value') ? path.substring(0, path.length - 6) : path;
+        const fieldObj = getValueByPath(pozo, basePath);
+
+        let value: any = '-';
+        let link: string | undefined = undefined;
+
+        if (fieldObj && typeof fieldObj === 'object') {
+            value = fieldObj.value ?? '-';
+            link = fieldObj.link;
+        } else {
+            value = fieldObj ?? '-';
+        }
+
+        // Fallback para links de ubicación
+        if (!link && (fieldId.includes('latitud') || fieldId.includes('longitud'))) {
+            const lat = getValueByPath(pozo, 'identificacion.latitud.value');
+            const lon = getValueByPath(pozo, 'identificacion.longitud.value');
+            if (lat && lon && lat !== '-' && lon !== '-') {
+                link = `https://www.google.com/maps?q=${lat},${lon}`;
+            }
+        }
+        return { value, link };
+    }
+
+    return { value: '-' };
+}
+
 export async function generatePdfFromDesign(
     design: FichaDesignVersion,
     pozo: Pozo
 ): Promise<{ success: boolean; blob?: Blob; error?: string }> {
     try {
-        console.log('🎨 Generando PDF con diseño personalizado:', {
-            nombre: design.name,
-            placements: design.placements?.length || 0,
-            pageSize: design.pageSize
-        });
+        console.log('🎨 Generando PDF con diseño optimizado:', design.name);
 
         const orientation = design.orientation === 'portrait' ? 'p' : 'l';
         const doc = new jsPDF({
@@ -87,78 +229,63 @@ export async function generatePdfFromDesign(
         });
 
         configurePDFFont(doc);
-        const { blobStore } = await import('@/lib/storage/blobStore');
 
-        // MAPEO DE CÓDIGOS PARA FOTOS
-        const codeMap: Record<string, string> = {
-            'foto_panoramica': 'P', 'foto_tapa': 'T', 'foto_interior': 'I',
-            'foto_acceso': 'A', 'foto_fondo': 'F', 'foto_medicion': 'M',
-            'foto_entrada_1': 'E1', 'foto_entrada_2': 'E2', 'foto_entrada_3': 'E3', 'foto_entrada_4': 'E4', 'foto_entrada_5': 'E5', 'foto_entrada_6': 'E6', 'foto_entrada_7': 'E7',
-            'foto_salida_1': 'S1', 'foto_salida_2': 'S2', 'foto_salida_3': 'S3', 'foto_salida_4': 'S4', 'foto_salida_5': 'S5', 'foto_salida_6': 'S6', 'foto_salida_7': 'S7',
-            'foto_sumidero_1': 'SUM1', 'foto_sumidero_2': 'SUM2', 'foto_sumidero_3': 'SUM3', 'foto_sumidero_4': 'SUM4', 'foto_sumidero_5': 'SUM5', 'foto_sumidero_6': 'SUM6', 'foto_sumidero_7': 'SUM7',
-            'foto_descarga_1': 'D1', 'foto_descarga_2': 'D2', 'foto_descarga_3': 'D3', 'foto_descarga_4': 'D4', 'foto_descarga_5': 'D5', 'foto_descarga_6': 'D6', 'foto_descarga_7': 'D7',
-            'foto_esquema': 'L', 'foto_shape': 'L'
-        };
-
-        // 1. PRE-CARGA DE BLOBS
+        // 1. PRE-CARGAR TODAS LAS FOTOS NECESARIAS
         const neededBlobIds = new Set<string>();
-        design.placements.filter(p => p.fieldId.startsWith('foto_') && !/^\d+$/.test(p.fieldId.split('_')[1])).forEach(p => {
-            let targetCode = codeMap[p.fieldId];
-            // Fallback: Deducir código de FIELD_PATHS si no está en codeMap (ej: fotos.fotos[E1] -> E1)
-            if (!targetCode) {
-                const path = FIELD_PATHS[p.fieldId as keyof typeof FIELD_PATHS];
-                if (path && path.includes('[') && path.includes(']')) {
-                    targetCode = path.split('[').pop()?.split(']').shift() || '';
+        for (const p of design.placements) {
+            if (p.fieldId.startsWith('foto_') && !/^\d+$/.test(p.fieldId.split('_')[1])) {
+                const targetCode = PHOTO_CODE_MAP[p.fieldId];
+                if (targetCode) {
+                    const photo = findPhotoByCode(pozo, targetCode);
+                    if (photo?.blobId) neededBlobIds.add(photo.blobId);
                 }
             }
+        }
+        if (neededBlobIds.size > 0) {
+            await blobStore.ensureMultipleLoaded(Array.from(neededBlobIds));
+        }
 
-            if (targetCode) {
-                const upperTarget = targetCode.toUpperCase();
-                const f = pozo.fotos?.fotos?.find(f => {
-                    const filename = String(f.filename || '').toUpperCase().split('.')[0];
-                    if (filename.endsWith('-AT') || filename.endsWith('_AT') || filename.endsWith('-Z') || filename.endsWith('_Z')) return false;
-
-                    const subcat = String(f.subcategoria || '').toUpperCase();
-                    if (subcat === upperTarget) return true;
-
-                    if (upperTarget === 'P') return filename === 'P' || filename === 'F-P' || filename === 'S-P' || filename.includes('-P');
-                    if (upperTarget === 'T') return filename === 'T' || filename === 'F-T' || filename === 'TT' || filename.includes('-T');
-                    if (upperTarget === 'I') return filename === 'I' || filename === 'F-I' || filename === 'II' || /^I\d?$/.test(filename) || /^I\(\d+\)$/.test(filename) || filename.includes('-I');
-                    if (upperTarget.startsWith('E')) {
-                        const num = upperTarget.replace('E', '');
-                        if (num === '1' && (filename === 'E-T' || filename.includes('-E-T'))) return true;
-                        return new RegExp(`(^|[\\-_])E${num}([\\-_\\.]|$)`).test(filename) || filename.includes(`F-E${num}`);
-                    }
-                    if (upperTarget.startsWith('S') && !upperTarget.startsWith('SUM')) {
-                        const num = upperTarget.replace('S', '');
-                        if (num === '1' && (filename === 'S' || filename === 'S-T' || filename === 'S-HS' || filename === 'F-S-T' || filename.includes('-S-T') || filename.includes('-S-HS') || new RegExp('(^|[\\-_])S([\\-_\\.]|$)').test(filename))) return true;
-
-                        // Solo coincide si NO es un tag secundario de un Sumidero (ej: evitar que S1 en E2-T-S1 sea tomado como Salida 1)
-                        // Si el nombre contiene E#, el S# al final es un Sumidero.
-                        if (filename.includes('-E')) {
-                            return false;
-                        }
-
-                        const regex = new RegExp(`(^|[\\-_])S${num}([\\-_\\.]|$)`);
-                        return regex.test(filename) || new RegExp(`(^|[\\-_])S${num}([\\-_\\.]|$)`).test(filename.replace(/-/g, '')) || filename.includes(`F-S${num}`);
-                    }
-                    if (upperTarget.startsWith('SUM')) {
-                        const num = upperTarget.replace('SUM', '');
-                        return new RegExp(`(^|[\\-_])SUM${num}([\\-_\\.]|$)`).test(filename) || new RegExp(`(^|[\\-_])S${num}([\\-_\\.]|$)`).test(filename);
-                    }
-                    if (upperTarget === 'L') return filename.includes('_ARGIS') || filename === 'L';
-                    return false;
-                });
-                if (f?.blobId) neededBlobIds.add(f.blobId);
-            }
-        });
-        if (neededBlobIds.size > 0) await blobStore.ensureMultipleLoaded(Array.from(neededBlobIds));
-
-        // 2. ORDENACIÓN Y RENDERIZADO
+        // 2. PROCESAR ELEMENTOS
         const allElements = [
             ...(design.shapes || []).map(s => ({ ...s, isShape: true })),
             ...(design.placements || []).map(p => ({ ...p, isShape: false }))
         ].sort((a, b) => (Number(a.zIndex) || 0) - (Number(b.zIndex) || 0));
+
+        // 3. MAPA DE VISIBILIDAD DE GRUPOS (Sincronizado con DesignRenderer)
+        const groupVisibilityMap = new Map<string, boolean>();
+        if (design.groups) {
+            design.groups.forEach(group => {
+                const name = (group.name || '').toLowerCase();
+                if (!name) return;
+                let shouldHide = false;
+                if (name.includes('entrada') || name.includes('salida')) {
+                    const match = name.match(/(entrada|salida)\s*(\d+)/);
+                    if (match) {
+                        const type = match[1];
+                        const orderNum = match[2];
+                        const pipe = pozo.tuberias?.tuberias?.find(t =>
+                            String(t.tipoTuberia?.value || '').toLowerCase() === (type === 'entrada' ? 'entrada' : 'salida') &&
+                            String(t.orden?.value) === orderNum
+                        );
+                        if (!pipe) shouldHide = true;
+                    }
+                } else if (name.includes('sumidero')) {
+                    const match = name.match(/sumidero\s*(\d+)/);
+                    if (match) {
+                        const orderNum = match[1];
+                        const num = parseInt(orderNum);
+                        const sumidero = pozo.sumideros?.sumideros?.find(s => {
+                            const esquema = String(s.numeroEsquema?.value || '').toUpperCase();
+                            if (!esquema) return false;
+                            const esquemaNum = esquema.replace(/\D/g, '');
+                            return esquemaNum === orderNum || parseInt(esquemaNum) === num;
+                        }) || pozo.sumideros?.sumideros?.[num - 1];
+                        if (!sumidero) shouldHide = true;
+                    }
+                }
+                groupVisibilityMap.set(group.id, !shouldHide);
+            });
+        }
 
         const numPages = design.numPages || 1;
         for (let pIdx = 1; pIdx <= numPages; pIdx++) {
@@ -166,6 +293,13 @@ export async function generatePdfFromDesign(
 
             for (const el of allElements) {
                 if (el.isVisible === false) continue;
+
+                // Verificar visibilidad de grupo
+                const elAsObj = el as any;
+                if (elAsObj.groupId && groupVisibilityMap.has(elAsObj.groupId)) {
+                    if (!groupVisibilityMap.get(elAsObj.groupId)) continue;
+                }
+
                 const isHeader = (el as any).repeatOnEveryPage;
                 const elementPage = (el as any).pageNumber || 1;
                 if (!isHeader && elementPage !== pIdx) continue;
@@ -178,87 +312,15 @@ export async function generatePdfFromDesign(
                     await renderShape(doc, el as ShapeElement);
                 } else {
                     const placement = el as FieldPlacement;
-                    let value: any = '-';
-                    let link: string | undefined = undefined;
+                    const { value, link } = await resolveFieldValue(pozo, placement.fieldId, PHOTO_CODE_MAP);
 
-                    // RESOLUCIÓN DE VALOR
-                    if (placement.fieldId.startsWith('foto_') && !/^\d+$/.test(placement.fieldId.split('_')[1])) {
-                        let targetCode = codeMap[placement.fieldId];
-
-                        // Fallback: Deducir código de FIELD_PATHS si no está en codeMap (ej: fotos.fotos[E1] -> E1)
-                        if (!targetCode) {
-                            const path = FIELD_PATHS[placement.fieldId];
-                            if (path && path.includes('[') && path.includes(']')) {
-                                targetCode = path.split('[').pop()?.split(']').shift() || '';
-                            }
-                        }
-
-                        const typeKey = placement.fieldId.replace('foto_', '');
-                        if (targetCode) {
-                            const upperTarget = targetCode.toUpperCase();
-
-                            // Búsqueda inteligente
-                            let found = pozo.fotos?.fotos?.find(f => {
-                                const filename = String(f.filename || '').toUpperCase().split('.')[0];
-                                if (filename.endsWith('-AT') || filename.endsWith('_AT') || filename.endsWith('-Z') || filename.endsWith('_Z')) return false;
-
-                                const subcat = String(f.subcategoria || '').toUpperCase();
-                                if (subcat === upperTarget) return true;
-
-                                if (upperTarget === 'P') return filename === 'P' || filename === 'F-P' || filename === 'S-P' || filename.includes('-P');
-                                if (upperTarget === 'T') return filename === 'T' || filename === 'F-T' || filename === 'TT' || filename.includes('-T');
-                                if (upperTarget === 'I') return filename === 'I' || filename === 'F-I' || filename === 'II' || /^I\d?$/.test(filename) || /^I\(\d+\)$/.test(filename);
-                                if (upperTarget.startsWith('E')) {
-                                    const num = upperTarget.replace('E', '');
-                                    if (num === '1' && (filename === 'E-T' || filename.includes('-E-T'))) return true;
-                                    return new RegExp(`(^|[\\-_])E${num}([\\-_\\.]|$)`).test(filename) || filename.includes(`F-E${num}`);
-                                }
-                                if (upperTarget.startsWith('S') && !upperTarget.startsWith('SUM')) {
-                                    const num = upperTarget.replace('S', '');
-                                    if (num === '1' && (filename === 'S' || filename === 'S-T' || filename === 'S-HS' || filename === 'F-S-T')) return true;
-                                    return new RegExp(`(^|[\\-_])S${num}([\\-_\\.]|$)`).test(filename) || new RegExp(`(^|[\\-_])S${num}([\\-_\\.]|$)`).test(filename.replace(/-/g, '')) || filename.includes(`F-S${num}`);
-                                }
-                                if (upperTarget.startsWith('SUM')) {
-                                    const num = upperTarget.replace('SUM', '');
-                                    return new RegExp(`(^|[\\-_])SUM${num}([\\-_\\.]|$)`).test(filename) || new RegExp(`(^|[\\-_])S${num}([\\-_\\.]|$)`).test(filename);
-                                }
-                                if (upperTarget === 'L') return filename.includes('_ARGIS') || filename === 'L';
-                                return false;
-                            });
-
-                            if (!found) {
-                                found = pozo.fotos?.fotos?.find(f =>
-                                    String(f.tipo || '').toUpperCase() === typeKey.toUpperCase() ||
-                                    (f.subcategoria && String(f.subcategoria).toUpperCase().includes(upperTarget))
-                                );
-                            }
-
-                            if (found) value = found.blobId ? blobStore.getUrl(found.blobId) : ((found as any).dataUrl || '-');
-                        }
-                    } else {
-                        // Campos de datos
-                        const path = FIELD_PATHS[placement.fieldId];
-                        if (path) {
-                            const basePath = path.endsWith('.value') ? path.substring(0, path.length - 6) : path;
-                            const fieldObj = getValueByPath(pozo, basePath);
-                            if (fieldObj && typeof fieldObj === 'object') {
-                                value = fieldObj.value ?? '-';
-                                link = fieldObj.link;
-                            } else {
-                                value = fieldObj ?? '-';
-                            }
-                            if (!link && (placement.fieldId.includes('latitud') || placement.fieldId.includes('longitud'))) {
-                                const lat = getValueByPath(pozo, 'identificacion.latitud.value');
-                                const lon = getValueByPath(pozo, 'identificacion.longitud.value');
-                                if (lat && lon && lat !== '-' && lon !== '-') link = `https://www.google.com/maps?q=${lat},${lon}`;
-                            }
-                        }
-                    }
-
-                    // ADAPTACIÓN DINÁMICA
-                    const isTechnicalSlot = placement.fieldId.startsWith('foto_entrada_') || placement.fieldId.startsWith('foto_salida_') ||
-                        placement.fieldId.startsWith('foto_sumidero_') || placement.fieldId.startsWith('foto_descarga_') ||
-                        placement.fieldId.startsWith('tub_') || placement.fieldId.startsWith('sum_');
+                    // ADAPTACIÓN DINÁMICA: Ocultar si es slot técnico vacío (Requirement synchronization)
+                    const isTechnicalSlot =
+                        placement.fieldId.startsWith('foto_') ||
+                        placement.fieldId.startsWith('tub_') ||
+                        placement.fieldId.startsWith('ent_') ||
+                        placement.fieldId.startsWith('sal_') ||
+                        placement.fieldId.startsWith('sum_');
 
                     const hasNoData = !value || value === '-' || value === '' || value === 'Sin foto';
 
@@ -324,34 +386,15 @@ async function renderShape(doc: jsPDF, shape: ShapeElement) {
 
     if (shape.type === 'image' && shape.imageUrl) {
         try {
-            const img = new Image();
-            img.src = shape.imageUrl;
-            await new Promise<void>((resolve) => {
-                img.onload = () => resolve();
-                img.onerror = () => resolve();
-                setTimeout(() => resolve(), 1000);
-            });
-            if (img.width > 0) {
-                const imgAspect = img.width / img.height;
-                const boxAspect = shape.width / shape.height;
-                let drawW = shape.width, drawH = shape.height, drawX = shape.x, drawY = shape.y;
-                if (imgAspect > boxAspect) {
-                    drawH = shape.width / imgAspect;
-                    drawY = shape.y + (shape.height - drawH) / 2;
-                } else {
-                    drawW = shape.height * imgAspect;
-                    drawX = shape.x + (shape.width - drawW) / 2;
-                }
-                const format = shape.imageUrl.toLowerCase().includes('png') ? 'PNG' : 'JPEG';
-                doc.addImage(shape.imageUrl, format, drawX, drawY, drawW, drawH, undefined, 'FAST');
-            }
+            const format = shape.imageUrl.toLowerCase().includes('png') ? 'PNG' : 'JPEG';
+            doc.addImage(shape.imageUrl, format, shape.x, shape.y, shape.width, shape.height, undefined, 'FAST');
         } catch (e) { console.warn('No se pudo añadir imagen al PDF', e); }
     }
 }
 
 async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, value: any, link?: string) {
     const isPhoto = placement.fieldId.startsWith('foto_');
-    const isWidget = placement.fieldId.startsWith('widget_');
+    const isWidget = placement.fieldId === 'widget_tuberias';
 
     if (placement.borderWidth || placement.backgroundColor) {
         const style = (placement.backgroundColor && placement.backgroundColor !== 'transparent' && placement.borderWidth && placement.borderWidth > 0) ? 'FD' :
@@ -397,54 +440,35 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
         availableContentHeight -= labelAreaHeight;
     }
 
-    if (isPhoto && value && value !== '-') {
+    if (isPhoto && value && value !== '-' && value !== '') {
         try {
-            const img = new Image();
-            img.src = value;
-            await new Promise<void>((resolve) => {
-                img.onload = () => resolve();
-                img.onerror = () => resolve();
-                setTimeout(() => resolve(), 2000);
-            });
-            const imgAspect = img.width / img.height;
-            const contentAreaY = placement.y + labelAreaHeight;
-            const boxAspect = placement.width / availableContentHeight;
-            let drawW = placement.width, drawH = availableContentHeight, drawX = placement.x, drawY = contentAreaY;
-            if (imgAspect > boxAspect) {
-                drawH = placement.width / imgAspect;
-                drawY = contentAreaY + (availableContentHeight - drawH) / 2;
-            } else {
-                drawW = availableContentHeight * imgAspect;
-                drawX = placement.x + (placement.width - drawW) / 2;
-            }
             const format = String(value).toLowerCase().includes('png') ? 'PNG' : 'JPEG';
-            doc.addImage(value, format, drawX, drawY, drawW, drawH, undefined, 'FAST');
+            // jsPDF addImage con ObjectURL requiere que el blob esté cargado. 
+            // Esto ya se garantiza en resolveFieldValue con blobStore.ensureLoaded.
+            doc.addImage(value, format, placement.x, placement.y + labelAreaHeight, placement.width, availableContentHeight, undefined, 'FAST');
         } catch (e) { console.warn(`Error foto ${placement.fieldId}`, e); }
         return;
     }
 
     if (isWidget && placement.fieldId === 'widget_tuberias') {
         const tuberias = (pozo.tuberias?.tuberias || []).slice(0, 10);
-        const headers = ['#', 'Ø (")', 'Material', 'Estado', 'Batea'];
+        const headers = ['#', 'Ø (")', 'Material', 'Estado', 'Batea', 'Z'];
         const headerH = 5;
-        const contentAreaY = placement.y + labelAreaHeight;
-        const rowH = (availableContentHeight - headerH) / Math.max(tuberias.length, 1);
         doc.setFillColor('#e5e7eb');
-        doc.rect(placement.x, contentAreaY, placement.width, headerH, 'F');
-        doc.setFontSize(7);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor('#000000');
-        const colWidths = [0.1, 0.15, 0.35, 0.2, 0.2].map(w => w * placement.width);
-        let curX = placement.x;
-        headers.forEach((h, i) => { doc.text(h, curX + 1, contentAreaY + 3.5); curX += colWidths[i]; });
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(5.5);
+        doc.rect(placement.x, placement.y + labelAreaHeight, placement.width, headerH, 'F');
+        doc.setFontSize(7); doc.setFont('helvetica', 'bold'); doc.setTextColor('#000000');
+        const colWidths = [0.1, 0.15, 0.25, 0.2, 0.2, 0.1].map(w => w * placement.width);
+        let cx = placement.x;
+        headers.forEach((h, i) => { doc.text(h, cx + 1, placement.y + labelAreaHeight + 3.5); cx += colWidths[i]; });
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(5.5);
+        const rowH = (availableContentHeight - headerH) / Math.max(tuberias.length, 1);
         tuberias.forEach((t, i) => {
-            const ry = contentAreaY + headerH + (i * rowH);
-            let cx = placement.x;
-            [String(t.orden?.value || i + 1), String(t.diametroPulgadas?.value || t.diametro?.value || '-'), String(t.material?.value || '-'), String(t.estado?.value || '-'), String(t.batea?.value || '-')].forEach((val, ci) => {
-                doc.text(sanitizeTextForPDF(val), cx + 1, ry + (rowH / 2) + 1, { maxWidth: colWidths[ci] - 1 });
-                cx += colWidths[ci];
+            const ry = placement.y + labelAreaHeight + headerH + (i * rowH);
+            let curX = placement.x;
+            const vals = [String(t.orden?.value || i + 1), String(t.diametroPulgadas?.value || t.diametro?.value || '-'), t.material?.value, t.estado?.value, t.batea?.value, t.cota?.value || t.z?.value || '-'];
+            vals.forEach((v, ci) => {
+                doc.text(sanitizeTextForPDF(String(v || '-')), curX + 1, ry + (rowH / 2) + 1, { maxWidth: colWidths[ci] - 1 });
+                curX += colWidths[ci];
             });
         });
         return;
@@ -469,6 +493,5 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
         if (align === 'center') lx = tx - (tw / 2);
         if (align === 'right') lx = tx - tw;
         doc.link(lx, ty - (fontSize * 0.4), tw, fontSize * 0.4, { url: link });
-        doc.setDrawColor('#0000FF'); doc.setLineWidth(0.1); doc.line(lx, ty + 0.5, lx + tw, ty + 0.5);
     }
 }

@@ -117,6 +117,34 @@ export const FIELD_PATHS: Record<string, string> = {
     'tub_8_z': 'tuberias.tuberias[7].cota.value',
     'tub_8_emboquillado': 'tuberias.tuberias[7].emboquillado.value',
 
+    // SALIDAS (Mapeadas a los índices 8-15 de tuberías)
+    'sal_1_id': 'tuberias.tuberias[8].idTuberia.value',
+    'sal_1_diametro': 'tuberias.tuberias[8].diametro.value',
+    'sal_1_material': 'tuberias.tuberias[8].material.value',
+    'sal_1_estado': 'tuberias.tuberias[8].estado.value',
+    'sal_1_orden': 'tuberias.tuberias[8].orden.value',
+    'sal_1_batea': 'tuberias.tuberias[8].batea.value',
+    'sal_1_z': 'tuberias.tuberias[8].cota.value',
+    'sal_1_emboquillado': 'tuberias.tuberias[8].emboquillado.value',
+
+    'sal_2_id': 'tuberias.tuberias[9].idTuberia.value',
+    'sal_2_diametro': 'tuberias.tuberias[9].diametro.value',
+    'sal_2_material': 'tuberias.tuberias[9].material.value',
+    'sal_2_estado': 'tuberias.tuberias[9].estado.value',
+    'sal_2_orden': 'tuberias.tuberias[9].orden.value',
+    'sal_2_batea': 'tuberias.tuberias[9].batea.value',
+    'sal_2_z': 'tuberias.tuberias[9].cota.value',
+    'sal_2_emboquillado': 'tuberias.tuberias[9].emboquillado.value',
+
+    'sal_3_id': 'tuberias.tuberias[10].idTuberia.value',
+    'sal_3_diametro': 'tuberias.tuberias[10].diametro.value',
+    'sal_3_material': 'tuberias.tuberias[10].material.value',
+    'sal_3_estado': 'tuberias.tuberias[10].estado.value',
+    'sal_3_orden': 'tuberias.tuberias[10].orden.value',
+    'sal_3_batea': 'tuberias.tuberias[10].batea.value',
+    'sal_3_z': 'tuberias.tuberias[10].cota.value',
+    'sal_3_emboquillado': 'tuberias.tuberias[10].emboquillado.value',
+
     // SUMIDEROS (Hasta 4 slots)
     'sum_1_tipo': 'sumideros.sumideros[0].tipoSumidero.value',
     'sum_1_material': 'sumideros.sumideros[0].materialTuberia.value',
@@ -321,6 +349,19 @@ export const AVAILABLE_DATA_FIELDS = [
     { id: 'tub_8_batea', label: 'Tub 8 Batea', category: 'Tuberías' },
     { id: 'tub_8_z', label: 'Tub 8 Prof. clave (m)', category: 'Tuberías' },
     { id: 'tub_8_emboquillado', label: 'Tub 8 Emb.', category: 'Tuberías' },
+
+    // Salidas (Slots 1-3 para empezar)
+    { id: 'sal_1_id', label: 'Salida 1 ID', category: 'Salidas' },
+    { id: 'sal_1_diametro', label: 'Salida 1 Ø', category: 'Salidas' },
+    { id: 'sal_1_material', label: 'Salida 1 Material', category: 'Salidas' },
+    { id: 'sal_1_orden', label: 'Salida 1 Orden', category: 'Salidas' },
+    { id: 'sal_1_batea', label: 'Salida 1 Batea', category: 'Salidas' },
+    { id: 'sal_1_z', label: 'Salida 1 Prof. clave (m)', category: 'Salidas' },
+
+    { id: 'sal_2_id', label: 'Salida 2 ID', category: 'Salidas' },
+    { id: 'sal_2_diametro', label: 'Salida 2 Ø', category: 'Salidas' },
+    { id: 'sal_2_material', label: 'Salida 2 Material', category: 'Salidas' },
+    { id: 'sal_2_z', label: 'Salida 2 Prof. clave (m)', category: 'Salidas' },
     { id: 'sum_1_tipo', label: 'Sum 1 Tipo', category: 'Sumideros' },
     { id: 'sum_1_material', label: 'Sum 1 Mat', category: 'Sumideros' },
     { id: 'sum_1_esquema', label: 'Sum 1 Esquema', category: 'Sumideros' },
