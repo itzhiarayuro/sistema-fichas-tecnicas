@@ -268,7 +268,7 @@ export default function EditorPage() {
         profundidad: createFieldValue('', 'default'),
       };
     }
-    return {
+    const base = {
       // IdentificacionPozo
       idPozo: createFieldValue(String(pozo.identificacion.idPozo?.value || '')),
       coordenadaX: createFieldValue(String(pozo.identificacion.coordenadaX?.value || '')),
@@ -341,7 +341,7 @@ export default function EditorPage() {
         peldanosMaterial: createFieldValue('', 'default'),
       };
     }
-    return {
+    const base = {
       // ComponentesPozo
       existeTapa: createFieldValue(String(pozo.componentes.existeTapa?.value || '')),
       estadoTapa: createFieldValue(String(pozo.componentes.estadoTapa?.value || '')),
@@ -411,6 +411,8 @@ export default function EditorPage() {
         estado: mergeFieldEdits('tuberias', `${prefix}_estado`, createFieldValue(String(t.estado?.value || ''))),
         emboquillado: mergeFieldEdits('tuberias', `${prefix}_emboquillado`, createFieldValue(String(t.emboquillado?.value || ''))),
         longitud: mergeFieldEdits('tuberias', `${prefix}_longitud`, createFieldValue(String(t.longitud?.value || ''))),
+        orden: mergeFieldEdits('tuberias', `${prefix}_orden`, createFieldValue(String(t.orden?.value || order))),
+        batea: mergeFieldEdits('tuberias', `${prefix}_batea`, createFieldValue(String(t.batea?.value || ''))),
       };
     };
 

@@ -330,7 +330,7 @@ export interface FotoInfo {
   tipo: TipoFoto | string;
 
   // 🟠 Importante - Categoría para gestión UI
-  categoria: 'PRINCIPAL' | 'ENTRADA' | 'SALIDA' | 'SUMIDERO' | 'OTRO';
+  categoria: 'PRINCIPAL' | 'ENTRADA' | 'SALIDA' | 'SUMIDERO' | 'DESCARGA' | 'OTRO';
 
   // 🟠 Importante - Subcategoría (ej: E1, S2)
   subcategoria?: string;

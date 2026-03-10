@@ -57,7 +57,7 @@ self.onmessage = async (e: MessageEvent<PhotoTask>) => {
 
       try {
         const img = await createImageBitmap(inputBlob);
-        
+
         // *** CLAVE: Usar dimensiones ORIGINALES — no tocar width/height ***
         const originalWidth = img.width;
         const originalHeight = img.height;
@@ -67,12 +67,12 @@ self.onmessage = async (e: MessageEvent<PhotoTask>) => {
 
         if (ctx) {
           ctx.drawImage(img, 0, 0, originalWidth, originalHeight);
-          
+
           // Reducir calidad JPEG progresivamente hasta que el peso sea aceptable
           // NUNCA reducimos dimensiones
           let currentQuality = quality;
           let attempt = 0;
-          
+
           processedBlob = await canvas.convertToBlob({
             type: 'image/jpeg',
             quality: currentQuality,
@@ -104,7 +104,7 @@ self.onmessage = async (e: MessageEvent<PhotoTask>) => {
     // 3. Transferir resultado como ArrayBuffer (zero-copy de vuelta al main thread)
     const resultBuffer = await processedBlob.arrayBuffer();
 
-    self.postMessage(
+    (self as any).postMessage(
       {
         type: 'SUCCESS',
         id,

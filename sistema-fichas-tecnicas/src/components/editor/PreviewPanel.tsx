@@ -155,9 +155,12 @@ const MOCK_POZO: Partial<Pozo> = {
     idPozo: { value: 'PZ-MOCK-001', source: 'manual' },
     coordenadaX: { value: '-74.000', source: 'manual' },
     coordenadaY: { value: '4.600', source: 'manual' },
+    latitud: { value: '4.600', source: 'manual' },
+    longitud: { value: '-74.000', source: 'manual' },
     fecha: { value: '2024-01-15', source: 'manual' },
     levanto: { value: 'Inspector Mock', source: 'manual' },
-    estado: { value: 'Bueno', source: 'manual' }
+    estado: { value: 'Bueno', source: 'manual' },
+    enlace: { value: '', source: 'manual' }
   },
   ubicacion: {
     direccion: { value: 'Calle 10 # 5-20', source: 'manual' },
@@ -202,7 +205,9 @@ const MOCK_POZO: Partial<Pozo> = {
         cota: { value: '1498.0', source: 'manual' },
         estado: { value: 'Bueno', source: 'manual' },
         emboquillado: { value: 'Bien', source: 'manual' },
-        longitud: { value: '45.0', source: 'manual' }
+        longitud: { value: '45.0', source: 'manual' },
+        orden: { value: '1', source: 'manual' },
+        batea: { value: '0.5', source: 'manual' }
       },
       {
         idPozo: { value: 'PZ-MOCK-001', source: 'manual' },
@@ -213,7 +218,9 @@ const MOCK_POZO: Partial<Pozo> = {
         cota: { value: '1497.8', source: 'manual' },
         estado: { value: 'Regular', source: 'manual' },
         emboquillado: { value: 'Regular', source: 'manual' },
-        longitud: { value: '12.5', source: 'manual' }
+        longitud: { value: '12.5', source: 'manual' },
+        orden: { value: '1', source: 'manual' },
+        batea: { value: '0.4', source: 'manual' }
       }
     ]
   },

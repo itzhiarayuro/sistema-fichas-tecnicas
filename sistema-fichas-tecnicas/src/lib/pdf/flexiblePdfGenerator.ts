@@ -20,10 +20,6 @@ export async function generateFlexiblePdf(
         // 1. Aplicar la lógica de reorganización dinámica
         // Solo afectará a grupos técnicos (entradas, salidas, etc.)
         const optimizedDesign = applyFlexibleGrid(design, pozo, {
-            columns: 3,
-            marginX: 10,
-            marginY: 10,
-            spacingX: 4,
             spacingY: 6,
             startAtY: 46 // Ajustado para que empiece justo después del encabezado (Y=48)
         });

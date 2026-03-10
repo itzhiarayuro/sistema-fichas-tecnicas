@@ -16,12 +16,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { processPhotoServer } from '@/lib/server/photoProcessor';
 
-// Configuración de Next.js para recibir archivos grandes
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
+// Route Segment Config (Next.js 14 format)
+export const dynamic = 'force-dynamic';
 
 // Límite: 50MB por request (para lotes de ~20 fotos)
 export const maxDuration = 60; // segundos máximo por request

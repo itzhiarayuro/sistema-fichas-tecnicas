@@ -20,6 +20,7 @@ import { logger } from '@/lib/logger';
 import { PozosTable, PozoStatusDetail } from '@/components/pozos';
 import { RecommendationsPanel } from '@/components/guided';
 import { AppShell, NextStepIndicator, ProgressBar } from '@/components/layout';
+import { FirebaseSetupBanner } from '@/components/layout/FirebaseSetupBanner';
 import { Pozo } from '@/types';
 import { useDesignStore } from '@/stores/designStore';
 import { useState } from 'react';
@@ -299,6 +300,7 @@ export default function PozosPage() {
       <div className="h-[calc(100vh-8rem)] flex flex-col">
         {/* Header */}
         <div className="bg-white border-b border-gray-200 px-6 py-4 -mx-6 -mt-6 mb-6">
+          <FirebaseSetupBanner />
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Lista de Pozos</h1>

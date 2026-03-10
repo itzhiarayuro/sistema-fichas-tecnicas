@@ -32,6 +32,7 @@ import { processBatch } from '@/lib/utils/batchProcessor';
 import { buildExpectedPhotoIndex, filterPhotoFiles, getFiltradoSummary } from '@/lib/utils/smartPhotoFilter';
 import type { IndiceFotosEsperadas } from '@/lib/utils/smartPhotoFilter';
 import { processPhotosOnServer, checkServerAvailable } from '@/lib/utils/serverPhotoUploader';
+import { CloudImportModal } from '@/components/upload/CloudImportModal';
 import type { Pozo, FotoInfo } from '@/types';
 
 export default function UploadPage() {
@@ -65,7 +66,8 @@ export default function UploadPage() {
   const expectedIndexRef = useRef<IndiceFotosEsperadas | null>(null);
   const [filtradoInfo, setFiltradoInfo] = useState<string>('');
 
-  // Estado del procesamiento en servidor
+  // Estado de la nube
+  const [isCloudModalOpen, setIsCloudModalOpen] = useState(false);
   const [serverAvailable, setServerAvailable] = useState<boolean | null>(null); // null = verificando
 
   // Verificar si el servidor Sharp está disponible al cargar la página
@@ -238,7 +240,7 @@ export default function UploadPage() {
       if (finalFile === file && file.size > 2 * 1024 * 1024) {
         try {
           const result = await workerRegistry.runPhotoTask<any>(file, {
-            maxSizeMB: 2.0,
+            maxWidth: 2000,
             quality: 0.92,
             generateHash: false
           });
@@ -755,6 +757,31 @@ export default function UploadPage() {
   }, [processedPozos, processedPhotos, addPozo, addPhoto, setCurrentStep, router]);
 
   /**
+   * Maneja la importación de datos desde la nube
+   */
+  const handleCloudImport = useCallback((importedPozos: Pozo[]) => {
+    if (importedPozos.length === 0) return;
+
+    setProcessedPozos(prev => [...prev, ...importedPozos]);
+
+    // Extraer fotos si vienen incluidas en el objeto Pozo (o si necesitamos mapearlas)
+    const importedPhotos: FotoInfo[] = [];
+    importedPozos.forEach(pozo => {
+      if (pozo.fotos?.fotos) {
+        importedPhotos.push(...pozo.fotos.fotos);
+      }
+    });
+
+    if (importedPhotos.length > 0) {
+      setProcessedPhotos(prev => [...prev, ...importedPhotos]);
+    }
+
+    setCanContinue(true);
+    setDropZoneStatus('success');
+    showSuccess(`Importados ${importedPozos.length} pozos desde la nube`);
+  }, [showSuccess]);
+
+  /**
    * Reinicia la carga
    */
   const handleReset = useCallback(() => {
@@ -796,6 +823,31 @@ export default function UploadPage() {
               <p className="text-sm font-semibold">
                 ¿Primera vez? Descarga los archivos de ejemplo para ver cómo funciona todo el sistema paso a paso.
               </p>
+            </div>
+
+            {/* ✅ NUEVO: Acción de importación desde la nube */}
+            <div className="mb-8 p-6 bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl shadow-xl shadow-amber-200 text-white overflow-hidden relative group">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl group-hover:bg-white/20 transition-all"></div>
+              <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+                <div className="flex-1 text-center md:text-left">
+                  <h2 className="text-xl font-bold flex items-center justify-center md:justify-start gap-2">
+                    <span className="text-2xl">⚡</span>
+                    Importación Instantánea (V2)
+                  </h2>
+                  <p className="mt-1 text-amber-50 text-sm">
+                    Conéctate directamente a la App de Catastro UT para importar registros y fotos sin usar archivos Excel.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setIsCloudModalOpen(true)}
+                  className="px-8 py-3 bg-white text-amber-600 font-extrabold rounded-xl shadow-lg hover:bg-amber-50 transition-all active:scale-95 flex items-center gap-2 whitespace-nowrap"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+                  </svg>
+                  TRAER DE LA NUBE
+                </button>
+              </div>
             </div>
 
             <p className="text-xs text-green-700 mb-4 ml-7">
@@ -1099,6 +1151,13 @@ export default function UploadPage() {
           </div>
         </div>
       </div>
+
+      {/* Modal de Importación Cloud */}
+      <CloudImportModal
+        isOpen={isCloudModalOpen}
+        onClose={() => setIsCloudModalOpen(false)}
+        onImport={handleCloudImport}
+      />
     </AppShell>
   );
 }

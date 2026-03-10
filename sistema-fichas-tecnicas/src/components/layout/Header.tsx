@@ -14,11 +14,21 @@
 import { useUIStore, useGlobalStore } from '@/stores';
 import { ContextIndicator } from './ContextIndicator';
 import { WorkflowBreadcrumbs, StepIndicatorDots } from './FlowIndicators';
+import { signOut } from 'firebase/auth';
+import { auth } from '@/lib/services/firebaseClient';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 export function Header() {
   const guidedMode = useGlobalStore((state) => state.config.guidedMode);
   const setConfig = useGlobalStore((state) => state.setConfig);
   const currentStep = useGlobalStore((state) => state.currentStep);
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    await signOut(auth);
+    router.push('/login');
+  };
 
   return (
     <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6 sticky top-0 z-40">
@@ -94,6 +104,31 @@ export function Header() {
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </button>
+
+        {/* Separador */}
+        <div className="w-px h-8 bg-gray-200" />
+
+        {/* Volver al Portal */}
+        <Link
+          href="/portal"
+          className="text-sm font-medium text-gray-500 hover:text-blue-600 transition-colors"
+          title="Volver al selector de aplicaciones"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+          </svg>
+        </Link>
+
+        {/* Logout */}
+        <button
+          onClick={handleLogout}
+          className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+          title="Cerrar Sesión"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
           </svg>
         </button>
       </div>
