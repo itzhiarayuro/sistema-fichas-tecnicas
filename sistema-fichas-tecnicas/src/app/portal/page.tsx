@@ -69,7 +69,7 @@ export default function PortalPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 px-4">
                     {/* Fichas Técnicas */}
                     <Link
-                        href="/fichas"
+                        href="/pozos"
                         className="group relative h-72 bg-slate-900/60 backdrop-blur-xl border border-white/10 rounded-[2rem] p-8 flex flex-col justify-between hover:border-blue-500/50 hover:bg-slate-800/80 transition-all duration-500 overflow-hidden shadow-2xl"
                     >
                         <div className="absolute top-[-20%] right-[-20%] w-64 h-64 bg-blue-600/5 blur-[60px] group-hover:bg-blue-600/15 transition-all duration-1000" />
