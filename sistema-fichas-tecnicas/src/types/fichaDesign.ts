@@ -166,6 +166,7 @@ export interface DesignState {
     selectedPlacementId: string | null;
     selectedShapeId: string | null;
     selectedGroupId: string | null;
+    selectedIds: string[]; // Soporte para selección múltiple
 
     // Acciones
     createVersion: (name: string, description?: string) => string;
@@ -199,6 +200,10 @@ export interface DesignState {
     addToGroup: (versionId: string, groupId: string, elementIds: string[]) => void;
     removeFromGroup: (versionId: string, groupId: string, elementIds: string[]) => void;
 
+    // Acciones Bulk
+    removeElements: (versionId: string, elementIds: string[]) => void;
+    duplicateElements: (versionId: string, elementIds: string[]) => void;
+
     // Getters
     getCurrentVersion: () => FichaDesignVersion | null;
     getVersionById: (id: string) => FichaDesignVersion | undefined;
@@ -211,6 +216,7 @@ export interface DesignState {
     setSelectedPlacementId: (id: string | null) => void;
     setSelectedShapeId: (id: string | null) => void;
     setSelectedGroupId: (id: string | null) => void;
+    setSelectedIds: (ids: string[]) => void;
 }
 
 // 70 Campos disponibles del sistema

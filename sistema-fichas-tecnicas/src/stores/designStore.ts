@@ -39,6 +39,7 @@ export const useDesignStore = create<DesignState>()(
             selectedPlacementId: null,
             selectedShapeId: null,
             selectedGroupId: null,
+            selectedIds: [],
 
             // History Actions
             undo: () => {
@@ -239,19 +240,50 @@ export const useDesignStore = create<DesignState>()(
             },
 
             setCurrentVersion: (id) => {
-                set({ currentVersionId: id, selectedPlacementId: null, selectedShapeId: null, selectedGroupId: null });
+                set({ 
+                    currentVersionId: id, 
+                    selectedPlacementId: null, 
+                    selectedShapeId: null, 
+                    selectedGroupId: null,
+                    selectedIds: [] 
+                });
             },
 
             setSelectedPlacementId: (id) => {
-                set({ selectedPlacementId: id, selectedShapeId: id ? null : get().selectedShapeId, selectedGroupId: null });
+                set({ 
+                    selectedPlacementId: id, 
+                    selectedShapeId: null, 
+                    selectedGroupId: null,
+                    selectedIds: id ? [id] : [] 
+                });
             },
 
             setSelectedShapeId: (id) => {
-                set({ selectedShapeId: id, selectedPlacementId: id ? null : get().selectedPlacementId, selectedGroupId: null });
+                set({ 
+                    selectedShapeId: id, 
+                    selectedPlacementId: null, 
+                    selectedGroupId: null,
+                    selectedIds: id ? [id] : [] 
+                });
             },
 
             setSelectedGroupId: (id) => {
-                set({ selectedGroupId: id, selectedPlacementId: null, selectedShapeId: null });
+                set({ 
+                    selectedGroupId: id, 
+                    selectedPlacementId: null, 
+                    selectedShapeId: null,
+                    selectedIds: id ? [id] : [] 
+                });
+            },
+
+            setSelectedIds: (ids) => {
+                set((state) => ({
+                    selectedIds: ids,
+                    // Si solo hay uno, lo marcamos como selección individual para el PropertiesPanel
+                    selectedPlacementId: ids.length === 1 && state.versions.find(v => v.id === state.currentVersionId)?.placements.some(p => p.id === ids[0]) ? ids[0] : null,
+                    selectedShapeId: ids.length === 1 && state.versions.find(v => v.id === state.currentVersionId)?.shapes.some(s => s.id === ids[0]) ? ids[0] : null,
+                    selectedGroupId: ids.length === 1 && state.versions.find(v => v.id === state.currentVersionId)?.groups.some(g => g.id === ids[0]) ? ids[0] : null,
+                }));
             },
 
             // Persistencia externa
@@ -578,12 +610,12 @@ export const useDesignStore = create<DesignState>()(
                             } : v
                         ),
                         past: { ...state.past, [versionId]: newPast },
-                        future: { ...state.future, [versionId]: [] }
-                    };
-                });
-            },
+                    future: { ...state.future, [versionId]: [] }
+                };
+            });
+        },
 
-            removeFromGroup: (versionId, groupId, elementIds) => {
+            removeFromGroup: (versionId: string, groupId: string, elementIds: string[]) => {
                 set((state) => {
                     const version = state.versions.find(v => v.id === versionId);
                     if (!version) return state;
@@ -598,7 +630,7 @@ export const useDesignStore = create<DesignState>()(
                                 ...v,
                                 groups: (Array.isArray(v.groups) ? v.groups : []).map(g =>
                                     g.id === groupId ? { ...g, childIds: g.childIds.filter(id => !elementIds.includes(id)) } : g
-                                ),
+                                ).filter(g => g.childIds.length > 0), // Eliminar grupo si queda vacío
                                 placements: (Array.isArray(v.placements) ? v.placements : []).map(p =>
                                     elementIds.includes(p.id) ? { ...p, groupId: undefined } : p
                                 ),
@@ -610,6 +642,148 @@ export const useDesignStore = create<DesignState>()(
                         ),
                         past: { ...state.past, [versionId]: newPast },
                         future: { ...state.future, [versionId]: [] }
+                    };
+                });
+            },
+
+            removeElements: (versionId: string, elementIds: string[]) => {
+                set((state) => {
+                    const version = state.versions.find(v => v.id === versionId);
+                    if (!version) return state;
+
+                    const newPast = [...(state.past[versionId] || []), version].slice(-20);
+
+                    let childrenOfDeletedGroups: string[] = [];
+                    // Si borramos un grupo, recolectar sus hijos
+                    (version.groups || []).forEach(g => {
+                        if (elementIds.includes(g.id)) {
+                            childrenOfDeletedGroups.push(...g.childIds);
+                        }
+                    });
+
+                    const allIdsToRemove = [...elementIds, ...childrenOfDeletedGroups];
+
+                    return {
+                        versions: state.versions.map((v) =>
+                            v.id === versionId ? {
+                                ...v,
+                                groups: (v.groups || []).filter(g => !elementIds.includes(g.id)),
+                                placements: (v.placements || []).filter(p => !allIdsToRemove.includes(p.id)),
+                                shapes: (v.shapes || []).filter(s => !allIdsToRemove.includes(s.id)),
+                                updatedAt: Date.now()
+                            } : v
+                        ),
+                        past: { ...state.past, [versionId]: newPast },
+                        future: { ...state.future, [versionId]: [] },
+                        selectedIds: [],
+                        selectedPlacementId: null,
+                        selectedShapeId: null,
+                        selectedGroupId: null
+                    };
+                });
+            },
+
+            duplicateElements: (versionId: string, elementIds: string[]) => {
+                set((state) => {
+                    const version = state.versions.find(v => v.id === versionId);
+                    if (!version) return state;
+
+                    const newPast = [...(state.past[versionId] || []), version].slice(-20);
+                    
+                    const newPlacements = [...version.placements];
+                    const newShapes = [...(version.shapes || [])];
+                    const newGroups = [...(version.groups || [])];
+                    const addedIds: string[] = [];
+
+                    // Mapeo de IDs antiguos a nuevos para manejar grupos y sus hijos
+                    const idMapping: { [oldId: string]: string } = {};
+
+                    // 1. Identificar todos los elementos que forman parte de los grupos que se van a duplicar
+                    const elementsToDuplicate = new Set(elementIds);
+                    (version.groups || []).forEach(g => {
+                        if (elementIds.includes(g.id)) {
+                            g.childIds.forEach(childId => elementsToDuplicate.add(childId));
+                        }
+                    });
+
+                    // 2. Duplicar todo lo recolectado
+                    elementsToDuplicate.forEach(id => {
+                        const p = version.placements.find(item => item.id === id);
+                        if (p) {
+                            const newId = generateId();
+                            idMapping[id] = newId;
+                            const newP = { ...p, id: newId, x: p.x + 5, y: p.y + 5 };
+                            newPlacements.push(newP);
+                            if (elementIds.includes(id)) addedIds.push(newId);
+                        }
+                        const s = (version.shapes || []).find(item => item.id === id);
+                        if (s) {
+                            const newId = generateId();
+                            idMapping[id] = newId;
+                            const newS = { ...s, id: newId, x: s.x + 5, y: s.y + 5 };
+                            newShapes.push(newS);
+                            if (elementIds.includes(id)) addedIds.push(newId);
+                        }
+                        const g = (version.groups || []).find(item => item.id === id);
+                        if (g) {
+                            const newId = generateId();
+                            idMapping[id] = newId;
+                            // Sus hijos se duplicarán también, usaremos el idMapping después
+                            const newG = { ...g, id: newId, childIds: [] as string[] };
+                            newGroups.push(newG);
+                            if (elementIds.includes(id)) addedIds.push(newId);
+                        }
+                    });
+
+                    // 3. Corregir IDs de grupo en placements y shapes, y childIds en los nuevos grupos
+                    newPlacements.forEach((p, idx) => {
+                        if (idMapping[p.id]) { // Es uno de los nuevos
+                            if (p.groupId && idMapping[p.groupId]) {
+                                newPlacements[idx] = { ...p, groupId: idMapping[p.groupId] };
+                            } else if (p.groupId && !elementsToDuplicate.has(p.groupId)) {
+                                // Si el grupo original no se duplicó, eliminamos el vínculo para evitar líos
+                                newPlacements[idx] = { ...p, groupId: undefined };
+                            }
+                        }
+                    });
+                    newShapes.forEach((s, idx) => {
+                        if (idMapping[s.id]) {
+                            if (s.groupId && idMapping[s.groupId]) {
+                                newShapes[idx] = { ...s, groupId: idMapping[s.groupId] };
+                            } else if (s.groupId && !elementsToDuplicate.has(s.groupId)) {
+                                newShapes[idx] = { ...s, groupId: undefined };
+                            }
+                        }
+                    });
+                    newGroups.forEach((g, idx) => {
+                        if (idMapping[g.id]) {
+                            // Actualizar childIds con los nuevos IDs mapeados de los hijos originales
+                            const originalGroup = (version.groups || []).find(og => idMapping[og.id] === g.id);
+                            if (originalGroup) {
+                                const newChildIds = originalGroup.childIds
+                                    .map(cid => idMapping[cid])
+                                    .filter(Boolean) as string[];
+                                newGroups[idx] = { ...g, childIds: newChildIds };
+                            }
+                        }
+                    });
+
+                    return {
+                        versions: state.versions.map((v) =>
+                            v.id === versionId ? {
+                                ...v,
+                                placements: newPlacements,
+                                shapes: newShapes,
+                                groups: newGroups,
+                                updatedAt: Date.now()
+                            } : v
+                        ),
+                        past: { ...state.past, [versionId]: newPast },
+                        future: { ...state.future, [versionId]: [] },
+                        selectedIds: addedIds,
+                        selectedPlacementId: addedIds.length === 1 && newPlacements.find(p => p.id === addedIds[0]) ? addedIds[0] : null,
+                        selectedShapeId: addedIds.length === 1 && newShapes.find(s => s.id === addedIds[0]) ? addedIds[0] : null,
+                        selectedGroupId: addedIds.length === 1 && newGroups.find(g => g.id === addedIds[0]) ? addedIds[0] : null
                     };
                 });
             },

@@ -24,17 +24,18 @@ export function LayersPanel({
         setSelectedPlacementId,
         setSelectedShapeId,
         setSelectedGroupId,
+        setSelectedIds,
         updatePlacement,
         updateShape,
         createGroup,
         ungroupElements,
         updateGroup,
-        removeFromGroup
+        removeFromGroup,
+        selectedIds
     } = useDesignStore();
     const selectedItemRef = useRef<HTMLDivElement>(null);
 
-    // Estado para selección múltiple
-    const [selectedIds, setSelectedIds] = useState<string[]>([]);
+    // Estado para colapsar y expandir grupos
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
     const [renamingGroupId, setRenamingGroupId] = useState<string | null>(null);
     const [renameValue, setRenameValue] = useState('');
@@ -42,16 +43,6 @@ export function LayersPanel({
     console.log('🔴 LayersPanel render - selectedPlacementId:', selectedPlacementId);
     console.log('🔴 LayersPanel render - selectedShapeId:', selectedShapeId);
 
-    // Sincronizar selección múltiple con selección individual
-    useEffect(() => {
-        if (selectedPlacementId) {
-            setSelectedIds([selectedPlacementId]);
-        } else if (selectedShapeId) {
-            setSelectedIds([selectedShapeId]);
-        } else {
-            setSelectedIds([]);
-        }
-    }, [selectedPlacementId, selectedShapeId]);
 
     // Scroll automático cuando se selecciona un elemento
     useEffect(() => {
@@ -132,8 +123,10 @@ export function LayersPanel({
     };
 
     const handleItemClick = (e: React.MouseEvent, item: any) => {
-        if (item.isGroup) {
-            // Toggle collapse del grupo
+        e.stopPropagation();
+
+        if (item.isGroup && !e.ctrlKey && !e.metaKey) {
+            // Toggle collapse del grupo si es click simple
             setCollapsedGroups(prev => {
                 const next = new Set(prev);
                 if (next.has(item.id)) {
@@ -143,21 +136,21 @@ export function LayersPanel({
                 }
                 return next;
             });
-            return;
         }
 
         // Selección múltiple con Ctrl/Cmd
         if (e.ctrlKey || e.metaKey) {
-            setSelectedIds(prev => {
-                if (prev.includes(item.id)) {
-                    return prev.filter(id => id !== item.id);
-                } else {
-                    return [...prev, item.id];
-                }
-            });
+            const isAlreadySelected = selectedIds.includes(item.id);
+            if (isAlreadySelected) {
+                setSelectedIds(selectedIds.filter(id => id !== item.id));
+            } else {
+                setSelectedIds([...selectedIds, item.id]);
+            }
         } else {
             // Selección simple
-            if (item.isShape) {
+            if (item.isGroup) {
+                setSelectedGroupId(item.id);
+            } else if (item.isShape) {
                 setSelectedShapeId(item.id);
             } else {
                 setSelectedPlacementId(item.id);
