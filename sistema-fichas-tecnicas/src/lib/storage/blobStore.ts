@@ -59,27 +59,29 @@ async function getOpfsFolder(): Promise<FileSystemDirectoryHandle | null> {
 
 /** Guarda un blob en OPFS */
 async function saveToOPFS(id: string, blob: Blob): Promise<void> {
+  const safeId = id.replace(/[^a-z0-9]/gi, '_').toLowerCase();
   try {
     const folder = await getOpfsFolder();
     if (!folder) return saveBlobToIDB(id, blob); // fallback a IDB si no hay OPFS
 
-    const fileHandle = await folder.getFileHandle(id, { create: true });
+    const fileHandle = await folder.getFileHandle(safeId, { create: true });
     const writable = await fileHandle.createWritable();
     await writable.write(blob);
     await writable.close();
   } catch (error) {
-    console.warn(`⚠️ Error guardando en OPFS (${id}):`, error);
+    console.warn(`⚠️ Error guardando en OPFS (${id} -> ${safeId}):`, error);
     await saveBlobToIDB(id, blob); // fallback
   }
 }
 
 /** Carga un blob desde OPFS */
 async function loadFromOPFS(id: string): Promise<Blob | null> {
+  const safeId = id.replace(/[^a-z0-9]/gi, '_').toLowerCase();
   try {
     const folder = await getOpfsFolder();
     if (!folder) return loadBlobFromIDB(id);
 
-    const fileHandle = await folder.getFileHandle(id);
+    const fileHandle = await folder.getFileHandle(safeId);
     const file = await fileHandle.getFile();
     return file; // File extiende Blob — compatible directo
   } catch {
@@ -90,10 +92,11 @@ async function loadFromOPFS(id: string): Promise<Blob | null> {
 
 /** Elimina un blob de OPFS */
 async function deleteFromOPFS(id: string): Promise<void> {
+  const safeId = id.replace(/[^a-z0-9]/gi, '_').toLowerCase();
   try {
     const folder = await getOpfsFolder();
     if (!folder) { deleteBlobFromIDB(id); return; }
-    await folder.removeEntry(id);
+    await folder.removeEntry(safeId);
   } catch {
     deleteBlobFromIDB(id);
   }
@@ -290,6 +293,8 @@ export class BlobStore {
 
   /** Obtiene la URL de un blob para <img src={...}> */
   getUrl(blobId: string): string {
+    if (!blobId || blobId.includes('url=undefined')) return '';
+
     const entry = this.memoryMap.get(blobId);
     if (entry) {
       this.touchLRU(blobId);
@@ -314,12 +319,77 @@ export class BlobStore {
     return null;
   }
 
-  /** Carga un blob de disco a RAM si fue eviccionado */
+  /** Carga un blob de disco a RAM si fue eviccionado, o lo descarga si es una URL */
   async ensureLoaded(blobId: string): Promise<string> {
+    if (!blobId || blobId.includes('url=undefined')) return '';
+
     const existing = this.memoryMap.get(blobId);
     if (existing) {
       this.touchLRU(blobId);
       return existing.url;
+    }
+
+    // SI ES UNA URL DE PROXY/REMOTA: Descargar y guardar localmente
+    if (blobId.startsWith('/') || blobId.startsWith('http')) {
+      try {
+        const response = await fetch(blobId);
+        if (response.ok) {
+          const blob = await response.blob();
+          // Validar que sea una imagen real
+          if (blob.size > 100 && blob.type.startsWith('image/')) {
+            await this.store(blob, blobId);
+            return this.getUrl(blobId);
+          }
+        }
+      } catch (error) {
+        // silencioso - intentamos el fallback abajo
+      }
+
+      // FALLBACK: Si es una URL de proxy-image y falló, intentar GAS directo desde el cliente
+      if (blobId.includes('proxy-image')) {
+        try {
+          const url = new URL(blobId, window.location.origin);
+          const filename = url.searchParams.get('filename');
+          if (filename) {
+            const gasUrl = (window as any).__NEXT_DATA__?.props?.pageProps?.gasUrl 
+              || process.env.NEXT_PUBLIC_GAS_URL 
+              || '';
+            const token = (window as any).__NEXT_DATA__?.props?.pageProps?.gasToken
+              || process.env.NEXT_PUBLIC_SECRET_TOKEN
+              || '';
+            
+            if (gasUrl) {
+              console.log(`🔄 BlobStore: Intentando GAS directo para ${filename}...`);
+              const gasResponse = await fetch(gasUrl, {
+                method: 'POST',
+                mode: 'cors',
+                body: JSON.stringify({ token, action: 'download', filename })
+              });
+              if (gasResponse.ok) {
+                const result = await gasResponse.json();
+                if (result.success && result.base64) {
+                  let b64 = result.base64;
+                  const mime = result.mimeType || 'image/jpeg';
+                  if (!b64.startsWith('data:')) {
+                    b64 = `data:${mime};base64,${b64}`;
+                  }
+                  // Convertir data URL a Blob y almacenar
+                  const fetchBlob = await fetch(b64);
+                  const blob = await fetchBlob.blob();
+                  await this.store(blob, blobId);
+                  console.log(`✅ BlobStore: GAS directo exitoso para ${filename}`);
+                  return this.getUrl(blobId);
+                }
+              }
+            }
+          }
+        } catch (gasError) {
+          console.warn(`⚠️ BlobStore: GAS directo falló para ${blobId}`);
+        }
+      }
+
+      console.warn(`⚠️ BlobStore: No se encontró ${blobId}`);
+      return '';
     }
 
     // Cargar desde OPFS (o IDB fallback)

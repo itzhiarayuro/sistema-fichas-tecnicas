@@ -148,21 +148,42 @@ const defaultTemplates: Template[] = [
 // Custom storage to handle Map serialization
 const mapStorage = {
   getItem: (name: string) => {
-    const str = localStorage.getItem(name);
-    if (!str) return null;
-    const parsed = JSON.parse(str);
-    // Convert arrays back to Maps
-    if (parsed.state) {
-      if (parsed.state.pozos) {
-        parsed.state.pozos = new Map(parsed.state.pozos);
+    try {
+      const str = localStorage.getItem(name);
+      if (!str) return null;
+      const parsed = JSON.parse(str);
+      // Convert arrays back to Maps
+      if (parsed.state) {
+        if (parsed.state.pozos) {
+          // Check if it's a legacy array of objects (not key-value pairs)
+          if (Array.isArray(parsed.state.pozos) && parsed.state.pozos.length > 0 && !Array.isArray(parsed.state.pozos[0])) {
+            parsed.state.pozos = new Map(parsed.state.pozos.map((p: any) => [p.id, p]));
+          } else {
+            parsed.state.pozos = new Map(parsed.state.pozos);
+          }
+        } else {
+            parsed.state.pozos = new Map();
+        }
+
+        if (parsed.state.photos) {
+          // Check if it's a legacy array of objects
+          if (Array.isArray(parsed.state.photos) && parsed.state.photos.length > 0 && !Array.isArray(parsed.state.photos[0])) {
+            parsed.state.photos = new Map(parsed.state.photos.map((p: any) => [p.id, p]));
+          } else {
+            parsed.state.photos = new Map(parsed.state.photos);
+          }
+        } else {
+            parsed.state.photos = new Map();
+        }
+        
+        // Re-inicializar caché vacía (se poblará al cargar/indexar)
+        parsed.state.photosByCodeCache = new Map();
       }
-      if (parsed.state.photos) {
-        parsed.state.photos = new Map(parsed.state.photos);
-      }
-      // Re-inicializar caché vacía (se poblará al cargar/indexar)
-      parsed.state.photosByCodeCache = new Map();
+      return parsed;
+    } catch (e) {
+      console.error('Error parsing global store from local storage', e);
+      return null;
     }
-    return parsed;
   },
   setItem: (name: string, value: { state: any }) => {
     const state = value.state as GlobalState;
@@ -392,8 +413,9 @@ export const useGlobalStore = create<GlobalState>()(
         config: state.config,
         templates: state.templates,
         guidedMode: state.guidedMode,
-        uploadedImages: state.uploadedImages,
-        // Don't persist pozos and photos - they should be reloaded
+        pozos: state.pozos,
+        photos: state.photos,
+        // No persistir uploadedImages para evitar exceder el límite de cuota (Base64 es muy pesado)
       }),
     }
   )

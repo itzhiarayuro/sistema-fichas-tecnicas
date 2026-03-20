@@ -335,7 +335,7 @@ export async function drawPhotoGrid(
  * Extrae datos de tuberías del pozo en formato tabla
  */
 export function extractTuberiasData(pozo: Pozo): string[][] {
-    const tuberias = pozo.tuberias?.tuberias || [];
+    const tuberias = (pozo.tuberias?.tuberias || []).filter(t => t !== null);
     return tuberias.map(tub => [
         String(tub.diametro?.value || '-'),
         String(tub.material?.value || '-'),
@@ -350,7 +350,7 @@ export function extractTuberiasData(pozo: Pozo): string[][] {
  * Extrae datos de sumideros del pozo en formato tabla
  */
 export function extractSumiderosData(pozo: Pozo): string[][] {
-    const sumideros = pozo.sumideros?.sumideros || [];
+    const sumideros = (pozo.sumideros?.sumideros || []).filter(s => s !== null);
     return sumideros.map(sum => [
         String(sum.idSumidero?.value || '-'),
         String(sum.tipoSumidero?.value || '-'),

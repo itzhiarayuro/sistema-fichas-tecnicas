@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "site": "sistema-fichas-tecnicas",
     "source": ".",
     "ignore": [
       "firebase.json",

@@ -34,9 +34,11 @@ import type { IndiceFotosEsperadas } from '@/lib/utils/smartPhotoFilter';
 import { processPhotosOnServer, checkServerAvailable } from '@/lib/utils/serverPhotoUploader';
 import { CloudImportModal } from '@/components/upload/CloudImportModal';
 import type { Pozo, FotoInfo } from '@/types';
+import { useMounted } from '@/hooks/useMounted';
 
 export default function UploadPage() {
   const router = useRouter();
+  const isMounted = useMounted();
 
   // Stores
   const { addPozo, addPozosBulk, addPhoto, addPhotosBulk, setCurrentStep, pozos, photos } = useGlobalStore();
@@ -762,9 +764,9 @@ export default function UploadPage() {
   const handleCloudImport = useCallback((importedPozos: Pozo[]) => {
     if (importedPozos.length === 0) return;
 
-    setProcessedPozos(prev => [...prev, ...importedPozos]);
+    // 1. Commit INMEDIATAMENTE al store global para que aparezcan en /pozos
+    addPozosBulk(importedPozos);
 
-    // Extraer fotos si vienen incluidas en el objeto Pozo (o si necesitamos mapearlas)
     const importedPhotos: FotoInfo[] = [];
     importedPozos.forEach(pozo => {
       if (pozo.fotos?.fotos) {
@@ -773,13 +775,21 @@ export default function UploadPage() {
     });
 
     if (importedPhotos.length > 0) {
-      setProcessedPhotos(prev => [...prev, ...importedPhotos]);
+      addPhotosBulk(importedPhotos);
     }
+
+    // 2. Actualizar estado local por si el usuario quiere seguir cargando archivos
+    setProcessedPozos(prev => [...prev, ...importedPozos]);
+    setProcessedPhotos(prev => [...prev, ...importedPhotos]);
 
     setCanContinue(true);
     setDropZoneStatus('success');
-    showSuccess(`Importados ${importedPozos.length} pozos desde la nube`);
-  }, [showSuccess]);
+
+    showSuccess(
+      `Importados ${importedPozos.length} registros y ${importedPhotos.length} fotos desde la nube. ` +
+      `Ya puedes verlos en la lista de pozos.`
+    );
+  }, [addPozosBulk, addPhotosBulk, showSuccess]);
 
   /**
    * Reinicia la carga
@@ -832,11 +842,23 @@ export default function UploadPage() {
                 <div className="flex-1 text-center md:text-left">
                   <h2 className="text-xl font-bold flex items-center justify-center md:justify-start gap-2">
                     <span className="text-2xl">⚡</span>
-                    Importación Instantánea (V2)
+                    Importación Instantánea
                   </h2>
                   <p className="mt-1 text-amber-50 text-sm">
                     Conéctate directamente a la App de Catastro UT para importar registros y fotos sin usar archivos Excel.
                   </p>
+
+                  {/* Status de datos en memoria */}
+                  {(isMounted && pozos.size > 0) && (
+                    <div className="mt-3 flex gap-2 justify-center md:justify-start">
+                      <span className="bg-amber-400/30 text-white px-2 py-1 rounded-lg text-xs font-bold border border-white/20">
+                        📦 {pozos.size} registros listos
+                      </span>
+                      <span className="bg-amber-400/30 text-white px-2 py-1 rounded-lg text-xs font-bold border border-white/20">
+                        📸 {photos.size} fotos asociadas
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <button
                   onClick={() => setIsCloudModalOpen(true)}
@@ -1022,7 +1044,7 @@ export default function UploadPage() {
         )}
 
         {/* Advertencia si hay datos existentes */}
-        {hasExistingData && (
+        {(isMounted && hasExistingData) && (
           <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
             <div className="flex items-start gap-3">
               <svg className="w-5 h-5 text-yellow-600 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1127,7 +1149,7 @@ export default function UploadPage() {
           </button>
 
           <div className="flex items-center gap-3">
-            {hasExistingData && (
+            {(isMounted && hasExistingData) && (
               <button
                 type="button"
                 onClick={() => router.push('/pozos')}

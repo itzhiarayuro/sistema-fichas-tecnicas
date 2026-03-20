@@ -7,8 +7,8 @@
 
 import { useState, useEffect } from 'react';
 import type { FichaDesignVersion } from '@/types/fichaDesign';
-import { AVAILABLE_FIELDS } from '@/types/fichaDesign';
 import { useGlobalStore } from '@/stores';
+import { useFieldsStore } from '@/stores/fieldsStore';
 import { blobStore } from '@/lib/storage/blobStore';
 
 interface DesignPreviewProps {
@@ -20,6 +20,8 @@ interface DesignPreviewProps {
 type PreviewMode = 'design' | 'data';
 
 export function DesignPreview({ version, isOpen, onClose }: DesignPreviewProps) {
+    const { getAllFields } = useFieldsStore();
+    const allFields = getAllFields();
     const pozos = useGlobalStore((state) => state.pozos);
     const [selectedPozoId, setSelectedPozoId] = useState<string | null>(null);
     const [previewMode, setPreviewMode] = useState<PreviewMode>('design');
@@ -390,7 +392,7 @@ export function DesignPreview({ version, isOpen, onClose }: DesignPreviewProps) 
 
                             {/* Render Field Placements */}
                             {version.placements.map((placement) => {
-                                const field = AVAILABLE_FIELDS.find(f => f.id === placement.fieldId);
+                                 const field = allFields.find(f => f.id === placement.fieldId);
                                 const isPhoto = placement.fieldId.startsWith('foto_');
 
                                 // En modo diseño, mostrar el nombre del campo o placeholder
@@ -507,7 +509,7 @@ export function DesignPreview({ version, isOpen, onClose }: DesignPreviewProps) 
                                     if (!version || !selectedPozo) return;
                                     try {
                                         const { generatePdfFromDesign } = await import('@/lib/pdf/designBasedPdfGenerator');
-                                        const result = await generatePdfFromDesign(version, selectedPozo);
+                                        const result = await generatePdfFromDesign(version, selectedPozo, allFields);
                                         if (result.success && result.blob) {
                                             const url = URL.createObjectURL(result.blob);
                                             const link = document.createElement('a');

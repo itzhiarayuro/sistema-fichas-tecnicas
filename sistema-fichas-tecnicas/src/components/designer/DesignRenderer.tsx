@@ -4,7 +4,7 @@
 
 'use client';
 
-import { FichaDesignVersion } from '@/types/fichaDesign';
+import { FichaDesignVersion, AvailableField } from '@/types/fichaDesign';
 import { Pozo } from '@/types/pozo';
 import { blobStore } from '@/lib/storage/blobStore';
 import { FIELD_PATHS } from '@/constants/fieldMapping';
@@ -12,10 +12,11 @@ import { FIELD_PATHS } from '@/constants/fieldMapping';
 interface DesignRendererProps {
     design: FichaDesignVersion;
     pozo: Pozo;
+    availableFields?: AvailableField[];
     zoom?: number;
 }
 
-export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) {
+export function DesignRenderer({ design, pozo, availableFields, zoom = 1 }: DesignRendererProps) {
     // Helper para obtener valor de ruta (maneja anidamiento y arrays)
     const getValueByPath = (obj: any, path: string) => {
         if (!path) return undefined;
@@ -35,11 +36,24 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
         }
     };
 
+    // Helper para verificar si un grupo tiene fotos asignadas
+    const checkGroupHasPhotos = (groupId: string) => {
+        const groupElements = [
+            ...design.placements.filter(p => p.groupId === groupId),
+            ...design.shapes.filter(s => s.groupId === groupId)
+        ];
+
+        return groupElements.some(el => {
+            if (!(el as any).fieldId?.startsWith('foto_')) return false;
+            const val = getFieldValue((el as any).fieldId);
+            return val && val !== '-';
+        });
+    };
+
     // Helper para obtener valor de campo con fallback
     const getFieldValue = (fieldId: string) => {
         // CASO ESPECIAL: Fotos específicas por nomenclatura
         if (fieldId.startsWith('foto_') && !/^\d+/.test(fieldId.split('_')[1])) {
-            // ... existing photo logic ...
             const codeMap: Record<string, string> = {
                 'foto_panoramica': 'P', 'foto_tapa': 'T', 'foto_interior': 'I',
                 'foto_acceso': 'A', 'foto_fondo': 'F', 'foto_medicion': 'M',
@@ -61,7 +75,7 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
                     found = pozo.fotos?.fotos?.find(f => {
                         const filename = String(f.filename || '').toUpperCase().split('.')[0]; // Sin extensión
 
-                        // REGLA: Omitir si termina en AT o Z (Seguimos respetando esto)
+                        // REGLA: Omitir si termina en AT o Z
                         if (filename.endsWith('-AT') || filename.endsWith('_AT') ||
                             filename.endsWith('-Z') || filename.endsWith('_Z')) {
                             return false;
@@ -71,29 +85,15 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
                         const subcat = String(f.subcategoria || '').toUpperCase();
                         if (subcat === upperTarget) return true;
 
-                        // 2. Lógica por Categoría (Casos Especiales del listado)
-
-                        // PANORÁMICAS
-                        if (upperTarget === 'P') {
-                            return filename === 'P' || filename === 'F-P' || filename === 'S-P' || filename.includes('-P');
-                        }
-
-                        // TAPAS
-                        if (upperTarget === 'T') {
-                            return filename === 'T' || filename === 'F-T' || filename === 'TT' || filename.includes('-T');
-                        }
-
-                        // INTERNAS
-                        if (upperTarget === 'I') {
-                            return filename === 'I' || filename === 'F-I' || filename === 'II' ||
-                                /^I\d?$/.test(filename) || /^I\(\d+\)$/.test(filename) || filename.includes('-I');
-                        }
+                        // 2. Lógica por Categoría
+                        if (upperTarget === 'P') return filename === 'P' || filename === 'F-P' || filename === 'S-P' || filename.includes('-P');
+                        if (upperTarget === 'T') return filename === 'T' || filename === 'F-T' || filename === 'TT' || filename.includes('-T');
+                        if (upperTarget === 'I') return filename === 'I' || filename === 'F-I' || filename === 'II' || /^I\d?$/.test(filename) || filename.includes('-I');
 
                         // ENTRADAS
                         if (upperTarget.startsWith('E')) {
                             const num = upperTarget.replace('E', '');
                             if (num === '1' && (filename === 'E-T' || filename.includes('-E-T'))) return true;
-                            // Busca "E1" o "E-1" o "E1-T" o "F-E1-T"
                             const regex = new RegExp(`(^|[\\-_])E${num}([\\-_\\.]|$)`);
                             return regex.test(filename) || filename.includes(`F-E${num}`);
                         }
@@ -101,33 +101,20 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
                         // SALIDAS
                         if (upperTarget.startsWith('S') && !upperTarget.startsWith('SUM')) {
                             const num = upperTarget.replace('S', '');
-                            if (num === '1') {
-                                if (filename === 'S' || filename === 'S-T' || filename === 'S-HS' || filename === 'F-S-T' || filename.includes('-S-T') || filename.includes('-S-HS') || new RegExp('(^|[\\-_])S([\\-_\\.]|$)').test(filename)) return true;
-                            }
-
-                            // Solo coincide si NO es un tag secundario de un Sumidero (ej: evitar que S1 en E2-T-S1 sea tomado como Salida 1)
-                            if (filename.includes('-E')) {
-                                return false;
-                            }
-
+                            if (num === '1' && (filename === 'S' || filename === 'S-T' || filename === 'S-HS' || filename.includes('-S-T'))) return true;
+                            if (filename.includes('-E')) return false;
                             const regex = new RegExp(`(^|[\\-_])S${num}([\\-_\\.]|$)`);
-                            return regex.test(filename) || regex.test(filename.replace(/-/g, '')) || filename.includes(`F-S${num}`);
+                            return regex.test(filename) || filename.includes(`F-S${num}`);
                         }
 
                         // SUMIDEROS
                         if (upperTarget.startsWith('SUM')) {
                             const num = upperTarget.replace('SUM', '');
-                            // Los sumideros pueden venir como SUM1 o como S1
                             const regexSum = new RegExp(`(^|[\\-_])SUM${num}([\\-_\\.]|$)`);
-                            const regexS = new RegExp(`(^|[\\-_])S${num}([\\-_\\.]|$)`);
-                            return regexSum.test(filename) || regexS.test(filename);
+                            return regexSum.test(filename);
                         }
 
-                        // ESQUEMAS / ARGIS
-                        if (upperTarget === 'L') {
-                            return filename.includes('_ARGIS') || filename === 'L';
-                        }
-
+                        if (upperTarget === 'L') return filename.includes('_ARGIS') || filename === 'L';
                         return false;
                     });
                 }
@@ -136,19 +123,17 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
             }
         }
 
-        const path = FIELD_PATHS[fieldId];
-
         // REGLA ESPECIAL: Campos de Entradas/Salidas/Sumideros específicas
         if (fieldId.startsWith('ent_') || fieldId.startsWith('sal_') || fieldId.startsWith('sum_')) {
-            const parts = fieldId.split('_'); // [ent, 1, diametro]
-            const typePrefix = parts[0]; // ent, sal, sum
-            const orderNum = parts[1]; // 1, 2, ...
-            const fieldName = parts.slice(2).join('_'); // id, diametro, etc.
+            const parts = fieldId.split('_'); 
+            const typePrefix = parts[0]; 
+            const orderNum = parts[1]; 
+            const fieldName = parts.slice(2).join('_'); 
 
             if (typePrefix === 'ent' || typePrefix === 'sal') {
                 const targetType = typePrefix === 'ent' ? 'entrada' : 'salida';
-                const pipe = pozo.tuberias?.tuberias?.find(t =>
-                    String(t.tipoTuberia?.value || '').toLowerCase() === targetType &&
+                const pipe = (pozo.tuberias?.tuberias || []).find(t =>
+                    t && String(t.tipoTuberia?.value || '').toLowerCase() === targetType &&
                     String(t.orden?.value) === orderNum
                 );
                 if (!pipe) return '-';
@@ -160,14 +145,14 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
                 const targetField = pipeFieldMap[fieldName] || fieldName;
                 return (pipe as any)[targetField]?.value || '-';
             } else if (typePrefix === 'sum') {
-                // Lógica robusta para sumideros: buscar por numeroEsquema (S1, E1, 1) or index
                 const num = parseInt(orderNum);
-                const sumidero = pozo.sumideros?.sumideros?.find(s => {
+                const sumidero = (pozo.sumideros?.sumideros || []).find(s => {
+                    if (!s) return false;
                     const esquema = String(s.numeroEsquema?.value || '').toUpperCase();
                     if (!esquema) return false;
-                    const esquemaNum = esquema.replace(/\D/g, ''); // "S1" -> "1"
+                    const esquemaNum = esquema.replace(/\D/g, '');
                     return esquemaNum === orderNum || parseInt(esquemaNum) === num;
-                }) || pozo.sumideros?.sumideros?.[num - 1];
+                }) || (pozo.sumideros?.sumideros?.[num - 1] || undefined);
 
                 if (!sumidero) return '-';
 
@@ -180,16 +165,22 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
             }
         }
 
-        if (!path) return '-';
+        // Caso general por FIELD_PATHS o AvailableField
+        const customField = availableFields?.find(f => f.id === fieldId);
+        const path = FIELD_PATHS[fieldId] || customField?.fieldPath;
+        
+        if (path) {
+            const val = getValueByPath(pozo, path);
+            return val !== undefined && val !== null ? val : '-';
+        }
 
-        const value = getValueByPath(pozo, path);
-        if (value === undefined || value === null) return '-';
-        return value;
+        return '-';
     };
 
     // Helper para obtener enlace de campo
     const getFieldLink = (fieldId: string) => {
-        const path = FIELD_PATHS[fieldId];
+        const customField = availableFields?.find(f => f.id === fieldId);
+        const path = FIELD_PATHS[fieldId] || customField?.fieldPath;
         if (!path) return undefined;
 
         const linkPath = path.replace('.value', '.link');
@@ -234,34 +225,42 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
             if (name.includes('entrada') || name.includes('salida')) {
                 const match = name.match(/(entrada|salida)\s*(\d+)/);
                 if (match) {
-                    const type = match[1]; // entrada o salida
-                    const num = match[2]; // 1, 2...
+                    const type = match[1];
+                    const num = match[2];
 
-                    // Verificar si existe la tubería
-                    const pipe = pozo.tuberias?.tuberias?.find(t =>
-                        String(t.tipoTuberia?.value || '').toLowerCase() === (type === 'entrada' ? 'entrada' : 'salida') &&
+                    const pipe = (pozo.tuberias?.tuberias || []).find(t =>
+                        t && String(t.tipoTuberia?.value || '').toLowerCase() === type &&
                         String(t.orden?.value) === num
                     );
 
-                    if (!pipe) shouldHide = true;
+                    const hasTechData = !!pipe;
+                    const hasPhotos = checkGroupHasPhotos(group.id);
+
+                    // SUPREME LOGIC: Ambos deben existir (Request)
+                    if (!hasTechData || !hasPhotos) {
+                        shouldHide = true;
+                    }
                 }
             } else if (name.includes('sumidero')) {
                 const match = name.match(/sumidero\s*(\d+)/);
                 if (match) {
-                    const orderNum = match[1];
-                    const num = parseInt(orderNum);
-                    const sumidero = pozo.sumideros?.sumideros?.find(s => {
+                    const num = parseInt(match[1]);
+                    const sumidero = (pozo.sumideros?.sumideros || []).find(s => {
+                        if (!s) return false;
                         const esquema = String(s.numeroEsquema?.value || '').toUpperCase();
                         if (!esquema) return false;
                         const esquemaNum = esquema.replace(/\D/g, '');
-                        return esquemaNum === orderNum || parseInt(esquemaNum) === num;
-                    }) || pozo.sumideros?.sumideros?.[num - 1];
-                    if (!sumidero) shouldHide = true;
+                        return esquemaNum === match[1] || parseInt(esquemaNum) === num;
+                    }) || (pozo.sumideros?.sumideros?.[num - 1] || undefined);
+                    
+                    const hasTechData = !!sumidero;
+                    const hasPhotos = checkGroupHasPhotos(group.id);
+                    
+                    // SUPREME LOGIC: Ambos deben existir (Request)
+                    if (!hasTechData || !hasPhotos) {
+                        shouldHide = true;
+                    }
                 }
-            } else if (name.includes('foto')) {
-                // Si es un grupo de foto, ejemplo "Foto Entrada 1"
-                // Solo lo ocultamos si el campo de foto correspondiente no tiene valor
-                // (Opcional, pero útil si el usuario agrupa la foto con un recuadro)
             }
 
             groupVisibilityMap.set(group.id, !shouldHide);
@@ -386,7 +385,7 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
                                 <span>Batea</span>
                                 <span>Z</span>
                             </div>
-                            {(pozo.tuberias?.tuberias || []).slice(0, 10).map((t, idx) => (
+                            {(pozo.tuberias?.tuberias || []).filter(t => t !== null).slice(0, 10).map((t, idx) => (
                                 <div key={idx} className="grid grid-cols-6 border-b border-gray-200 p-1 last:border-0 bg-white">
                                     <span>{t.orden?.value || idx + 1}</span>
                                     <span>{t.diametroPulgadas?.value || t.diametro?.value || '-'}</span>
@@ -396,7 +395,7 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
                                     <span>{t.cota?.value || t.z?.value || '-'}</span>
                                 </div>
                             ))}
-                            {(pozo.tuberias?.tuberias?.length || 0) === 0 && <div className="p-2 text-center text-gray-400 italic">Sin tuberías</div>}
+                            {(pozo.tuberias?.tuberias || []).filter(t => t !== null).length === 0 && <div className="p-2 text-center text-gray-400 italic">Sin tuberías</div>}
                         </div>
                     ) : (
                         <>
@@ -422,7 +421,7 @@ export function DesignRenderer({ design, pozo, zoom = 1 }: DesignRendererProps) 
                                             textTransform: 'uppercase'
                                         }}
                                     >
-                                        {placement.customLabel || placement.fieldId}
+                                        {placement.customLabel || availableFields?.find(f => f.id === placement.fieldId)?.label || placement.fieldId}
                                     </span>
                                 </div>
                             )}

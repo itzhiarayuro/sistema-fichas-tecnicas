@@ -1,12 +1,9 @@
-/**
- * FieldsPanel - Panel intuitivo de campos arrastables
- * Diseño simplificado: ícono + nombre de campo visible, arrastrable al canvas
- */
-
 'use client';
 
-import { useState, useMemo } from 'react';
-import { AVAILABLE_FIELDS, type AvailableField, type FieldCategory } from '@/types/fichaDesign';
+import { useState, useMemo, useEffect } from 'react';
+import type { AvailableField, FieldCategory } from '@/types/fichaDesign';
+import { useFieldsStore } from '@/stores/fieldsStore';
+import { CreateFieldModal } from './CreateFieldModal';
 
 const CATEGORY_INFO: Record<FieldCategory, { label: string; icon: string; color: string; bg: string }> = {
     pozo: { label: 'Pozo', icon: '🔵', color: 'text-blue-700', bg: 'bg-blue-50 border-blue-200 hover:bg-blue-100' },
@@ -27,6 +24,15 @@ export function FieldsPanel({ onFieldDragStart, onFieldSelect }: FieldsPanelProp
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCategory, setSelectedCategory] = useState<FieldCategory | 'all'>('all');
     const [expandedCategories, setExpandedCategories] = useState<Set<FieldCategory>>(new Set(['pozo']));
+    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+
+    // Store logic
+    const { getAllFields, fetchDynamicFields, isLoading } = useFieldsStore();
+    const allFields = getAllFields();
+
+    useEffect(() => {
+        fetchDynamicFields();
+    }, [fetchDynamicFields]);
 
     const toggleCategory = (cat: FieldCategory) => {
         setExpandedCategories(prev => {
@@ -42,7 +48,7 @@ export function FieldsPanel({ onFieldDragStart, onFieldSelect }: FieldsPanelProp
 
     // Filtrado de campos
     const filteredFields = useMemo(() => {
-        let fields = AVAILABLE_FIELDS;
+        let fields = allFields;
 
         if (selectedCategory !== 'all') {
             fields = fields.filter(f => f.category === selectedCategory);
@@ -57,7 +63,7 @@ export function FieldsPanel({ onFieldDragStart, onFieldSelect }: FieldsPanelProp
         }
 
         return fields;
-    }, [searchTerm, selectedCategory]);
+    }, [allFields, searchTerm, selectedCategory]);
 
     // Agrupar por categoría
     const groupedFields = useMemo(() => {
@@ -86,22 +92,40 @@ export function FieldsPanel({ onFieldDragStart, onFieldSelect }: FieldsPanelProp
 
     const categoryCounts = useMemo(() => {
         const counts: Record<FieldCategory, number> = { pozo: 0, tuberias: 0, entradas: 0, salidas: 0, sumideros: 0, fotos: 0, otros: 0 };
-        AVAILABLE_FIELDS.forEach(f => counts[f.category]++);
+        allFields.forEach(f => counts[f.category]++);
         return counts;
-    }, []);
+    }, [allFields]);
 
     return (
         <aside className="w-full bg-white border-r border-gray-200 flex flex-col h-full">
+            {/* Modal de creación */}
+            <CreateFieldModal 
+                isOpen={isCreateModalOpen} 
+                onClose={() => setIsCreateModalOpen(false)} 
+            />
+
             {/* Header compacto */}
             <div className="p-3 border-b border-gray-200 bg-gradient-to-r from-primary/5 to-primary/10">
                 <div className="flex items-center justify-between mb-2">
-                    <h2 className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
-                        <svg className="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                    <h2 className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5 font-bold">
+                        <svg className="w-4 h-4 text-primary font-bold" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
                         </svg>
                         Campos
                     </h2>
-                    <span className="text-[10px] text-gray-400 bg-white px-2 py-0.5 rounded-full">{filteredFields.length} disponibles</span>
+                    <div className="flex items-center gap-2">
+                        {isLoading && (
+                             <span className="w-3 h-3 flex items-center justify-center animate-spin border-2 border-primary border-t-transparent rounded-full font-bold"></span>
+                        )}
+                        <button 
+                            onClick={() => setIsCreateModalOpen(true)}
+                            className="bg-primary hover:bg-primary-dark text-white p-1 rounded-md shadow-sm transition-all flex items-center gap-1 group font-bold"
+                            title="Añadir Campo Dinámico desde Firebase"
+                        >
+                            <span className="text-[10px] uppercase font-bold px-1 hidden group-hover:block transition-all font-bold">Nuevo Campo</span>
+                            <span className="text-sm font-bold">➕</span>
+                        </button>
+                    </div>
                 </div>
 
                 {/* Búsqueda */}
@@ -125,10 +149,10 @@ export function FieldsPanel({ onFieldDragStart, onFieldSelect }: FieldsPanelProp
             </div>
 
             {/* Filtros rápidos como tabs */}
-            <div className="flex border-b border-gray-200 bg-gray-50 overflow-x-auto">
+            <div className="flex border-b border-gray-200 bg-gray-50 overflow-x-auto text-[10px] font-bold">
                 <button
                     onClick={() => setSelectedCategory('all')}
-                    className={`flex-1 min-w-max px-3 py-2 text-xs font-medium transition-all border-b-2 ${selectedCategory === 'all'
+                    className={`flex-1 min-w-max px-3 py-2 text-xs font-medium transition-all border-b-2 font-bold ${selectedCategory === 'all'
                         ? 'border-primary text-primary bg-white'
                         : 'border-transparent text-gray-500 hover:text-gray-700'
                         }`}
@@ -139,13 +163,13 @@ export function FieldsPanel({ onFieldDragStart, onFieldSelect }: FieldsPanelProp
                     <button
                         key={cat}
                         onClick={() => setSelectedCategory(cat)}
-                        className={`flex-1 min-w-max px-3 py-2 text-xs font-medium transition-all border-b-2 flex items-center justify-center gap-1 ${selectedCategory === cat
+                        className={`flex-1 min-w-max px-3 py-2 text-xs font-medium transition-all border-b-2 flex items-center justify-center gap-1 font-bold ${selectedCategory === cat
                             ? 'border-primary text-primary bg-white'
                             : 'border-transparent text-gray-500 hover:text-gray-700'
                             }`}
                     >
-                        <span>{CATEGORY_INFO[cat].icon}</span>
-                        <span className="hidden sm:inline">{categoryCounts[cat]}</span>
+                        <span className="font-bold">{CATEGORY_INFO[cat].icon}</span>
+                        <span className="hidden sm:inline font-bold">{categoryCounts[cat]}</span>
                     </button>
                 ))}
             </div>
@@ -241,7 +265,7 @@ export function FieldsPanel({ onFieldDragStart, onFieldSelect }: FieldsPanelProp
 
             {/* Tip de ayuda */}
             <div className="p-2 border-t border-gray-100 bg-gradient-to-r from-blue-50 to-indigo-50">
-                <p className="text-[10px] text-gray-500 text-center flex items-center justify-center gap-1">
+                <p className="text-[10px] text-gray-500 text-center flex items-center justify-center gap-1 font-bold">
                     <span>💡</span>
                     <span>Arrastra los campos hacia el canvas de diseño</span>
                 </p>

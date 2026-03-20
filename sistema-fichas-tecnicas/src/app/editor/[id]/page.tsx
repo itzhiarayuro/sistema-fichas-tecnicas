@@ -52,6 +52,8 @@ import { resourceManager } from '@/lib/managers/resourceManager';
 import { recoverState } from '@/lib/state/integrity';
 import { StateGuard } from '@/components/editor/StateGuard';
 import type { FieldValue, FichaState, FichaCustomization } from '@/types/ficha';
+import { useFieldsStore } from '@/stores/fieldsStore';
+import { useMounted } from '@/hooks/useMounted';
 
 // Helper para crear FieldValue desde string
 function createFieldValue(value: string, source: FieldValue['source'] = 'excel'): FieldValue {
@@ -142,6 +144,7 @@ export default function EditorPage() {
   const params = useParams();
   const router = useRouter();
   const pozoId = params.id as string;
+  const isMounted = useMounted();
 
   const pozo = useGlobalStore((state) => state.getPozoById(pozoId));
   const setCurrentStep = useGlobalStore((state) => state.setCurrentStep);
@@ -765,6 +768,20 @@ export default function EditorPage() {
     }
   }, [pozoId, reinitialize, addToast]);
 
+  // Evitar desajustes de hidratación (hydration mismatch)
+  if (!isMounted) {
+    return (
+      <AppShell>
+        <div className="flex items-center justify-center h-[calc(100vh-8rem)]">
+          <div className="animate-pulse flex flex-col items-center">
+            <div className="h-12 w-12 bg-gray-200 rounded-full mb-4"></div>
+            <div className="h-4 w-32 bg-gray-200 rounded"></div>
+          </div>
+        </div>
+      </AppShell>
+    );
+  }
+
   // Si no hay pozo, mostrar mensaje
   if (!pozo) {
     return (
@@ -908,15 +925,17 @@ export default function EditorPage() {
           // Si hay un diseño personalizado, usar designBasedPdfGenerator
           if (customDesign) {
             const { generatePdfFromDesign } = await import('@/lib/pdf/designBasedPdfGenerator');
-            result = await generatePdfFromDesign(customDesign, enrichedPozo);
+            const allFields = useFieldsStore.getState().getAllFields();
+            result = await generatePdfFromDesign(customDesign, enrichedPozo, allFields);
           } else {
             // Si no hay diseño personalizado, usar pdfMakeGenerator
             const { pdfMakeGenerator } = await import('@/lib/pdf/pdfMakeGenerator');
             result = await pdfMakeGenerator.generatePDF(syncedState || initialFichaState!, enrichedPozo, {
               pageNumbers: true,
               includeDate: true,
-              includePhotos: true
-            });
+              includePhotos: true,
+              availableFields: useFieldsStore.getState().getAllFields()
+            } as any);
           }
 
           if (!result.success || !result.blob) {

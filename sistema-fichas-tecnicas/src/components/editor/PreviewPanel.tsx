@@ -18,6 +18,7 @@ import { useMemo, useState, useEffect } from 'react';
 import type { FichaState, FichaSection, FieldValue, FichaCustomization } from '@/types/ficha';
 import type { Pozo, FotoInfo } from '@/types/pozo';
 import { useGlobalStore, useDesignStore, useUIStore } from '@/stores';
+import { useFieldsStore } from '@/stores/fieldsStore';
 import { DesignRenderer } from '@/components/designer';
 import { blobStore } from '@/lib/storage/blobStore';
 
@@ -345,7 +346,7 @@ export function PreviewPanel({
     });
 
     return {
-      principal: todosResultados.filter((f: FotoInfo) => f.categoria === 'PRINCIPAL' || ['general', 'tapa', 'principal'].includes(String(f.tipo || '').toLowerCase())),
+      principal: todosResultados.filter((f: FotoInfo) => (f.categoria === 'PRINCIPAL' || ['general', 'tapa', 'principal'].includes(String(f.tipo || '').toLowerCase())) && !['entrada', 'salida', 'sumidero'].some(k => (f.categoria || '').includes(k.toUpperCase()) || String(f.tipo || '').toLowerCase().includes(k))),
       entradas: todosResultados.filter((f: FotoInfo) => f.categoria === 'ENTRADA' || String(f.tipo || '').toLowerCase().includes('entrada')),
       salidas: todosResultados.filter((f: FotoInfo) => f.categoria === 'SALIDA' || String(f.tipo || '').toLowerCase().includes('salida')),
       sumideros: todosResultados.filter((f: FotoInfo) => f.categoria === 'SUMIDERO' || String(f.tipo || '').toLowerCase().includes('sumidero')),
@@ -361,6 +362,9 @@ export function PreviewPanel({
     ...fotos.sumideros,
     ...fotos.otras,
   ].slice(0, 6), [fotos]);
+
+  const { getAllFields } = useFieldsStore();
+  const allFields = getAllFields();
 
   return (
     <div className="space-y-4">
@@ -400,7 +404,7 @@ export function PreviewPanel({
           style={{ zoom }}
         >
           <div id="preview-print-container" className="bg-white shadow-lg mx-auto">
-            <DesignRenderer design={activeDesign} pozo={pozo} zoom={1} />
+            <DesignRenderer design={activeDesign} pozo={pozo} availableFields={allFields} zoom={1} />
           </div>
         </div>
       ) : (

@@ -13,7 +13,7 @@
 
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useGlobalStore, useUIStore } from '@/stores';
 import { logger } from '@/lib/logger';
@@ -23,10 +23,12 @@ import { AppShell, NextStepIndicator, ProgressBar } from '@/components/layout';
 import { FirebaseSetupBanner } from '@/components/layout/FirebaseSetupBanner';
 import { Pozo } from '@/types';
 import { useDesignStore } from '@/stores/designStore';
-import { useState } from 'react';
+import { useFieldsStore } from '@/stores/fieldsStore';
+import { useMounted } from '@/hooks/useMounted';
 
 export default function PozosPage() {
   const router = useRouter();
+  const isMounted = useMounted();
 
   // Global store
   const pozos = useGlobalStore((state) => state.pozos);
@@ -157,6 +159,9 @@ export default function PozosPage() {
       const customDesign = customTemplates.find(v => v.id === selectedTemplateId);
       const isCustom = !!customDesign && selectedTemplateId !== 'standard';
 
+      // Obtener campos dinámicos del store para pasarlos al generador
+      const allFields = useFieldsStore.getState().getAllFields();
+
       // Generar todos los PDFs
       const pdfBlobs: Array<{ name: string; blob: Blob }> = [];
 
@@ -178,10 +183,129 @@ export default function PozosPage() {
           }
         });
 
-        const enrichedPozo = {
+        // Saneamiento de fotos: Asegurar que TODAS las fotos remotas tengan una URL de proxy válida
+        const saneFotos = todasLasFotos.map(f => {
+          const currentUrl = f.blobId || '';
+          const driveId = (f as any).driveId || (f.id.includes('PHOTO-') ? f.id.replace('PHOTO-', '') : null);
+          const filename = f.filename || 'foto.jpg';
+
+          // Si es un blob muerto o una URL incompleta, reconstruir a partir de la mejor información disponible
+          if (currentUrl.startsWith('blob:') || (currentUrl.includes('proxy-image') && !currentUrl.includes('driveId'))) {
+              
+              // Intentar extraer driveId de la URL actual si existe pero está mal formateada
+              let finalDriveId = driveId;
+              if (!finalDriveId && currentUrl.includes('driveId=')) {
+                  const match = currentUrl.match(/driveId=([^&]+)/);
+                  if (match) finalDriveId = match[1];
+              }
+
+              const commonQuery = `filename=${encodeURIComponent(filename)}&pozoId=${pozo.id}`;
+
+              if (finalDriveId) {
+                  return { ...f, blobId: `/api/catastro/proxy-image?driveId=${finalDriveId}&${commonQuery}` };
+              } else if (filename && filename !== 'foto.jpg') {
+                  // Fallback al nombre de archivo si no hay driveId
+                  return { ...f, blobId: `/api/catastro/proxy-image?${commonQuery}` };
+              }
+          }
+          return f;
+        });
+
+        let enrichedPozo = {
           ...pozo,
-          fotos: { ...pozo.fotos, fotos: todasLasFotos }
+          fotos: { ...pozo.fotos, fotos: saneFotos }
         };
+
+        // Debug de URLs de fotos (solo nombres para no saturar)
+        console.log(`📸 Preparando PDF (${pozoId}):`, saneFotos.map(sf => sf.filename));
+
+        // ⚡ PRE-CARGA PARALELA: Cargar todas las fotos remotas en el caché del navegador
+        // antes de que el generador de PDF las necesite. Esto evita timeouts
+        // porque el GAS proxy tarda ~3-5s por foto.
+        const proxyPhotos = saneFotos.filter(f => f.blobId?.startsWith('/api/'));
+        if (proxyPhotos.length > 0) {
+          console.log(`⏳ Pre-cargando ${proxyPhotos.length} fotos en paralelo...`);
+          const preloadStart = Date.now();
+
+          // Función para llamar GAS directamente desde el cliente (fallback si proxy-image falla)
+          const fetchPhotoFromGasDirect = async (filename: string): Promise<string | null> => {
+            const gasUrl = process.env.NEXT_PUBLIC_GAS_URL;
+            const token = process.env.NEXT_PUBLIC_SECRET_TOKEN;
+            if (!gasUrl || !filename) return null;
+            try {
+              const response = await fetch(gasUrl, {
+                method: 'POST',
+                mode: 'cors',
+                body: JSON.stringify({ token, action: 'download', filename })
+              });
+              if (!response.ok) return null;
+              const result = await response.json();
+              if (result.success && result.base64) {
+                // Asegurar formato data URL
+                const b64 = result.base64;
+                if (b64.startsWith('data:')) return b64;
+                const mime = result.mimeType || 'image/jpeg';
+                return `data:${mime};base64,${b64}`;
+              }
+              return null;
+            } catch { return null; }
+          };
+          
+          const preloadResults = await Promise.allSettled(
+            proxyPhotos.map(async (foto) => {
+              try {
+                // Intento 1: via proxy-image API route
+                const response = await fetch(foto.blobId, { cache: 'force-cache' });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const blob = await response.blob();
+                // Validar que el blob sea realmente una imagen (no un error HTML/JSON)
+                if (blob.size < 100 || !blob.type.startsWith('image/')) {
+                  throw new Error(`Invalid blob: size=${blob.size}, type=${blob.type}`);
+                }
+                return new Promise<{ id: string; dataUrl: string }>((resolve, reject) => {
+                  const reader = new FileReader();
+                  reader.onloadend = () => resolve({ id: foto.id, dataUrl: reader.result as string });
+                  reader.onerror = reject;
+                  reader.readAsDataURL(blob);
+                });
+              } catch (proxyErr) {
+                // Intento 2: llamar GAS directamente (como hace el catastro app)
+                console.warn(`⚠️ Proxy falló para ${foto.filename}, intentando GAS directo...`);
+                const directDataUrl = await fetchPhotoFromGasDirect(foto.filename || '');
+                if (directDataUrl) {
+                  console.log(`✅ GAS directo exitoso para ${foto.filename}`);
+                  return { id: foto.id, dataUrl: directDataUrl };
+                }
+                console.warn(`❌ GAS directo también falló para ${foto.filename}`);
+                return null;
+              }
+            })
+          );
+
+          // Reemplazar blobIds de proxy con data URLs pre-cargadas
+          const dataUrlMap = new Map<string, string>();
+          preloadResults.forEach(result => {
+            if (result.status === 'fulfilled' && result.value) {
+              dataUrlMap.set(result.value.id, result.value.dataUrl);
+            }
+          });
+
+          // Actualizar las fotos con data URLs pre-cargadas
+          const finalFotos = saneFotos.map(f => {
+            const preloaded = dataUrlMap.get(f.id);
+            if (preloaded) {
+              return { ...f, blobId: preloaded };
+            }
+            return f;
+          });
+
+          // Reemplazar el enrichedPozo con fotos pre-cargadas
+          enrichedPozo.fotos = { ...enrichedPozo.fotos, fotos: finalFotos };
+
+          const preloadDuration = Date.now() - preloadStart;
+          const successCount = dataUrlMap.size;
+          console.log(`✅ Pre-carga completada en ${preloadDuration}ms: ${successCount}/${proxyPhotos.length} fotos listas`);
+        }
 
         const pozoName = String(enrichedPozo.idPozo?.value || pozo.identificacion.idPozo.value);
 
@@ -192,11 +316,11 @@ export default function PozosPage() {
           if (isFlexible) {
             // Modo Flexible: Usa layoutEngine para reorganizar elementos dinámicamente
             const { generateFlexiblePdf } = await import('@/lib/pdf/flexiblePdfGenerator');
-            result = await generateFlexiblePdf(customDesign, enrichedPozo);
+            result = await generateFlexiblePdf(customDesign, enrichedPozo, allFields);
           } else {
             // Modo Normal: Usa generador estándar con posiciones fijas
             const { generatePdfFromDesign } = await import('@/lib/pdf/designBasedPdfGenerator');
-            result = await generatePdfFromDesign(customDesign, enrichedPozo);
+            result = await generatePdfFromDesign(customDesign, enrichedPozo, allFields);
           }
 
           if (result.success && result.blob) {
@@ -206,14 +330,11 @@ export default function PozosPage() {
           }
         } else {
           // GENERACIÓN CON DISEÑO ESTÁNDAR
-          // Intentar recuperar el estado guardado de la ficha
-          const { recoverState } = await import('@/lib/state/integrity');
-          const savedFicha = recoverState(`ficha-${pozoId}`, pozoId);
-
           let ficha: any;
-          if (savedFicha && savedFicha.stateStatus !== 'reset') {
-            ficha = savedFicha;
-          } else {
+          
+          if (isFlexible) {
+            // En modo flexible estándar no necesitamos recuperar estado previo, 
+            // generamos una ficha virtual al vuelo.
             ficha = {
               id: `ficha-${pozoId}`,
               pozoId: pozoId,
@@ -231,6 +352,35 @@ export default function PozosPage() {
               },
               version: 1,
             };
+          } else {
+            // Intentar recuperar el estado guardado de la ficha de forma silenciosa
+            let savedFicha = null;
+            try {
+              const { recoverState } = await import('@/lib/state/integrity');
+              savedFicha = recoverState(`ficha-${pozoId}`, pozoId);
+            } catch (err) { /* ignore */ }
+
+            if (savedFicha && (savedFicha as any).stateStatus !== 'reset') {
+              ficha = savedFicha;
+            } else {
+              ficha = {
+                id: `ficha-${pozoId}`,
+                pozoId: pozoId,
+                status: 'complete' as const,
+                sections: [
+                  { id: 'identificacion', type: 'identificacion', order: 1, visible: true, locked: false, content: {} },
+                  { id: 'estructura', type: 'estructura', order: 2, visible: true, locked: false, content: {} },
+                  { id: 'fotos', type: 'fotos', order: 3, visible: true, locked: false, content: {} },
+                ],
+                customizations: {
+                  colors: { headerBg: '#1F4E79', headerText: '#FFFFFF', sectionBg: '#F5F5F5' },
+                  fonts: { titleSize: 14, labelSize: 9, valueSize: 10, fontFamily: 'Roboto' },
+                  spacing: { sectionGap: 8, padding: 5, margin: 15 },
+                  template: 'default'
+                },
+                version: 1,
+              };
+            }
           }
 
           const { pdfMakeGenerator } = await import('@/lib/pdf/pdfMakeGenerator');
@@ -238,8 +388,9 @@ export default function PozosPage() {
             includePhotos: true,
             pageNumbers: true,
             includeDate: true,
-            isFlexible
-          });
+            isFlexible,
+            availableFields: allFields
+          } as any);
           if (result.success && result.blob) {
             pdfBlobs.push({ name: pozoName, blob: result.blob });
           }
@@ -305,7 +456,7 @@ export default function PozosPage() {
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Lista de Pozos</h1>
               <p className="text-gray-600 mt-1">
-                {pozosArray.length > 0
+                {isMounted && pozosArray.length > 0
                   ? `${pozosArray.length} pozos cargados. Selecciona uno para ver detalles.`
                   : 'No hay pozos cargados. Carga un archivo Excel para comenzar.'
                 }
@@ -338,7 +489,7 @@ export default function PozosPage() {
                 Subir Fotos/Excel
               </button>
 
-              {selectedIds.size > 0 && (
+              {isMounted && selectedIds.size > 0 && (
                 <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-4">
                   <button
                     onClick={() => handleGeneratePDF(undefined, false)}
@@ -375,7 +526,7 @@ export default function PozosPage() {
                 </div>
               )}
 
-              {selectedPozoId && selectedIds.size === 0 && (
+              {isMounted && selectedPozoId && selectedIds.size === 0 && (
                 <>
                   <button
                     onClick={() => handleGeneratePDF([selectedPozoId], false)}
@@ -438,8 +589,8 @@ export default function PozosPage() {
         {/* Content */}
         <div className="flex-1 flex flex-col tablet:flex-row overflow-hidden -mx-6">
           {/* Table panel */}
-          <div className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ${selectedPozo ? 'tablet:w-1/2 desktop:w-2/3' : 'w-full'}`}>
-            {pozosArray.length > 0 ? (
+          <div className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ${isMounted && selectedPozo ? 'tablet:w-1/2 desktop:w-2/3' : 'w-full'}`}>
+            {isMounted && pozosArray.length > 0 ? (
               <PozosTable
                 pozos={pozosArray}
                 selectedPozoId={selectedPozoId}
@@ -455,7 +606,7 @@ export default function PozosPage() {
           </div>
 
           {/* Preview panel */}
-          {selectedPozo && (
+          {isMounted && selectedPozo && (
             <div className="tablet:w-1/2 desktop:w-1/3 border-t tablet:border-t-0 tablet:border-l border-gray-200 bg-white overflow-auto">
               <div id="preview-container-wrapper">
                 <PozoPreviewPanel

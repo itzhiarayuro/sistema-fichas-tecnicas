@@ -372,7 +372,9 @@ export function DesignToolbar({
                             }
 
                             const { generatePdfFromDesign } = await import('@/lib/pdf/designBasedPdfGenerator');
-                            const result = await generatePdfFromDesign(version, pozo);
+                            const { useFieldsStore } = await import('@/stores/fieldsStore');
+                            const allFields = useFieldsStore.getState().getAllFields();
+                            const result = await generatePdfFromDesign(version, pozo, allFields);
                             if (result.success && result.blob) {
                                 const url = URL.createObjectURL(result.blob);
                                 const link = document.createElement('a');

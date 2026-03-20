@@ -6,8 +6,8 @@
 'use client';
 
 import type { FichaDesignVersion, FieldPlacement, ShapeElement } from '@/types/fichaDesign';
-import { AVAILABLE_FIELDS } from '@/types/fichaDesign';
 import { useDesignStore } from '@/stores/designStore';
+import { useFieldsStore } from '@/stores/fieldsStore';
 import { StylePicker } from './StylePicker';
 
 interface PropertiesPanelProps {
@@ -35,6 +35,9 @@ export function PropertiesPanel({ version }: PropertiesPanelProps) {
         duplicateElements,
         createGroup
     } = useDesignStore();
+
+    const { getAllFields } = useFieldsStore();
+    const allFields = getAllFields();
 
     if (!version || (selectedIds.length === 0 && !selectedGroupId)) {
         return (
@@ -160,7 +163,7 @@ export function PropertiesPanel({ version }: PropertiesPanelProps) {
 
     if (!placement && !shape) return null;
 
-    const field = placement ? AVAILABLE_FIELDS.find(f => f.id === placement.fieldId) : null;
+    const field = placement ? allFields.find(f => f.id === placement.fieldId) : null;
 
     const handleUpdatePlacement = (updates: Partial<FieldPlacement>) => {
         if (placement) updatePlacement(version.id, placement.id, updates);

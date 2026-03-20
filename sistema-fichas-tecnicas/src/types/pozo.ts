@@ -346,6 +346,9 @@ export interface FotoInfo {
 
   // 🟢 Opcional - Fecha de captura
   fechaCaptura?: number;
+
+  // 🟢 Opcional - ID de Google Drive para recuperación remota
+  driveId?: string;
 }
 
 /**

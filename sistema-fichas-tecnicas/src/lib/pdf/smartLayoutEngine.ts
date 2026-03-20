@@ -300,7 +300,7 @@ function checkHasRealData(group: TechnicalGroup, pozo: Pozo): boolean {
     const idx = group.number - 1; // número 1 → índice 0
 
     if (group.type === 'entrada' || group.type === 'salida') {
-        const tuberias = pozo.tuberias?.tuberias || [];
+        const tuberias = (pozo.tuberias?.tuberias || []).filter(t => t !== null);
         // Filtrar por tipo si el campo tipoTuberia existe
         const filtered = tuberias.filter(t => {
             const tipo = t.tipoTuberia?.value?.toLowerCase() || '';
@@ -312,7 +312,7 @@ function checkHasRealData(group: TechnicalGroup, pozo: Pozo): boolean {
     }
 
     if (group.type === 'sumidero') {
-        const sumideros = pozo.sumideros?.sumideros || [];
+        const sumideros = (pozo.sumideros?.sumideros || []).filter(s => s !== null);
         return idx < sumideros.length && !!sumideros[idx];
     }
 

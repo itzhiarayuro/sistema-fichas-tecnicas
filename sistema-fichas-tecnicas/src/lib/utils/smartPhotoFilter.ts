@@ -106,12 +106,12 @@ export function buildExpectedPhotoIndex(pozos: Map<string, Pozo>): IndiceFotosEs
     }
 
     // 2. Entradas — una foto por cada tubería de entrada
-    const tuberias = pozo.tuberias?.tuberias || [];
+    const tuberias = (pozo.tuberias?.tuberias || []).filter(t => t !== null);
     const entradas = tuberias.filter(
-      t => String(t.tipoTuberia || '').toLowerCase().includes('entrada')
+      t => String(t.tipoTuberia?.value || '').toLowerCase().includes('entrada')
     );
     const salidas = tuberias.filter(
-      t => String(t.tipoTuberia || '').toLowerCase().includes('salida')
+      t => String(t.tipoTuberia?.value || '').toLowerCase().includes('salida')
     );
 
     // Agrupar entradas por orden para asignar E1, E2, E3...
@@ -160,7 +160,7 @@ export function buildExpectedPhotoIndex(pozos: Map<string, Pozo>): IndiceFotosEs
     }
 
     // 4. Sumideros — una foto por cada sumidero
-    const sumideros = pozo.sumideros?.sumideros || [];
+    const sumideros = (pozo.sumideros?.sumideros || []).filter(s => s !== null);
     sumideros.forEach((sum, i) => {
       const num = i + 1;
       const subcategoria = `SUM${num}`;

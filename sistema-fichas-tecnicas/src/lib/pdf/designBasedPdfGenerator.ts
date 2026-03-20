@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import { FichaDesignVersion, FieldPlacement, ShapeElement } from '@/types/fichaDesign';
+import { FichaDesignVersion, FieldPlacement, ShapeElement, AvailableField } from '@/types/fichaDesign';
 import { Pozo } from '@/types/pozo';
 import { FIELD_PATHS } from '@/constants/fieldMapping';
 import { blobStore } from '@/lib/storage/blobStore';
@@ -129,8 +129,8 @@ function findPhotoByCode(pozo: Pozo, targetCode: string) {
         if (upperTarget.startsWith('SUM')) {
             const num = upperTarget.replace('SUM', '');
             const regexSum = new RegExp(`(^|[\\-_])SUM${num}([\\-_\\.]|$)`);
-            const regexS = new RegExp(`(^|[\\-_])S${num}([\\-_\\.]|$)`);
-            return regexSum.test(filename) || regexS.test(filename);
+            // Eliminamos el fallback de 'S' para evitar colisión con Salidas (Request)
+            return regexSum.test(filename);
         }
 
         if (upperTarget === 'L') return filename.includes('_ARGIS') || filename === 'L';
@@ -141,15 +141,26 @@ function findPhotoByCode(pozo: Pozo, targetCode: string) {
 /**
  * Resuelve el valor de un campo, manejando casos especiales de tuberías y fotos
  */
-async function resolveFieldValue(pozo: Pozo, fieldId: string, codeMap: Record<string, string>): Promise<{ value: any, link?: string }> {
+async function resolveFieldValue(
+    pozo: Pozo, 
+    fieldId: string, 
+    codeMap: Record<string, string>,
+    availableFields?: AvailableField[]
+): Promise<{ value: any, link?: string }> {
     // CASO ESPECIAL: Fotos específicas por nomenclatura
     if (fieldId.startsWith('foto_') && !/^\d+$/.test(fieldId.split('_')[1])) {
         const targetCode = codeMap[fieldId];
         if (targetCode) {
             const photo = findPhotoByCode(pozo, targetCode);
             if (photo) {
+                const bId = photo.blobId || '';
+                // SI YA ES UNA DATA URL O BLOB URL: Usar directamente
+                if (bId.startsWith('data:') || bId.startsWith('blob:')) {
+                    return { value: bId };
+                }
+                
                 // ASEGURAR CARGA: En PDF necesitamos la URL real, si no está en RAM la cargamos.
-                const url = await blobStore.ensureLoaded(photo.blobId);
+                const url = await blobStore.ensureLoaded(bId);
                 return { value: url || (photo as any).dataUrl || '-' };
             }
         }
@@ -165,8 +176,8 @@ async function resolveFieldValue(pozo: Pozo, fieldId: string, codeMap: Record<st
 
         if (typePrefix === 'ent' || typePrefix === 'sal') {
             const targetType = typePrefix === 'ent' ? 'entrada' : 'salida';
-            const pipe = pozo.tuberias?.tuberias?.find(t =>
-                String(t.tipoTuberia?.value || '').toLowerCase() === targetType &&
+            const pipe = (pozo.tuberias?.tuberias || []).find(t =>
+                t && String(t.tipoTuberia?.value || '').toLowerCase() === targetType &&
                 String(t.orden?.value) === orderNum
             );
             if (pipe) {
@@ -180,12 +191,13 @@ async function resolveFieldValue(pozo: Pozo, fieldId: string, codeMap: Record<st
             }
         } else if (typePrefix === 'sum') {
             const num = parseInt(orderNum);
-            const sumidero = pozo.sumideros?.sumideros?.find(s => {
+            const sumidero = (pozo.sumideros?.sumideros || []).find(s => {
+                if (!s) return false;
                 const esquema = String(s.numeroEsquema?.value || '').toUpperCase();
                 if (!esquema) return false;
                 const esquemaNum = esquema.replace(/\D/g, ''); // "S1" -> "1"
                 return esquemaNum === orderNum || parseInt(esquemaNum) === num;
-            }) || pozo.sumideros?.sumideros?.[num - 1];
+            }) || (pozo.sumideros?.sumideros?.[num - 1] || undefined);
 
             if (sumidero) {
                 const sumFieldMap: Record<string, string> = {
@@ -200,8 +212,10 @@ async function resolveFieldValue(pozo: Pozo, fieldId: string, codeMap: Record<st
         return { value: '-' };
     }
 
-    // Caso general por FIELD_PATHS
-    const path = FIELD_PATHS[fieldId];
+    // Caso general por FIELD_PATHS o AvailableField
+    const customField = availableFields?.find(f => f.id === fieldId);
+    const path = FIELD_PATHS[fieldId] || customField?.fieldPath;
+    
     if (path) {
         const basePath = path.endsWith('.value') ? path.substring(0, path.length - 6) : path;
         const fieldObj = getValueByPath(pozo, basePath);
@@ -232,7 +246,8 @@ async function resolveFieldValue(pozo: Pozo, fieldId: string, codeMap: Record<st
 
 export async function generatePdfFromDesign(
     design: FichaDesignVersion,
-    pozo: Pozo
+    pozo: Pozo,
+    availableFields?: AvailableField[]
 ): Promise<{ success: boolean; blob?: Blob; error?: string }> {
     try {
         console.log('🎨 Generando PDF con diseño optimizado:', design.name);
@@ -253,7 +268,9 @@ export async function generatePdfFromDesign(
                 const targetCode = PHOTO_CODE_MAP[p.fieldId];
                 if (targetCode) {
                     const photo = findPhotoByCode(pozo, targetCode);
-                    if (photo?.blobId) neededBlobIds.add(photo.blobId);
+                    if (photo?.blobId && !photo.blobId.startsWith('data:') && !photo.blobId.startsWith('blob:')) {
+                        neededBlobIds.add(photo.blobId);
+                    }
                 }
             }
         }
@@ -269,34 +286,50 @@ export async function generatePdfFromDesign(
 
         // 3. MAPA DE VISIBILIDAD DE GRUPOS (Sincronizado con DesignRenderer)
         const groupVisibilityMap = new Map<string, boolean>();
-        if (design.groups) {
+        // Solo re-evaluamos visibilidad si NO es un layout ya optimizado por el motor flexible
+        if (design.groups && !(design as any)._isFlexed) {
             design.groups.forEach(group => {
                 const name = (group.name || '').toLowerCase();
                 if (!name) return;
                 let shouldHide = false;
-                if (name.includes('entrada') || name.includes('salida')) {
-                    const match = name.match(/(entrada|salida)\s*(\d+)/);
+                
+                // DETECCIÓN TÉCNICA (Entradas, Salidas, Sumideros)
+                if (name.includes('entrada') || name.includes('salida') || name.includes('sumidero')) {
+                    const match = name.match(/(entrada|salida|sumidero)\s*(\d+)/);
                     if (match) {
                         const type = match[1];
-                        const orderNum = match[2];
-                        const pipe = pozo.tuberias?.tuberias?.find(t =>
-                            String(t.tipoTuberia?.value || '').toLowerCase() === (type === 'entrada' ? 'entrada' : 'salida') &&
-                            String(t.orden?.value) === orderNum
-                        );
-                        if (!pipe) shouldHide = true;
-                    }
-                } else if (name.includes('sumidero')) {
-                    const match = name.match(/sumidero\s*(\d+)/);
-                    if (match) {
-                        const orderNum = match[1];
-                        const num = parseInt(orderNum);
-                        const sumidero = pozo.sumideros?.sumideros?.find(s => {
-                            const esquema = String(s.numeroEsquema?.value || '').toUpperCase();
-                            if (!esquema) return false;
-                            const esquemaNum = esquema.replace(/\D/g, '');
-                            return esquemaNum === orderNum || parseInt(esquemaNum) === num;
-                        }) || pozo.sumideros?.sumideros?.[num - 1];
-                        if (!sumidero) shouldHide = true;
+                        const num = parseInt(match[2]);
+                        
+                        // Verificar si hay datos técnicos (tuberías/sumideros)
+                        let hasTechData = false;
+                        if (type === 'entrada' || type === 'salida') {
+                            hasTechData = !!(pozo.tuberias?.tuberias || []).some(t =>
+                                t && String(t.tipoTuberia?.value || '').toLowerCase() === type &&
+                                String(t.orden?.value) === String(num)
+                            );
+                        } else {
+                            hasTechData = !!(pozo.sumideros?.sumideros?.[num - 1] || pozo.sumideros?.sumideros?.some(s => {
+                                const esquema = String(s.numeroEsquema?.value || '').toUpperCase().replace(/\D/g, '');
+                                return esquema === String(num);
+                            }));
+                        }
+
+                        // Verificar si hay alguna foto para este slot (Refuerzo)
+                        const children = [
+                            ...design.placements.filter(p => p.groupId === group.id),
+                            ...design.shapes.filter(s => s.groupId === group.id)
+                        ] as any[];
+                        
+                        const hasPhotos = children.some(c => {
+                            if (!c.fieldId?.startsWith('foto_')) return false;
+                            const target = PHOTO_CODE_MAP[c.fieldId];
+                            return !!(target && findPhotoByCode(pozo, target));
+                        });
+
+                        // SUPREME LOGIC: Ocultar solo si NO hay ni información NI foto (Request)
+                        if (!hasTechData && !hasPhotos) {
+                            shouldHide = true;
+                        }
                     }
                 }
                 groupVisibilityMap.set(group.id, !shouldHide);
@@ -320,15 +353,29 @@ export async function generatePdfFromDesign(
                 const elementPage = (el as any).pageNumber || 1;
                 if (!isHeader && elementPage !== pIdx) continue;
 
+                // APLICAR AJUSTE DE ALINEACIÓN (Requirement: mover unos pixeles a la izquierda)
+                let xOffset = 0;
+                const fieldId = (el as any).fieldId || '';
+                const groupId = (el as any).groupId || '';
+                
+                if (fieldId.startsWith('ent_') || fieldId.startsWith('sal_') || fieldId.startsWith('sum_') || 
+                    fieldId.startsWith('foto_ent') || fieldId.startsWith('foto_sal') || fieldId.startsWith('foto_sum') ||
+                    groupId.toLowerCase().includes('entrada') || groupId.toLowerCase().includes('salida') || groupId.toLowerCase().includes('sumidero')) {
+                    xOffset = -1.2; 
+                }
+
                 // Opacidad
                 const opacity = (el as any).opacity ?? 1;
                 doc.setGState(new (doc as any).GState({ opacity }));
 
                 if (el.isShape) {
-                    await renderShape(doc, el as ShapeElement);
+                    const shape = { ...el as ShapeElement };
+                    shape.x += xOffset;
+                    await renderShape(doc, shape);
                 } else {
-                    const placement = el as FieldPlacement;
-                    const { value, link } = await resolveFieldValue(pozo, placement.fieldId, PHOTO_CODE_MAP);
+                    const placement = { ...el as FieldPlacement };
+                    placement.x += xOffset;
+                    const { value, link } = await resolveFieldValue(pozo, placement.fieldId, PHOTO_CODE_MAP, availableFields);
 
                     // ADAPTACIÓN DINÁMICA: Ocultar si es slot técnico vacío (Requirement synchronization)
                     const isTechnicalSlot =
@@ -474,7 +521,14 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
         let labelX = placement.x + labelPadding;
         if (labelAlign === 'center') labelX = placement.x + (labelWidthMM / 2);
         if (labelAlign === 'right') labelX = placement.x + labelWidthMM - labelPadding;
-        doc.text(labelText, labelX, placement.y + labelPadding + (labelFontSize * 0.28), { align: labelAlign, maxWidth: labelWidthMM - (labelPadding * 2) });
+        
+        const isTechnicalField = placement.fieldId.startsWith('ent_') || placement.fieldId.startsWith('sal_') || placement.fieldId.startsWith('sum_');
+        const textOptions: any = { align: labelAlign };
+        if (!isTechnicalField) {
+            textOptions.maxWidth = Math.max(0, labelWidthMM - (labelPadding * 2));
+        }
+        
+        doc.text(labelText, labelX, placement.y + labelPadding + (labelFontSize * 0.28), textOptions);
         availableContentHeight -= labelAreaHeight;
     }
 
@@ -482,32 +536,10 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
         try {
             const format = String(value).toLowerCase().includes('png') ? 'PNG' : 'JPEG';
 
-            // ✅ CORRECCIÓN: Preservar relación de aspecto (Object-Contain)
-            const dims = await getImageDimensions(value);
-
             let finalX = placement.x;
             let finalY = placement.y + labelAreaHeight;
             let finalW = placement.width;
             let finalH = availableContentHeight;
-
-            if (dims.width > 0 && dims.height > 0) {
-                const imgRatio = dims.width / dims.height;
-                const containerRatio = placement.width / availableContentHeight;
-
-                if (imgRatio > containerRatio) {
-                    // Imagen es más ancha que el contenedor (relativamente)
-                    finalW = placement.width;
-                    finalH = placement.width / imgRatio;
-                    // Centrar verticalmente en el espacio disponible
-                    finalY += (availableContentHeight - finalH) / 2;
-                } else {
-                    // Imagen es más alta que el contenedor (relativamente)
-                    finalH = availableContentHeight;
-                    finalW = availableContentHeight * imgRatio;
-                    // Centrar horizontalmente
-                    finalX += (placement.width - finalW) / 2;
-                }
-            }
 
             doc.addImage(value, format, finalX, finalY, finalW, finalH, undefined, 'FAST');
         } catch (e) { console.warn(`Error foto ${placement.fieldId}`, e); }
@@ -539,23 +571,60 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
     }
 
     const content = String(value ?? '');
-    doc.setFontSize(fontSize);
+    let currentFontSize = fontSize;
+    doc.setFontSize(currentFontSize);
     doc.setFont(font, (placement.fontWeight === 'bold') ? 'bold' : 'normal');
     if (link) { doc.setTextColor('#0000FF'); } else { doc.setTextColor(placement.color || '#000000'); }
+    
     const padding = placement.padding || 1;
     const align = placement.textAlign || 'left';
     let tx = placement.x + padding;
     if (align === 'center') tx = placement.x + (placement.width / 2);
     if (align === 'right') tx = placement.x + placement.width - padding;
-    const lh = fontSize * 0.3527;
-    const ty = placement.y + labelAreaHeight + (availableContentHeight / 2) + (lh / 2.5);
-    const textContent = sanitizeTextForPDF(content);
-    doc.text(textContent, tx, ty, { maxWidth: placement.width - (padding * 2), align: align });
+    
+    let textContent = sanitizeTextForPDF(content);
+    const maxW = placement.width - (padding * 2);
+    const fontHeightMM = currentFontSize * 0.3527;
+    const isSingleLine = availableContentHeight <= (fontHeightMM * 1.8);
+
+    if (isSingleLine && maxW > 0) {
+        const originalText = textContent;
+        let shrunk = false;
+        
+        while (doc.getTextWidth(textContent) > maxW && currentFontSize > 5) {
+            currentFontSize -= 0.5;
+            doc.setFontSize(currentFontSize);
+            shrunk = true;
+        }
+        
+        if (doc.getTextWidth(textContent) > maxW) {
+            let truncated = textContent;
+            while (truncated.length > 3 && doc.getTextWidth(truncated + '...') > maxW) {
+                truncated = truncated.slice(0, -1);
+            }
+            textContent = truncated + '...';
+            console.warn(`📏 [PDF Layout] Texto truncado para evitar desbordamiento: "${originalText}" -> "${textContent}"`);
+        } else if (shrunk) {
+            console.info(`📏 [PDF Layout] Fuente reducida a ${currentFontSize}pt para encajar texto: "${originalText}"`);
+        }
+    }
+
+    const lh = currentFontSize * 0.3527;
+    let ty = placement.y + labelAreaHeight + (availableContentHeight / 2) + (lh / 2.5);
+    
+    if (isSingleLine) {
+        doc.text(textContent, tx, ty, { align: align });
+    } else {
+        // En cajas multiline, doc.text desde la parte superior
+        ty = placement.y + labelAreaHeight + padding + lh; 
+        doc.text(textContent, tx, ty, { maxWidth: maxW, align: align });
+    }
+
     if (link && content && content !== '-') {
         const tw = doc.getTextWidth(textContent);
         let lx = tx;
         if (align === 'center') lx = tx - (tw / 2);
         if (align === 'right') lx = tx - tw;
-        doc.link(lx, ty - (fontSize * 0.4), tw, fontSize * 0.4, { url: link });
+        doc.link(lx, ty - (currentFontSize * 0.4), tw, currentFontSize * 0.4, { url: link });
     }
 }

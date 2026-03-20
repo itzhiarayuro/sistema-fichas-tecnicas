@@ -33,11 +33,26 @@ function hasData(placement: FieldPlacement, pozo: Pozo): boolean {
     if (!path) return false;
 
     if (placement.fieldId.startsWith('foto_')) {
-        const targetId = placement.fieldId.replace('foto_', '').toUpperCase();
-        return !!(pozo.fotos?.fotos?.some(f =>
-            String(f.subcategoria || '').toUpperCase() === targetId ||
-            String(f.filename || '').toUpperCase().includes(targetId)
-        ));
+        const subId = placement.fieldId.replace('foto_', '').toLowerCase();
+        const subIdArr = subId.split('_');
+        let code = subId.toUpperCase();
+        if (subId.startsWith('entrada_')) code = 'E' + subIdArr[subIdArr.length - 1];
+        if (subId.startsWith('salida_')) code = 'S' + subIdArr[subIdArr.length - 1];
+        if (subId.startsWith('sumidero_')) code = 'SUM' + subIdArr[subIdArr.length - 1];
+        if (subId === 'panoramica') code = 'P';
+        if (subId === 'tapa') code = 'T';
+        if (subId === 'interior') code = 'I';
+
+        return !!(pozo.fotos?.fotos?.some(f => {
+            const sc = String(f.subcategoria || '').toUpperCase();
+            const fn = String(f.filename || '').toUpperCase();
+            // Match por subcategoría exacta, o por inclusión del código en el nombre del archivo
+            return sc === code || 
+                   fn.includes(`-${code}`) || 
+                   fn.startsWith(`${code}-`) ||
+                   fn.includes(`_${code}`) ||
+                   sc.startsWith(code);
+        }));
     }
 
     const basePath = path.endsWith('.value') ? path.slice(0, -6) : path;
@@ -118,6 +133,7 @@ export function applyFlexibleGrid(
     } = options;
 
     const newDesign: FichaDesignVersion = JSON.parse(JSON.stringify(design));
+    (newDesign as any)._isFlexed = true; // Evitar double-dipping en el generador
 
     // PASO 0: Encabezado
     let dynamicStartAtY = startAtY;
@@ -158,20 +174,38 @@ export function applyFlexibleGrid(
 
         const bbox = calculateGroupBoundingBox(g, children);
 
-        // VALIDACIÓN CONTRA EL EXCEL:
+        // VALIDACIÓN CONTRA EL EXCEL Y LA NUBE:
         // Buscamos si el pozo tiene datos en el slot correspondiente al número de orden
         let hasRealData = false;
         if (num >= 1 && num <= 8) {
-            const index = num - 1;
             if (type === 'entrada') {
-                const entries = pozo.tuberias.tuberias.slice(0, 8);
-                hasRealData = !!(entries[index]?.idTuberia?.value);
+                hasRealData = (pozo.tuberias?.tuberias || []).some(t => 
+                    t && String(t.tipoTuberia?.value || '').toLowerCase() === 'entrada' && 
+                    (String(t.orden?.value) === String(num) || String(t.orden?.value) === `E${num}`)
+                ) ?? false;
             } else if (type === 'salida') {
-                const exits = pozo.tuberias.tuberias.slice(8, 16);
-                hasRealData = !!(exits[index]?.idTuberia?.value);
+                hasRealData = (pozo.tuberias?.tuberias || []).some(t => 
+                    t && String(t.tipoTuberia?.value || '').toLowerCase() === 'salida' && 
+                    (String(t.orden?.value) === String(num) || String(t.orden?.value) === `S${num}`)
+                ) ?? false;
             } else if (type === 'sumidero') {
-                hasRealData = !!(pozo.sumideros.sumideros[index]?.idSumidero?.value);
+                const targetEsquema = String(num);
+                hasRealData = (pozo.sumideros?.sumideros || []).some(s => {
+                    if (!s) return false;
+                    const esquema = String(s.numeroEsquema?.value || '').toUpperCase().replace(/\D/g, '');
+                    return esquema === targetEsquema;
+                }) ?? false;
+                
+                // Fallback: Si no tiene numeroEsquema, confiamos en el índice directo del slot
+                if (!hasRealData && !!pozo.sumideros?.sumideros?.[num - 1]) {
+                    hasRealData = true;
+                }
             }
+        }
+
+        // ⚡ REFUERZO: Si el slot tiene una foto (aunque no tenga datos de batea), se queda.
+        if (!hasRealData) {
+            hasRealData = children.some(c => isFieldPlacement(c) && hasData(c as FieldPlacement, pozo));
         }
 
         if (!hasRealData) {
@@ -184,10 +218,10 @@ export function applyFlexibleGrid(
         children.forEach(c => processedIds.add(c.id));
     });
 
-    // PASO 2: Coordenadas fijas de columnas
-    const COL1_X = 5;
-    const COL2_X = 73;
-    const COL3_X = 142;
+    // PASO 2: Coordenadas fijas de columnas (Sincronización milimétrica con el JSON original)
+    const COL1_X = 5;      // Entradas (X:5, Ancho: 68 -> Termina en 73)
+    const COL2_X = 73;     // Salidas (Empieza justo donde termina la Col 1)
+    const COL3_X = 142;    // Sumideros (Espacio después del ID de Salidas)
 
     // Ordenamos las unidades por su número de orden real para que fluyan 1, 2, 3...
     const entradas = techUnits.filter(u => u.type === 'entrada').sort((a, b) => a.num - b.num);
@@ -202,31 +236,32 @@ export function applyFlexibleGrid(
     function moveUnit(unit: TechUnit, targetX: number, targetY: number) {
         const dx = targetX - unit.bbox.x;
         const dy = targetY - unit.bbox.y;
-        unit.elements.forEach((el: any) => { el.x += dx; el.y += dy; });
+        
+        // Asignamos explícitamente a la página 2 para que el motor de PDF lo renderice
+        unit.elements.forEach((el: any) => { 
+            el.x += dx; 
+            el.y += dy; 
+            el.pageNumber = 2; // FIX: Mudar a página 2
+        });
+
         const g = newDesign.groups.find(g => g.id === unit.groupId);
-        if (g) { g.x = targetX; g.y = targetY; }
+        if (g) { 
+            g.x = targetX; 
+            g.y = targetY; 
+            g.pageNumber = 2; // FIX: El grupo también debe estar en página 2
+        }
     }
 
-    // Entradas: respetamos su orden numérico para la alternancia de columnas
+    // Entradas: Columna 1 (X=10mm)
     entradas.forEach(unit => {
-        if (unit.num % 2 !== 0) { // 1, 3, 5, 7 -> Col 1
-            moveUnit(unit, COL1_X, yCol1);
-            yCol1 += unit.bbox.height + spacingY;
-        } else { // 2, 4, 6, 8 -> Col 2
-            moveUnit(unit, COL2_X, yCol2);
-            yCol2 += unit.bbox.height + spacingY;
-        }
+        moveUnit(unit, COL1_X, yCol1);
+        yCol1 += unit.bbox.height + spacingY;
     });
 
-    // Salidas: continúan en el flujo
+    // Salidas: Columna 2 (X=74.67mm)
     salidas.forEach(unit => {
-        if (unit.num % 2 !== 0) {
-            moveUnit(unit, COL1_X, yCol1);
-            yCol1 += unit.bbox.height + spacingY;
-        } else {
-            moveUnit(unit, COL2_X, yCol2);
-            yCol2 += unit.bbox.height + spacingY;
-        }
+        moveUnit(unit, COL2_X, yCol2);
+        yCol2 += unit.bbox.height + spacingY;
     });
 
     // Sumideros: columna 3
@@ -234,6 +269,11 @@ export function applyFlexibleGrid(
         moveUnit(unit, COL3_X, yCol3);
         yCol3 += unit.bbox.height + spacingY;
     });
+
+    // Si llegamos aquí y hay datos, aseguramos que el documento tenga al menos 2 páginas
+    if (techUnits.length > 0) {
+        newDesign.numPages = Math.max(newDesign.numPages || 1, 2);
+    }
 
     return newDesign;
 }

@@ -127,7 +127,7 @@ export class PDFMakeGenerator {
         // 🔥 PRIORIDAD JS-PDF EN NAVEGADOR: Evita el cuelgue de pdfMake con fotos
         if (typeof window !== 'undefined') {
             logger.info('🚀 Priorizando motor jsPDF para respuesta instantánea en navegador', null, 'PDFMakeGenerator');
-            const result = await this.generateWithJsPDF(ficha, pozo, options, customDesign);
+            const result = await this.generateWithJsPDF(ficha, pozo, options, customDesign, (options as any).availableFields);
             if (result.success) {
                 logger.info('✅ PDF generado exitosamente con motor prioritario jsPDF', {
                     duration: `${Date.now() - startTime}ms`
@@ -265,7 +265,7 @@ export class PDFMakeGenerator {
                     errorDetalles: result.error,
                     motivo: 'El motor primario no pudo completar la generación'
                 }, 'PDFMakeGenerator');
-                return await this.generateWithJsPDF(ficha, pozo, options);
+                return await this.generateWithJsPDF(ficha, pozo, options, undefined, (options as any).availableFields);
             }
 
             return result;
@@ -594,7 +594,7 @@ export class PDFMakeGenerator {
             ]
         ];
 
-        tuberias.forEach(tub => {
+        tuberias.filter(t => t !== null).forEach(tub => {
             tableBody.push([
                 { text: String(tub.diametro?.value || '-'), style: 'value' },
                 { text: String(tub.material?.value || '-'), style: 'value' },
@@ -637,7 +637,7 @@ export class PDFMakeGenerator {
             ]
         ];
 
-        sumideros.forEach(sum => {
+        sumideros.filter(s => s !== null).forEach(sum => {
             tableBody.push([
                 { text: String(sum.idSumidero?.value || '-'), style: 'value' },
                 { text: String(sum.tipoSumidero?.value || '-'), style: 'value' },
@@ -776,9 +776,29 @@ export class PDFMakeGenerator {
 
     private async getPhotoData(foto: FotoInfo): Promise<string | null> {
         try {
-            const imageUrl = foto.blobId ? blobStore.getUrl(foto.blobId) : (foto as any).dataUrl;
+            // Resolver la URL de la imagen:
+            // 1. Si blobId es una URL directa (proxy, http, data:), usarla directamente
+            // 2. Si es un ID de blobStore, buscarla en el store
+            // 3. Fallback a dataUrl legacy
+            let imageUrl: string | null = null;
+            
+            if (foto.blobId) {
+                if (foto.blobId.startsWith('/') || foto.blobId.startsWith('http') || foto.blobId.startsWith('data:')) {
+                    // Es una URL directa (proxy o remota), usarla tal cual
+                    imageUrl = foto.blobId;
+                } else {
+                    // Es un ID de blobStore, buscarlo
+                    imageUrl = blobStore.getUrl(foto.blobId);
+                }
+            }
+            
+            // Fallback a dataUrl legacy
             if (!imageUrl) {
-                logger.debug('getPhotoData: No se encontró URL para la foto', { filename: foto.filename }, 'PDFMakeGenerator');
+                imageUrl = (foto as any).dataUrl || null;
+            }
+
+            if (!imageUrl) {
+                logger.debug('getPhotoData: No se encontró URL para la foto', { filename: foto.filename, blobId: foto.blobId }, 'PDFMakeGenerator');
                 return null;
             }
 
@@ -794,13 +814,13 @@ export class PDFMakeGenerator {
                 logger.warn('getPhotoData: Intento de cargar blob: URL en servidor (ignorado)', { url: imageUrl }, 'PDFMakeGenerator');
                 return null;
             }
-            // CASO 3: Fetch con timeout y manejo de errores
+            // CASO 3: Fetch con timeout y manejo de errores (proxy URLs, etc.)
             else {
                 logger.debug('getPhotoData: Iniciando fetch de imagen', { url: imageUrl, filename: foto.filename }, 'PDFMakeGenerator');
 
                 const controller = new AbortController();
-                // Timeout reducido a 5s para no bloquear generación
-                const timeoutId = setTimeout(() => controller.abort(), 5000);
+                // Timeout de 15s — el proxy GAS puede ser lento
+                const timeoutId = setTimeout(() => controller.abort(), 15000);
 
                 try {
                     const response = await fetch(imageUrl, { signal: controller.signal });
@@ -876,7 +896,8 @@ export class PDFMakeGenerator {
         ficha: FichaState,
         pozo: Pozo,
         options: PDFGeneratorOptions,
-        customDesign?: any
+        customDesign?: any,
+        availableFields?: any[]
     ): Promise<PDFGenerationResult> {
 
         const ready = await initJsPDF();
@@ -1016,7 +1037,7 @@ export class PDFMakeGenerator {
                     shapes: customDesign.shapes?.length
                 }, 'PDFMakeGenerator');
 
-                await this.renderCustomDesignWithJsPDF(doc, customDesign, pozo, options);
+                await this.renderCustomDesignWithJsPDF(doc, customDesign, pozo, options, availableFields);
             } else {
                 // =====================================
                 // HEADER PRINCIPAL (SOLO PARA MODO ESTÁNDAR)
@@ -1293,9 +1314,6 @@ export class PDFMakeGenerator {
                 }
             }
 
-            // =====================================
-            // GENERAR BLOB
-            // =====================================
             const blob = doc.output('blob');
             const pozoIdFinal = idPozo.replace(/[^a-zA-Z0-9-]/g, '_');
 
@@ -1326,7 +1344,8 @@ export class PDFMakeGenerator {
         doc: any,
         design: FichaDesignVersion,
         pozo: Pozo,
-        options: PDFGeneratorOptions
+        options: PDFGeneratorOptions,
+        availableFields?: any[]
     ) {
         const hexToRgb = (hex: string): [number, number, number] => {
             const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
@@ -1335,10 +1354,32 @@ export class PDFMakeGenerator {
                 : [0, 0, 0];
         };
 
+        // 0. Determinar visibilidad dinámica de grupos técnicos (Entradas, Salidas, Sumideros)
+        const groupVisibility = new Map<string, boolean>();
+        if (design.groups) {
+            for (const group of design.groups) {
+                const gn = (group.name || '').toUpperCase();
+                let isVisible = true;
+
+                if (gn.includes('ENTRADA')) {
+                    const num = parseInt(gn.replace('ENTRADA', '').trim());
+                    if (!isNaN(num)) isVisible = !!pozo.tuberias?.tuberias?.[num - 1];
+                } else if (gn.includes('SALIDA')) {
+                    const num = parseInt(gn.replace('SALIDA', '').trim());
+                    if (!isNaN(num)) isVisible = !!pozo.tuberias?.tuberias?.[num + 7]; // 8-15
+                } else if (gn.includes('SUMIDERO')) {
+                    const num = parseInt(gn.replace('SUMIDERO', '').trim());
+                    if (!isNaN(num)) isVisible = !!pozo.sumideros?.sumideros?.[num - 1];
+                }
+                groupVisibility.set(group.id, isVisible);
+            }
+        }
+
         // 1. Renderizar Formas (Shapes) - Fondo
         const shapes = [...(design.shapes || [])].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0));
         for (const shape of shapes) {
             if (shape.isVisible === false) continue;
+            if (shape.groupId && groupVisibility.get(shape.groupId) === false) continue;
 
             if (shape.fillColor) doc.setFillColor(...hexToRgb(shape.fillColor));
             if (shape.strokeColor) doc.setDrawColor(...hexToRgb(shape.strokeColor));
@@ -1381,11 +1422,21 @@ export class PDFMakeGenerator {
         // 2. Renderizar Campos (Placements)
         for (const placement of (design.placements || [])) {
             if (placement.isVisible === false) continue;
+            if (placement.groupId && groupVisibility.get(placement.groupId) === false) continue;
 
-            const field = AVAILABLE_FIELDS.find(f => f.id === placement.fieldId);
+            const field = AVAILABLE_FIELDS.find(f => f.id === placement.fieldId) || 
+                         availableFields?.find(f => f.id === placement.fieldId);
             if (!field) continue;
 
-            const value = this.getFieldValueByPath(pozo, field.fieldPath);
+            let value = this.getFieldValueByPath(pozo, field.fieldPath);
+
+            // Formateo de coordenadas a 9 decimales (Requirement)
+            if (field.id === 'pozo_latitud' || field.id === 'pozo_longitud') {
+                const numValue = parseFloat(value);
+                if (!isNaN(numValue) && numValue !== 0) {
+                    value = numValue.toFixed(9);
+                }
+            }
 
             // Caso especial: FOTOS
             const isPhotoField = field.category === 'fotos' || field.id.startsWith('foto_');
@@ -1481,6 +1532,16 @@ export class PDFMakeGenerator {
                 doc.text(displayText, placement.x + placement.width - (placement.padding || 0), textY, textOptions);
             } else {
                 doc.text(displayText, textX, textY);
+            }
+
+            // Agregar Hipervínculo para coordenadas (Requirement)
+            if ((field.id === 'pozo_latitud' || field.id === 'pozo_longitud') && value && value !== '-') {
+                const latVal = this.getFieldValueByObjectPath(pozo, 'identificacion.latitud.value');
+                const lngVal = this.getFieldValueByObjectPath(pozo, 'identificacion.longitud.value');
+                if (latVal && lngVal && !isNaN(parseFloat(latVal)) && !isNaN(parseFloat(lngVal))) {
+                    const url = `https://www.google.com/maps/search/?api=1&query=${latVal},${lngVal}`;
+                    doc.link(placement.x, placement.y, placement.width, placement.height, { url });
+                }
             }
         }
     }

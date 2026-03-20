@@ -116,8 +116,7 @@ export function recoverState(fichaId: string, pozoId: string): FichaState {
             }
         }
 
-        // 3. Fallback a BASE_STATE
-        console.error('[Integrity] No se pudo recuperar ningún estado. Iniciando desde base.');
+        // 3. Fallback a BASE_STATE - Silencioso para inicializaciones normales
         return {
             ...BASE_STATE,
             id: fichaId,
@@ -127,6 +126,7 @@ export function recoverState(fichaId: string, pozoId: string): FichaState {
         } as FichaState;
 
     } catch (e) {
+        console.error('[Integrity] Fallo crítico:', e);
         return {
             ...BASE_STATE,
             id: fichaId,
