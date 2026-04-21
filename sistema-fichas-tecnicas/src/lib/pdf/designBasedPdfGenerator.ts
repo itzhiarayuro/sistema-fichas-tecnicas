@@ -98,13 +98,14 @@ function findPhotoByCode(pozo: Pozo, targetCode: string) {
 
     // 1. Coincidencia exacta por subcategoría (La más fiable)
     let found = pozo.fotos.fotos.find(f =>
-        String(f.subcategoria || '').toUpperCase() === upperTarget
+        f && String(f.subcategoria || '').toUpperCase() === upperTarget
     );
 
     if (found) return found;
 
     // 2. Fallbacks basados en nomenclatura del nombre de archivo (Sincronizado con DesignRenderer)
     return pozo.fotos.fotos.find(f => {
+        if (!f) return false;
         const filename = String(f.filename || '').toUpperCase().split('.')[0];
         if (filename.endsWith('-AT') || filename.endsWith('_AT') || filename.endsWith('-Z') || filename.endsWith('_Z')) return false;
 
@@ -319,6 +320,7 @@ export async function generatePdfFromDesign(
                             );
                         } else {
                             hasTechData = !!(pozo.sumideros?.sumideros?.[num - 1] || pozo.sumideros?.sumideros?.some(s => {
+                                if (!s) return false;
                                 const esquema = String(s.numeroEsquema?.value || '').toUpperCase().replace(/\D/g, '');
                                 return esquema === String(num);
                             }));

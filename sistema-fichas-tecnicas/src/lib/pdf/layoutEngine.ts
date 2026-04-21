@@ -45,6 +45,7 @@ function hasData(placement: FieldPlacement, pozo: Pozo): boolean {
         if (subId === 'interior') code = 'I';
 
         return !!(pozo.fotos?.fotos?.some(f => {
+            if (!f) return false;
             const sc = String(f.subcategoria || '').toUpperCase();
             const fn = String(f.filename || '').toUpperCase();
             return sc === code || 
@@ -200,6 +201,7 @@ export function applyFlexibleGrid(
 
         if (photoCode && pozo.fotos?.fotos) {
             const hasPhoto = pozo.fotos.fotos.some(f => {
+                if (!f) return false;
                 const sc = String(f.subcategoria || '').toUpperCase();
                 const fn = String(f.filename || '').toUpperCase();
                 return sc === photoCode || 
