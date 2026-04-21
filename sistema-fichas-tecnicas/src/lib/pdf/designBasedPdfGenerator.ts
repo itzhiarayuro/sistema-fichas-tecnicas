@@ -147,6 +147,8 @@ async function resolveFieldValue(
     codeMap: Record<string, string>,
     availableFields?: AvailableField[]
 ): Promise<{ value: any, link?: string }> {
+    const logPrefix = `⚠️ [PDF] Resolviendo [${fieldId}]...`;
+    
     // CASO ESPECIAL: Fotos específicas por nomenclatura
     if (fieldId.startsWith('foto_') && !/^\d+$/.test(fieldId.split('_')[1])) {
         const targetCode = codeMap[fieldId];
@@ -156,14 +158,17 @@ async function resolveFieldValue(
                 const bId = photo.blobId || '';
                 // SI YA ES UNA DATA URL O BLOB URL: Usar directamente
                 if (bId.startsWith('data:') || bId.startsWith('blob:')) {
+                    console.log(`${logPrefix} Foto encontrada por subcategoría/regex: ${targetCode}`);
                     return { value: bId };
                 }
                 
                 // ASEGURAR CARGA: En PDF necesitamos la URL real, si no está en RAM la cargamos.
                 const url = await blobStore.ensureLoaded(bId);
+                console.log(`${logPrefix} Foto cargada desde blobStore: ${targetCode}`);
                 return { value: url || (photo as any).dataUrl || '-' };
             }
         }
+        console.warn(`${logPrefix} Foto NO encontrada para código: ${targetCode || 'N/A'}`);
         return { value: '-' };
     }
 
@@ -187,6 +192,7 @@ async function resolveFieldValue(
                 };
                 const targetField = pipeFieldMap[fieldName] || fieldName;
                 const fieldVal = (pipe as any)[targetField];
+                console.log(`${logPrefix} Tubería [${targetType} ${orderNum}] -> ${fieldName}: ${fieldVal?.value || '-'}`);
                 return { value: fieldVal?.value || '-' };
             }
         } else if (typePrefix === 'sum') {
@@ -206,9 +212,11 @@ async function resolveFieldValue(
                 };
                 const targetField = sumFieldMap[fieldName] || fieldName;
                 const fieldVal = (sumidero as any)[targetField];
+                console.log(`${logPrefix} Sumidero [Orden ${orderNum}] -> ${fieldName}: ${fieldVal?.value || '-'}`);
                 return { value: fieldVal?.value || '-' };
             }
         }
+        console.warn(`${logPrefix} Elemento técnico NO encontrado o vacío.`);
         return { value: '-' };
     }
 
@@ -238,9 +246,11 @@ async function resolveFieldValue(
                 link = `https://www.google.com/maps?q=${lat},${lon}`;
             }
         }
+        console.log(`${logPrefix} Ruta [${path}] -> ${value}`);
         return { value, link };
     }
 
+    console.warn(`${logPrefix} No hay ruta definida para este campo.`);
     return { value: '-' };
 }
 
