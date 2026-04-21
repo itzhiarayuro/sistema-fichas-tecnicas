@@ -3,7 +3,16 @@ import * as admin from 'firebase-admin';
 if (!admin.apps.length) {
     try {
         const serviceAccountValue = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
-        let serviceAccount = serviceAccountValue ? JSON.parse(serviceAccountValue) : undefined;
+        let serviceAccount: any = undefined;
+        
+        if (serviceAccountValue) {
+            let raw = serviceAccountValue.trim();
+            // Eliminar comillas simples o dobles externas si existen
+            if ((raw.startsWith("'") && raw.endsWith("'")) || (raw.startsWith('"') && raw.endsWith('"'))) {
+                raw = raw.slice(1, -1);
+            }
+            serviceAccount = JSON.parse(raw);
+        }
 
         if (serviceAccount && serviceAccount.private_key) {
             serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');

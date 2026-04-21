@@ -49,22 +49,28 @@ export interface ExcelParseResult {
  * Soporta múltiples variaciones de nombres para cada campo
  * Incluye todos los 35 campos del diccionario de datos
  */
-const COLUMN_MAPPING: Record<string, string> = {
+export const COLUMN_MAPPING: Record<string, string> = {
   // IDENTIFICACIÓN
-  'id_pozo': 'idPozo',
+  'id_pozo': 'pozo_id',
+  'pozo_id': 'pozo_id',
   'id_descarga': 'idPozo',
   'codigo': 'idPozo',
   'pozo': 'idPozo',
   'descarga': 'idPozo',
-  'coordenada_x': 'coordenadaX',
-  'x': 'coordenadaX',
-  'longitud': 'longitud',
-  'coordenada_y': 'coordenadaY',
-  'y': 'coordenadaY',
-  'latitud': 'latitud',
+  'coordenada_x': 'pozo_coordX',
+  'coord_x': 'pozo_coordX',
+  'x': 'pozo_coordX',
+  'longitud': 'pozo_longitud',
+  'pozo_longitud': 'pozo_longitud',
+  'coordenada_y': 'pozo_coordY',
+  'coord_y': 'pozo_coordY',
+  'y': 'pozo_coordY',
+  'latitud': 'pozo_latitud',
+  'pozo_latitud': 'pozo_latitud',
   'enlace': 'enlace',
-  'fecha': 'fecha',
-  'fecha_inspeccion': 'fecha',
+  'fecha': 'pozo_fecha',
+  'fecha_inspeccion': 'pozo_fecha',
+  'pozo_fecha': 'pozo_fecha',
   'levanto': 'levanto',
   'inspector': 'levanto',
   'estado': 'estado',
@@ -78,6 +84,9 @@ const COLUMN_MAPPING: Record<string, string> = {
   'msnm': 'elevacion',
   'profundidad': 'profundidad',
   'prof': 'profundidad',
+  'municipio': '{{mObglBe5gLbSFKELv6WD}}',
+  'pueblo': 'municipio',
+  'localidad': 'municipio',
 
   // COMPONENTES
   'sistema': 'sistema',
@@ -117,7 +126,8 @@ const COLUMN_MAPPING: Record<string, string> = {
   'estado_peldanos': 'estadoPeldanos',
 
   // OBSERVACIONES
-  'observaciones': 'observaciones',
+  'observaciones': 'pozo_observaciones',
+  'pozo_observaciones': 'pozo_observaciones',
   'notas': 'observaciones',
   'comentarios': 'observaciones',
 };
@@ -125,7 +135,7 @@ const COLUMN_MAPPING: Record<string, string> = {
 /**
  * Mapeo para Tuberías (Hoja TUBERIAS)
  */
-const TUBERIA_MAPPING: Record<string, string> = {
+export const TUBERIA_MAPPING: Record<string, string> = {
   'id_pozo': 'idPozo',
   'id_de_pozo': 'idPozo',
   'pozo': 'idPozo',
@@ -157,7 +167,7 @@ const TUBERIA_MAPPING: Record<string, string> = {
   'longitud': 'longitud',
 };
 
-const SUMIDERO_MAPPING: Record<string, string> = {
+export const SUMIDERO_MAPPING: Record<string, string> = {
   'id_pozo': 'idPozo',
   'id_de_pozo': 'idPozo',
   'pozo': 'idPozo',
@@ -201,7 +211,7 @@ const FOTO_MAPPING: Record<string, string> = {
  * Columnas requeridas para crear un pozo válido
  * Según diccionario: 6 campos obligatorios
  */
-const REQUIRED_COLUMNS = ['idPozo', 'coordenadaX', 'coordenadaY', 'fecha', 'levanto', 'estado'];
+const REQUIRED_COLUMNS = ['pozo_id', 'pozo_coordX', 'pozo_coordY', 'pozo_fecha', 'levanto', 'estado'];
 
 /**
  * Campos esperados para estadísticas (todos los 35 campos del diccionario)
@@ -343,6 +353,13 @@ function normalizeDateValue(value: string): string {
   // Si ya está en formato YYYY-MM-DD, retornar
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return value;
+  }
+
+  // Intentar parsear DD/MM/YYYY
+  const ddMMyyyyMatch = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (ddMMyyyyMatch) {
+    const [, day, month, year] = ddMMyyyyMatch;
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
   }
 
   // Intentar parsear como fecha
@@ -685,10 +702,11 @@ function parseRow(
 
   /**
    * Obtiene el valor de un campo con fallback a string vacío
+   * Permite múltiples variaciones (ej: 'idPozo' o 'pozo_id')
    */
-  const getValue = (field: string): string => {
+  const getValue = (...fields: string[]): string => {
     for (const [col, mapped] of Object.entries(columnMapping)) {
-      if (mapped === field) {
+      if (fields.includes(mapped)) {
         const rawValue = row[col];
         return safeStringValue(rawValue);
       }
@@ -700,7 +718,7 @@ function parseRow(
   // VALIDACIÓN DE CAMPOS OBLIGATORIOS
   // ============================================================================
 
-  const idPozo = getValue('idPozo');
+  const idPozo = getValue('idPozo', 'pozo_id');
   if (!idPozo) {
     result.parseErrors.push({
       type: ErrorType.DATA,
@@ -712,7 +730,7 @@ function parseRow(
     return null;
   }
 
-  let fecha = getValue('fecha');
+  let fecha = getValue('fecha', 'pozo_fecha');
   let fechaNormalizada = normalizeDateValue(fecha);
   if (!isValidDate(fechaNormalizada)) {
     result.warnings.push(`Fila ${index + 2}: Fecha inválida o faltante - se usará la fecha actual`);
@@ -735,7 +753,7 @@ function parseRow(
   // VALIDACIÓN DE COORDENADAS (OPCIONALES PERO SI SE PROPORCIONAN DEBEN SER VÁLIDAS)
   // ============================================================================
 
-  const coordenadaX = getValue('coordenadaX');
+  const coordenadaX = getValue('coordenadaX', 'pozo_coordX');
   if (!isValidCoordinate(coordenadaX, false)) {
     result.parseErrors.push({
       type: ErrorType.DATA,
@@ -749,7 +767,7 @@ function parseRow(
     // No retornar null, solo advertir - las coordenadas son opcionales
   }
 
-  const coordenadaY = getValue('coordenadaY');
+  const coordenadaY = getValue('coordenadaY', 'pozo_coordY');
   if (!isValidCoordinate(coordenadaY, true)) {
     result.parseErrors.push({
       type: ErrorType.DATA,
@@ -763,8 +781,8 @@ function parseRow(
     // No retornar null, solo advertir - las coordenadas son opcionales
   }
 
-  const latitud = getValue('latitud');
-  const longitud = getValue('longitud');
+  const latitud = getValue('latitud', 'pozo_latitud');
+  const longitud = getValue('longitud', 'pozo_longitud');
   const enlace = getValue('enlace');
 
   // ============================================================================
@@ -895,18 +913,26 @@ function parseRow(
 
   const pozo: Pozo = {
     id: uniqueId,
-    // --- CAPA PLANA (Poblada directamente) ---
+    // --- CAPA PLANA ---
     idPozo: { value: idPozo, source: 'excel' },
+    pozo_id: { value: idPozo, source: 'excel' },
     coordenadaX: { value: coordenadaX, source: 'excel', link: finalEnlace },
+    pozo_coordX: { value: coordenadaX, source: 'excel', link: finalEnlace },
     coordenadaY: { value: coordenadaY, source: 'excel', link: finalEnlace },
+    pozo_coordY: { value: coordenadaY, source: 'excel', link: finalEnlace },
     latitud: { value: latitud, source: 'excel', link: finalEnlace },
+    pozo_latitud: { value: latitud, source: 'excel', link: finalEnlace },
     longitud: { value: longitud, source: 'excel', link: finalEnlace },
+    pozo_longitud: { value: longitud, source: 'excel', link: finalEnlace },
     enlace: { value: finalEnlace, source: 'excel' },
     fecha: { value: fechaNormalizada, source: 'excel' },
+    pozo_fecha: { value: fechaNormalizada, source: 'excel' },
     levanto: { value: levanto, source: 'excel' },
     estado: { value: estado, source: 'excel' },
     direccion: { value: getValue('direccion'), source: 'excel' },
     barrio: { value: getValue('barrio'), source: 'excel' },
+    municipio: { value: getValue('municipio') || getValue('{{mObglBe5gLbSFKELv6WD}}'), source: 'excel' },
+    ['{{mObglBe5gLbSFKELv6WD}}']: { value: getValue('{{mObglBe5gLbSFKELv6WD}}'), source: 'excel' },
     elevacion: { value: elevacion, source: 'excel' },
     profundidad: { value: profundidad, source: 'excel' },
     sistema: { value: getValue('sistema'), source: 'excel' },
@@ -929,12 +955,13 @@ function parseRow(
     existeCanuela: { value: getValue('existeCanuela'), source: 'excel' },
     materialCanuela: { value: getValue('materialCanuela'), source: 'excel' },
     estadoCanuela: { value: getValue('estadoCanuela'), source: 'excel' },
-    estadoCaniuela: { value: getValue('estadoCanuela'), source: 'excel' }, // Duplicado para alias
+    estadoCaniuela: { value: getValue('estadoCanuela'), source: 'excel' }, 
     existePeldanos: { value: existePeldanos, source: 'excel' },
     materialPeldanos: { value: getValue('materialPeldanos'), source: 'excel' },
     numeroPeldanos: { value: numeroPeldanos, source: 'excel' },
     estadoPeldanos: { value: getValue('estadoPeldanos'), source: 'excel' },
-    observacionesPozo: { value: getValue('observaciones'), source: 'excel' },
+    observacionesPozo: { value: getValue('pozo_observaciones'), source: 'excel' },
+    pozo_observaciones: { value: getValue('pozo_observaciones'), source: 'excel' },
 
     // --- CAPA JERÁRQUICA (Mantener para compatibilidad) ---
     identificacion: {
@@ -943,14 +970,16 @@ function parseRow(
       coordenadaY: { value: coordenadaY, source: 'excel', link: finalEnlace },
       latitud: { value: latitud, source: 'excel', link: finalEnlace },
       longitud: { value: longitud, source: 'excel', link: finalEnlace },
-      enlace: { value: finalEnlace, source: 'excel' },
+      estado: { value: estado, source: 'excel' },
       fecha: { value: fechaNormalizada, source: 'excel' },
       levanto: { value: levanto, source: 'excel' },
-      estado: { value: estado, source: 'excel' },
+      municipio: { value: getValue('municipio'), source: 'excel' },
+      enlace: { value: finalEnlace, source: 'excel' },
     },
     ubicacion: {
       direccion: { value: getValue('direccion'), source: 'excel' },
       barrio: { value: getValue('barrio'), source: 'excel' },
+      municipio: { value: getValue('municipio'), source: 'excel' },
       elevacion: { value: elevacion, source: 'excel' },
       profundidad: { value: profundidad, source: 'excel' },
     },
@@ -1360,11 +1389,7 @@ export {
   isValidDate,
   normalizeDateValue,
   isValidPredefinedValue,
-  COLUMN_MAPPING,
-  REQUIRED_COLUMNS,
   EXPECTED_FIELDS,
   PREDEFINED_VALUES,
-  TUBERIA_MAPPING,
-  SUMIDERO_MAPPING,
   FOTO_MAPPING,
 };

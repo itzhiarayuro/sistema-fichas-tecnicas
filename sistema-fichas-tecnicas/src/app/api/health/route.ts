@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
 export async function GET() {
     const hasAdminKey = !!process.env.FIREBASE_SERVICE_ACCOUNT_KEY;

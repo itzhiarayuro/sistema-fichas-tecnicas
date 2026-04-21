@@ -535,14 +535,37 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
     if (isPhoto && value && value !== '-' && value !== '') {
         try {
             const format = String(value).toLowerCase().includes('png') ? 'PNG' : 'JPEG';
+            const dims = await getImageDimensions(value);
 
             let finalX = placement.x;
             let finalY = placement.y + labelAreaHeight;
             let finalW = placement.width;
             let finalH = availableContentHeight;
 
+            if (dims.width > 0 && dims.height > 0) {
+                const naturalW = dims.width;
+                const naturalH = dims.height;
+                const maxW = placement.width;
+                const maxH = availableContentHeight;
+
+                const scaleW = naturalW > maxW ? maxW / naturalW : 1;
+                const scaleH = naturalH > maxH ? maxH / naturalH : 1;
+                const scale = Math.min(scaleW, scaleH);
+
+                finalW = naturalW * scale;
+                finalH = naturalH * scale;
+            }
+
+            console.group(`📸 [PDF] Renderizando Foto: ${placement.fieldId}`);
+            console.log(`📏 Área asignada: ${placement.width.toFixed(1)}x${availableContentHeight.toFixed(1)}mm`);
+            console.log(`📐 Tamaño dibujado: ${finalW.toFixed(1)}x${finalH.toFixed(1)}mm`);
+            console.log(`🖼️ Resolución origen: ${dims.width}x${dims.height}px`);
+            console.groupEnd();
+
             doc.addImage(value, format, finalX, finalY, finalW, finalH, undefined, 'FAST');
-        } catch (e) { console.warn(`Error foto ${placement.fieldId}`, e); }
+        } catch (e) {
+            console.warn(`Error foto ${placement.fieldId}`, e);
+        }
         return;
     }
 

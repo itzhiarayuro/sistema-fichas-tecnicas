@@ -247,6 +247,7 @@ export function transformFirebaseToPozo(firebaseData: any): Pozo {
         enlace: toFieldValue(firebaseData.enlace || '', 'manual'),
         direccion: toFieldValue(firebaseData.direccion || '', 'manual'),
         barrio: toFieldValue(firebaseData.barrio || firebaseData.municipio || '', 'manual'),
+        municipio: toFieldValue(firebaseData.municipio || '', 'manual'),
         elevacion: toFieldValue(firebaseData.gps?._precision || firebaseData.gps?.precision || firebaseData.zRasante || '0', 'manual', false),
         profundidad: toFieldValue(firebaseData.altura || firebaseData.depth || '0', 'manual', false),
         sistema: toFieldValue(firebaseData.sistema || 'DESCONOCIDO', 'manual'),
@@ -289,12 +290,14 @@ export function transformFirebaseToPozo(firebaseData: any): Pozo {
             fecha: toFieldValue(firebaseData.fecha || new Date().toISOString().split('T')[0], 'manual', false),
             levanto: toFieldValue(getInspectorName(firebaseData.creatorEmail || firebaseData.inspector || firebaseData.levanto), 'manual'),
             estado: toFieldValue(firebaseData.estadoPozo || firebaseData.estado || 'DESCONOCIDO', 'manual'),
+            municipio: toFieldValue(firebaseData.municipio || '', 'manual'),
             enlace: toFieldValue(firebaseData.enlace || '', 'manual', false),
         },
 
         ubicacion: {
             direccion: toFieldValue(firebaseData.direccion || '', 'manual'),
-            barrio: toFieldValue(firebaseData.barrio || firebaseData.municipio || '', 'manual'),
+            barrio: toFieldValue(firebaseData.barrio || '', 'manual'),
+            municipio: toFieldValue(firebaseData.municipio || '', 'manual'),
             elevacion: toFieldValue(firebaseData.gps?._precision || firebaseData.gps?.precision || firebaseData.zRasante || '0', 'manual', false),
             profundidad: toFieldValue(firebaseData.altura || firebaseData.depth || '0', 'manual', false),
         },
@@ -338,11 +341,19 @@ export function transformFirebaseToPozo(firebaseData: any): Pozo {
             sumideros: sumiderosSlots
         },
 
-
         fotos: {
-            fotos: (firebaseData.fotoList || [])
-                .map((f: any) => transformFirebaseToFotoInfo(f, id))
-                .filter((f: any) => f.blobId && f.blobId !== '')
+            fotos: (() => {
+                const list = [...(firebaseData.fotoList || [])];
+                // Support Marcaciones that use an object for "fotos"
+                if (firebaseData.fotos && typeof firebaseData.fotos === 'object') {
+                    Object.values(firebaseData.fotos).forEach((f: any) => {
+                        if (f && typeof f === 'object') list.push(f);
+                    });
+                }
+                return list
+                    .map((f: any) => transformFirebaseToFotoInfo(f, id))
+                    .filter((f: any) => f.blobId && f.blobId !== '');
+            })()
         },
 
         metadata: {

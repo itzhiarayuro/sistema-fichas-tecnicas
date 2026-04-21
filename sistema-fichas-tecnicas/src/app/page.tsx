@@ -13,7 +13,7 @@ export default function RootPage() {
       if (user) {
         const ADMINS = ['juanvegas003@gmail.com', 'juan.vega.icya@gmail.com'];
         if (ADMINS.includes(user.email || '')) {
-          router.replace('/portal');
+          router.replace('/pozos');
         } else {
           window.location.href = '/registro/index.html';
         }

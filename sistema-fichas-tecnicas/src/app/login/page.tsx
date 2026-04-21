@@ -18,7 +18,7 @@ export default function LoginPage() {
         const unsubscribe = onAuthStateChanged(auth, (user) => {
             if (user) {
                 if (ADMINS.includes(user.email || '')) {
-                    router.push('/portal');
+                    router.push('/pozos');
                 } else {
                     window.location.href = '/registro/index.html';
                 }
@@ -37,7 +37,7 @@ export default function LoginPage() {
             const user = userCredential.user;
 
             if (ADMINS.includes(user.email || '')) {
-                router.push('/portal');
+                router.push('/pozos');
             } else {
                 window.location.href = '/registro/index.html';
             }

@@ -35,7 +35,8 @@ function hasData(placement: FieldPlacement, pozo: Pozo): boolean {
     if (placement.fieldId.startsWith('foto_')) {
         const subId = placement.fieldId.replace('foto_', '').toLowerCase();
         const subIdArr = subId.split('_');
-        let code = subId.toUpperCase();
+        let code = subId.toUpperCase(); // default e.g. 'PANORAMICA'
+        
         if (subId.startsWith('entrada_')) code = 'E' + subIdArr[subIdArr.length - 1];
         if (subId.startsWith('salida_')) code = 'S' + subIdArr[subIdArr.length - 1];
         if (subId.startsWith('sumidero_')) code = 'SUM' + subIdArr[subIdArr.length - 1];
@@ -46,7 +47,6 @@ function hasData(placement: FieldPlacement, pozo: Pozo): boolean {
         return !!(pozo.fotos?.fotos?.some(f => {
             const sc = String(f.subcategoria || '').toUpperCase();
             const fn = String(f.filename || '').toUpperCase();
-            // Match por subcategoría exacta, o por inclusión del código en el nombre del archivo
             return sc === code || 
                    fn.includes(`-${code}`) || 
                    fn.startsWith(`${code}-`) ||
@@ -133,7 +133,6 @@ export function applyFlexibleGrid(
     } = options;
 
     const newDesign: FichaDesignVersion = JSON.parse(JSON.stringify(design));
-    (newDesign as any)._isFlexed = true; // Evitar double-dipping en el generador
 
     // PASO 0: Encabezado
     let dynamicStartAtY = startAtY;
@@ -146,134 +145,164 @@ export function applyFlexibleGrid(
         dynamicStartAtY = Math.max(maxHeaderY + 2, dynamicStartAtY);
     }
 
-    // PASO 1: Recopilar grupos y validar contra el ORDEN real del pozo
-    type TechUnit = {
-        groupId: string;
+    // PASO 1: Descubrir los bloques ancla (La cuadrícula visual)
+    type BlockBound = {
         type: 'entrada' | 'salida' | 'sumidero';
-        num: number; // Su número de identidad (Orden)
-        bbox: BoundingBox;
+        num: number;
+        col: 1 | 2 | 3;
+        minY: number;
+        maxY: number;
+        hasData: boolean;
         elements: (FieldPlacement | ShapeElement)[];
     };
 
-    const techUnits: TechUnit[] = [];
-    const processedIds = new Set<string>();
+    const blocks: BlockBound[] = [];
+    const page2Elements = [
+        ...newDesign.placements.filter(p => !p.repeatOnEveryPage && (p as any).pageNumber === 2),
+        ...newDesign.shapes.filter(s => !s.repeatOnEveryPage && (s as any).pageNumber === 2)
+    ];
 
+    // Primero, encontramos los límites Y de cada bloque definidos por los grupos explícitos.
+    // Asumismos que al menos un recuadro o texto que define el tamaño está agrupado.
     newDesign.groups.forEach(g => {
         const children = [
             ...newDesign.placements.filter(p => p.groupId === g.id),
             ...newDesign.shapes.filter(s => s.groupId === g.id),
         ] as (FieldPlacement | ShapeElement)[];
 
-        const childFieldIds = children.filter(c => isFieldPlacement(c)).map(c => (c as FieldPlacement).fieldId);
-        const { type, num } = getTechnicalType(g.name || '', childFieldIds);
-
-        if (type === 'none') {
-            children.forEach(c => processedIds.add(c.id));
-            return;
-        }
+        const { type, num } = getTechnicalType(g.name || '', []);
+        if (type === 'none' || num === 0 || children.length === 0) return;
 
         const bbox = calculateGroupBoundingBox(g, children);
+        
+        // Determinar columna visual
+        const cx = bbox.x + bbox.width / 2;
+        let col: 1 | 2 | 3 = 1;
+        if (cx > 135) col = 3;
+        else if (cx > 65) col = 2;
 
-        // VALIDACIÓN CONTRA EL EXCEL Y LA NUBE:
-        // Buscamos si el pozo tiene datos en el slot correspondiente al número de orden
         let hasRealData = false;
         if (num >= 1 && num <= 8) {
+            const index = num - 1;
             if (type === 'entrada') {
-                hasRealData = (pozo.tuberias?.tuberias || []).some(t => 
-                    t && String(t.tipoTuberia?.value || '').toLowerCase() === 'entrada' && 
-                    (String(t.orden?.value) === String(num) || String(t.orden?.value) === `E${num}`)
-                ) ?? false;
+                hasRealData = !!(pozo.tuberias?.tuberias?.[index]?.idTuberia?.value);
             } else if (type === 'salida') {
-                hasRealData = (pozo.tuberias?.tuberias || []).some(t => 
-                    t && String(t.tipoTuberia?.value || '').toLowerCase() === 'salida' && 
-                    (String(t.orden?.value) === String(num) || String(t.orden?.value) === `S${num}`)
-                ) ?? false;
+                hasRealData = !!(pozo.tuberias?.tuberias?.[index + 8]?.idTuberia?.value);
             } else if (type === 'sumidero') {
-                const targetEsquema = String(num);
-                hasRealData = (pozo.sumideros?.sumideros || []).some(s => {
-                    if (!s) return false;
-                    const esquema = String(s.numeroEsquema?.value || '').toUpperCase().replace(/\D/g, '');
-                    return esquema === targetEsquema;
-                }) ?? false;
-                
-                // Fallback: Si no tiene numeroEsquema, confiamos en el índice directo del slot
-                if (!hasRealData && !!pozo.sumideros?.sumideros?.[num - 1]) {
-                    hasRealData = true;
-                }
+                hasRealData = !!(pozo.sumideros?.sumideros?.[index]?.idSumidero?.value);
             }
         }
 
-        // ⚡ REFUERZO: Si el slot tiene una foto (aunque no tenga datos de batea), se queda.
-        if (!hasRealData) {
-            hasRealData = children.some(c => isFieldPlacement(c) && hasData(c as FieldPlacement, pozo));
+        let photoCode = '';
+        if (type === 'entrada') photoCode = 'E' + num;
+        if (type === 'salida') photoCode = 'S' + num;
+        if (type === 'sumidero') photoCode = 'SUM' + num;
+
+        if (photoCode && pozo.fotos?.fotos) {
+            const hasPhoto = pozo.fotos.fotos.some(f => {
+                const sc = String(f.subcategoria || '').toUpperCase();
+                const fn = String(f.filename || '').toUpperCase();
+                return sc === photoCode || 
+                       fn.includes(`-${photoCode}`) || 
+                       fn.startsWith(`${photoCode}-`) ||
+                       fn.includes(`_${photoCode}`) ||
+                       sc.startsWith(photoCode);
+            });
+            hasRealData = hasRealData || hasPhoto;
         }
 
-        if (!hasRealData) {
-            g.isVisible = false;
-            children.forEach(c => { c.isVisible = false; processedIds.add(c.id); });
-            return;
-        }
-
-        techUnits.push({ groupId: g.id, type, num, bbox, elements: children });
-        children.forEach(c => processedIds.add(c.id));
+        blocks.push({
+            type, num, col,
+            minY: bbox.y - 2, // Margen de tolerancia visual
+            maxY: bbox.y + bbox.height + 2,
+            hasData: hasRealData,
+            elements: []
+        });
     });
 
-    // PASO 2: Coordenadas fijas de columnas (Sincronización milimétrica con el JSON original)
-    const COL1_X = 5;      // Entradas (X:5, Ancho: 68 -> Termina en 73)
-    const COL2_X = 73;     // Salidas (Empieza justo donde termina la Col 1)
-    const COL3_X = 142;    // Sumideros (Espacio después del ID de Salidas)
+    // Expandimos los maxY para llenar los huecos y no perder nada. (El maxY de uno llega hasta el minY del siguiente)
+    [1, 2, 3].forEach(c => {
+        const colBlocks = blocks.filter(b => b.col === c).sort((a, b) => a.minY - b.minY);
+        for (let i = 0; i < colBlocks.length - 1; i++) {
+            colBlocks[i].maxY = colBlocks[i + 1].minY; // Que abarque hasta que empiece el siguiente
+        }
+        if (colBlocks.length > 0) {
+            colBlocks[colBlocks.length - 1].maxY = 290; // El último abarca hasta el final de la página
+        }
+    });
 
-    // Ordenamos las unidades por su número de orden real para que fluyan 1, 2, 3...
-    const entradas = techUnits.filter(u => u.type === 'entrada').sort((a, b) => a.num - b.num);
-    const salidas = techUnits.filter(u => u.type === 'salida').sort((a, b) => a.num - b.num);
-    const sumideros = techUnits.filter(u => u.type === 'sumidero').sort((a, b) => a.num - b.num);
-
-    // PASO 3: Posicionar
-    let yCol1 = dynamicStartAtY;
-    let yCol2 = dynamicStartAtY;
-    let yCol3 = dynamicStartAtY;
-
-    function moveUnit(unit: TechUnit, targetX: number, targetY: number) {
-        const dx = targetX - unit.bbox.x;
-        const dy = targetY - unit.bbox.y;
+    // PASO 2: ASIGNACIÓN 100% ESPACIAL
+    // TODO elemento de la página 2 pertenece al bloque en cuya columna y rango Y se encuentra.
+    page2Elements.forEach(el => {
+        if (el.y < dynamicStartAtY - 5) return; // Ignorar encabezados
         
-        // Asignamos explícitamente a la página 2 para que el motor de PDF lo renderice
-        unit.elements.forEach((el: any) => { 
+        const cx = el.x + (el.width || 0) / 2;
+        const cy = el.y + (el.height || 0) / 2;
+        
+        let elCol: 1 | 2 | 3 = 1;
+        if (cx > 135) elCol = 3;
+        else if (cx > 65) elCol = 2;
+
+        const targetBlock = blocks.find(b => b.col === elCol && cy >= b.minY && cy < b.maxY);
+        
+        if (targetBlock) {
+            targetBlock.elements.push(el);
+            if (!targetBlock.hasData) {
+                el.isVisible = false; // Se oculta porque pertenece a un bloque sin datos
+            }
+        } else {
+            // Huérfano que no cayó en ningún bloque lógico de la grilla -> se oculta.
+            el.isVisible = false;
+        }
+    });
+
+    // PASO 3: POSICIONAMIENTO Y TETRIS
+    let yCols = { 1: dynamicStartAtY, 2: dynamicStartAtY, 3: dynamicStartAtY };
+    const fixedX = { 1: 5, 2: 73, 3: 142 };
+
+    const activeBlocks = blocks.filter(b => b.hasData);
+
+    // Separamos en arrays para iterar en el orden correcto
+    const entradas = activeBlocks.filter(b => b.type === 'entrada').sort((a,b) => a.num - b.num);
+    const salidas = activeBlocks.filter(b => b.type === 'salida').sort((a,b) => a.num - b.num);
+    const sumideros = activeBlocks.filter(b => b.type === 'sumidero').sort((a,b) => a.num - b.num);
+
+    function placeBlock(b: BlockBound, targetCol: 1 | 2 | 3) {
+        if (b.elements.length === 0) return;
+        
+        const minX = Math.min(...b.elements.map(e => e.x));
+        const minY = Math.min(...b.elements.map(e => e.y));
+        const height = Math.max(...b.elements.map(e => e.y + (e.height || 0))) - minY;
+
+        const targetX = fixedX[targetCol];
+        const targetY = yCols[targetCol];
+
+        const dx = targetX - minX;
+        const dy = targetY - minY;
+
+        b.elements.forEach((el: any) => { 
             el.x += dx; 
             el.y += dy; 
-            el.pageNumber = 2; // FIX: Mudar a página 2
         });
 
-        const g = newDesign.groups.find(g => g.id === unit.groupId);
-        if (g) { 
-            g.x = targetX; 
-            g.y = targetY; 
-            g.pageNumber = 2; // FIX: El grupo también debe estar en página 2
-        }
+        yCols[targetCol] += height + spacingY;
     }
 
-    // Entradas: Columna 1 (X=10mm)
-    entradas.forEach(unit => {
-        moveUnit(unit, COL1_X, yCol1);
-        yCol1 += unit.bbox.height + spacingY;
+    // Tuberías en columnas 1 y 2
+    entradas.forEach(b => {
+        const col = b.num % 2 !== 0 ? 1 : 2;
+        placeBlock(b, col);
     });
 
-    // Salidas: Columna 2 (X=74.67mm)
-    salidas.forEach(unit => {
-        moveUnit(unit, COL2_X, yCol2);
-        yCol2 += unit.bbox.height + spacingY;
+    salidas.forEach(b => {
+        const col = b.num % 2 !== 0 ? 1 : 2;
+        placeBlock(b, col);
     });
 
-    // Sumideros: columna 3
-    sumideros.forEach(unit => {
-        moveUnit(unit, COL3_X, yCol3);
-        yCol3 += unit.bbox.height + spacingY;
+    // Sumideros en columna 3
+    sumideros.forEach(b => {
+        placeBlock(b, 3);
     });
-
-    // Si llegamos aquí y hay datos, aseguramos que el documento tenga al menos 2 páginas
-    if (techUnits.length > 0) {
-        newDesign.numPages = Math.max(newDesign.numPages || 1, 2);
-    }
 
     return newDesign;
 }

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/server/firebaseAdmin';
 import { transformFirebaseToPozo } from '@/lib/services/firebaseAdapter';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: NextRequest) {
     try {
         const { searchParams } = new URL(req.url);

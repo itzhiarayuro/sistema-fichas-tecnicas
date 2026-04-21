@@ -161,11 +161,13 @@ const MOCK_POZO: Partial<Pozo> = {
     fecha: { value: '2024-01-15', source: 'manual' },
     levanto: { value: 'Inspector Mock', source: 'manual' },
     estado: { value: 'Bueno', source: 'manual' },
+    municipio: { value: 'Municipio Mock', source: 'manual' },
     enlace: { value: '', source: 'manual' }
   },
   ubicacion: {
     direccion: { value: 'Calle 10 # 5-20', source: 'manual' },
     barrio: { value: 'Centro Histórico', source: 'manual' },
+    municipio: { value: 'Municio Mock', source: 'manual' },
     elevacion: { value: '1500.2', source: 'manual' },
     profundidad: { value: '2.5', source: 'manual' }
   },
@@ -305,6 +307,7 @@ export function PreviewPanel({
     codigo: getFieldValue(fichaState, 'identificacion', 'codigo', String(pozo.idPozo?.value || '')),
     direccion: getFieldValue(fichaState, 'identificacion', 'direccion', String(pozo.direccion?.value || '')),
     barrio: getFieldValue(fichaState, 'identificacion', 'barrio', String(pozo.barrio?.value || '')),
+    municipio: getFieldValue(fichaState, 'identificacion', 'municipio', String(pozo.municipio?.value || '')),
     sistema: getFieldValue(fichaState, 'identificacion', 'sistema', String(pozo.sistema?.value || '')),
     estado: getFieldValue(fichaState, 'identificacion', 'estado', String(pozo.estado?.value || '')),
     fecha: getFieldValue(fichaState, 'identificacion', 'fecha', String(pozo.fecha?.value || '')),
@@ -496,6 +499,12 @@ export function PreviewPanel({
                   label="Barrio"
                   value={identificacion.barrio.value}
                   isEdited={identificacion.barrio.isEdited}
+                  showIndicator={showEditIndicators}
+                />
+                <FieldDisplay
+                  label="Municipio"
+                  value={identificacion.municipio.value}
+                  isEdited={identificacion.municipio.isEdited}
                   showIndicator={showEditIndicators}
                 />
                 <FieldDisplay

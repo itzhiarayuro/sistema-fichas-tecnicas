@@ -206,7 +206,13 @@ const mapStorage = {
       }
     };
 
-    localStorage.setItem(name, JSON.stringify(toStore));
+    try {
+      localStorage.setItem(name, JSON.stringify(toStore));
+    } catch (error) {
+      console.error('Error saving to local storage (Quota Exceeded likely):', error);
+      // We don't throw here to avoid crashing the app and halting the import script,
+      // state will live in memory instead.
+    }
   },
   removeItem: (name: string) => localStorage.removeItem(name),
 };
@@ -386,8 +392,20 @@ export const useGlobalStore = create<GlobalState>()(
         if (!pozoId) return [];
         const state = get();
 
-        // 1. Extraer código del pozo (ej: M680)
+        // Check if pozoId is a document ID and resolve its true idPozo
         let targetCode = String(pozoId).toUpperCase();
+        const pozo = state.pozos.get(pozoId);
+        
+        if (pozo) {
+            const rawId = pozo.idPozo || pozo.identificacion?.idPozo;
+            if (typeof rawId === 'object' && rawId !== null && 'value' in rawId) {
+                targetCode = String(rawId.value).trim().toUpperCase();
+            } else if (rawId) {
+                targetCode = String(rawId).trim().toUpperCase();
+            }
+        }
+
+        // Fallback for POZO- naming convention
         if (targetCode.startsWith('POZO-')) {
           const parts = targetCode.split('-');
           if (parts.length >= 4) {

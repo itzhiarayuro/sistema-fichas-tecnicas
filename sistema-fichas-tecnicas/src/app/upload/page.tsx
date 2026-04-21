@@ -12,10 +12,11 @@
 
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useCallback, useEffect, useRef, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { DropZone, DropZoneStatus, FileList, FileItem, UploadProgress, UploadStats, ExcelFormatGuide } from '@/components/upload';
 import { ChunkedUploader } from '@/components/upload/ChunkedUploader';
+import { ExcelAuditDashboard } from '@/components/upload/ExcelAuditDashboard';
 import { PerformanceMonitor } from '@/components/upload/PerformanceMonitor';
 import { RecommendationsPanel } from '@/components/guided';
 import { AppShell, NextStepIndicator, ProgressBar } from '@/components/layout';
@@ -35,10 +36,20 @@ import { processPhotosOnServer, checkServerAvailable } from '@/lib/utils/serverP
 import { CloudImportModal } from '@/components/upload/CloudImportModal';
 import type { Pozo, FotoInfo } from '@/types';
 import { useMounted } from '@/hooks/useMounted';
+import { downloadPhotoFromGAS, dataUrlToBlob } from '@/lib/services/drivePhotoDownloader';
 
-export default function UploadPage() {
+export default function UploadPageWrapper() {
+  return (
+    <Suspense fallback={<div className="p-10 text-center">Cargando cargador...</div>}>
+      <UploadContent />
+    </Suspense>
+  );
+}
+
+function UploadContent() {
   const router = useRouter();
   const isMounted = useMounted();
+  // ... (rest of the component)
 
   // Stores
   const { addPozo, addPozosBulk, addPhoto, addPhotosBulk, setCurrentStep, pozos, photos } = useGlobalStore();
@@ -63,6 +74,7 @@ export default function UploadPage() {
   const [canContinue, setCanContinue] = useState(false);
   const [showChunkedUploader, setShowChunkedUploader] = useState(false);
   const [performanceRecommendation, setPerformanceRecommendation] = useState<string>('');
+  const [showAuditTool, setShowAuditTool] = useState(false);
 
   // Índice de fotos esperadas (se construye cuando se carga el Excel)
   const expectedIndexRef = useRef<IndiceFotosEsperadas | null>(null);
@@ -88,6 +100,16 @@ export default function UploadPage() {
   const realFilesRef = useRef<File[]>([]); // Archivos reales para ChunkedUploader
   const fileUpdatesBuffer = useRef<Map<string, Partial<FileItem>>>(new Map());
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const searchParams = useSearchParams();
+
+  // Handle URL tab parameter
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab === 'audit') {
+      setShowAuditTool(true);
+    }
+  }, [searchParams]);
 
   // Actualizar paso del workflow al montar
   useEffect(() => {
@@ -761,18 +783,64 @@ export default function UploadPage() {
   /**
    * Maneja la importación de datos desde la nube
    */
-  const handleCloudImport = useCallback((importedPozos: Pozo[]) => {
+  const handleCloudImport = useCallback(async (importedPozos: Pozo[]) => {
     if (importedPozos.length === 0) return;
+
+    // Verificar credenciales antes de intentar descargar fotos
+    if (!process.env.NEXT_PUBLIC_GAS_URL || !process.env.NEXT_PUBLIC_SECRET_TOKEN) {
+      showError(
+        'Faltan las variables de entorno NEXT_PUBLIC_GAS_URL y/o NEXT_PUBLIC_SECRET_TOKEN. ' +
+        'Las fotos no se descargarán. Configúralas en el archivo .env.local y reinicia el servidor.'
+      );
+    }
+
+    // Mostrar progreso de preparación
+    setIsProcessing(true);
+    setProcessingMessage('Descargando las fotos de los pozos seleccionados... (Esto puede tardar)');
+
+    const importedPhotos: FotoInfo[] = [];
+
+    // Recolectar todas las fotos
+    for (const pozo of importedPozos) {
+      if (pozo.fotos?.fotos) {
+        for (const foto of pozo.fotos.fotos) {
+          let resolvedBlobId = foto.blobId;
+
+          try {
+            const dataUrl = await downloadPhotoFromGAS(foto.filename, foto.driveId);
+            if (dataUrl) {
+              const blob = dataUrlToBlob(dataUrl);
+              resolvedBlobId = await blobStore.store(blob, foto.filename);
+            } else {
+              console.warn(`No se pudo descargar dataUrl para ${foto.filename} — se omite la foto.`);
+              continue;
+            }
+          } catch (err) {
+            console.error(`Excepcion descargando foto de nube ${foto.filename}:`, err);
+            continue;
+          }
+
+          // Crear un objeto FotoInfo limpio (no mutar el original de Firebase)
+          const fotoLocal: FotoInfo = {
+            id: foto.id || generateFileId(),
+            idPozo: foto.idPozo || pozo.id,
+            tipo: foto.tipo || 'otro',
+            categoria: foto.categoria || 'OTRO',
+            subcategoria: foto.subcategoria,
+            descripcion: foto.descripcion,
+            blobId: resolvedBlobId,
+            filename: foto.filename,
+            fechaCaptura: foto.fechaCaptura ?? Date.now(),
+            driveId: foto.driveId,
+          };
+
+          importedPhotos.push(fotoLocal);
+        }
+      }
+    }
 
     // 1. Commit INMEDIATAMENTE al store global para que aparezcan en /pozos
     addPozosBulk(importedPozos);
-
-    const importedPhotos: FotoInfo[] = [];
-    importedPozos.forEach(pozo => {
-      if (pozo.fotos?.fotos) {
-        importedPhotos.push(...pozo.fotos.fotos);
-      }
-    });
 
     if (importedPhotos.length > 0) {
       addPhotosBulk(importedPhotos);
@@ -784,12 +852,26 @@ export default function UploadPage() {
 
     setCanContinue(true);
     setDropZoneStatus('success');
+    setIsProcessing(false);
+
+    // 3. ACTUALIZAR REFERENCIA DE ÍNDICE
+    // Si importó pozos de la nube, queremos que si luego arrastra ARGIS, ¡los reconozca!
+    // Para ello, reconstruimos el expectedIndexRef con los nuevos pozos mezclados.
+    const combinedPozosMap = new Map<string, Pozo>();
+    if (pozos instanceof Map) {
+      pozos.forEach((p, id) => combinedPozosMap.set(id, p));
+    } else if (typeof pozos === 'object' && pozos !== null) {
+      Object.entries(pozos).forEach(([id, p]) => combinedPozosMap.set(id, p as Pozo));
+    }
+    importedPozos.forEach(p => combinedPozosMap.set(p.id, p));
+    
+    expectedIndexRef.current = buildExpectedPhotoIndex(combinedPozosMap);
 
     showSuccess(
-      `Importados ${importedPozos.length} registros y ${importedPhotos.length} fotos desde la nube. ` +
-      `Ya puedes verlos en la lista de pozos.`
+      `Importados ${importedPozos.length} registros y descargadas ${importedPhotos.length} fotos desde la nube. ` +
+      `Ya puedes generar las fichas PDF correctamente.`
     );
-  }, [addPozosBulk, addPhotosBulk, showSuccess]);
+  }, [addPozosBulk, addPhotosBulk, showSuccess, pozos]);
 
   /**
    * Reinicia la carga
@@ -817,303 +899,354 @@ export default function UploadPage() {
   return (
     <AppShell>
       <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">Cargar Archivos</h1>
-          <p className="mt-2 text-gray-600">
-            Arrastra archivos Excel con datos de pozos y fotografías para comenzar.
-          </p>
+        {showAuditTool ? (
+          <div className="mb-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
+             <div className="mb-8 p-6 bg-blue-600 rounded-2xl text-white shadow-lg shadow-blue-200">
+                <h1 className="text-3xl font-black flex items-center gap-3">
+                   <span className="bg-white/20 p-2 rounded-xl">🔍</span>
+                   Auditoría de Archivos
+                </h1>
+                <p className="mt-2 text-blue-50 font-medium max-w-2xl text-sm leading-relaxed">
+                   Verifica la estructura de tus archivos Excel antes de procesarlos. 
+                   El sistema te indicará qué columnas se reconocerán automáticamente y cuáles necesitan revisión.
+                </p>
+             </div>
 
-          {/* Enlace a ejemplos */}
-          <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg shadow-sm">
-            <div className="flex items-center gap-2 text-green-800 mb-2">
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <p className="text-sm font-semibold">
-                ¿Primera vez? Descarga los archivos de ejemplo para ver cómo funciona todo el sistema paso a paso.
+             <button 
+               onClick={() => {
+                 setShowAuditTool(false);
+                 router.replace('/upload');
+               }} 
+               className="mb-6 flex items-center gap-2 text-blue-600 hover:text-blue-800 font-extrabold transition-all hover:translate-x-[-4px] group"
+             >
+               <svg className="w-5 h-5 transition-transform group-hover:scale-110" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+               </svg>
+               VOLVER AL CARGADOR PRINCIPAL
+             </button>
+             
+             <ExcelAuditDashboard />
+          </div>
+        ) : (
+          <>
+            {/* Header */}
+            <div className="mb-8">
+              <h1 className="text-2xl font-bold text-gray-900">Cargar Archivos</h1>
+              <p className="mt-2 text-gray-600">
+                Arrastra archivos Excel con datos de pozos y fotografías para comenzar.
               </p>
-            </div>
 
-            {/* ✅ NUEVO: Acción de importación desde la nube */}
-            <div className="mb-8 p-6 bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl shadow-xl shadow-amber-200 text-white overflow-hidden relative group">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl group-hover:bg-white/20 transition-all"></div>
-              <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
-                <div className="flex-1 text-center md:text-left">
-                  <h2 className="text-xl font-bold flex items-center justify-center md:justify-start gap-2">
-                    <span className="text-2xl">⚡</span>
-                    Importación Instantánea
-                  </h2>
-                  <p className="mt-1 text-amber-50 text-sm">
-                    Conéctate directamente a la App de Catastro UT para importar registros y fotos sin usar archivos Excel.
-                  </p>
-
-                  {/* Status de datos en memoria */}
-                  {(isMounted && pozos.size > 0) && (
-                    <div className="mt-3 flex gap-2 justify-center md:justify-start">
-                      <span className="bg-amber-400/30 text-white px-2 py-1 rounded-lg text-xs font-bold border border-white/20">
-                        📦 {pozos.size} registros listos
-                      </span>
-                      <span className="bg-amber-400/30 text-white px-2 py-1 rounded-lg text-xs font-bold border border-white/20">
-                        📸 {photos.size} fotos asociadas
-                      </span>
-                    </div>
-                  )}
-                </div>
-                <button
-                  onClick={() => setIsCloudModalOpen(true)}
-                  className="px-8 py-3 bg-white text-amber-600 font-extrabold rounded-xl shadow-lg hover:bg-amber-50 transition-all active:scale-95 flex items-center gap-2 whitespace-nowrap"
-                >
+              {/* Enlace a ejemplos */}
+              <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg shadow-sm">
+                <div className="flex items-center gap-2 text-green-800 mb-2">
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  TRAER DE LA NUBE
-                </button>
+                  <p className="text-sm font-semibold">
+                    ¿Primera vez? Descarga los archivos de ejemplo para ver cómo funciona todo el sistema paso a paso.
+                  </p>
+                </div>
+
+                {/* Acción de importación desde la nube */}
+                <div className="mb-8 p-6 bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl shadow-xl shadow-amber-200 text-white overflow-hidden relative group">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl group-hover:bg-white/20 transition-all"></div>
+                  <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+                    <div className="flex-1 text-center md:text-left">
+                      <h2 className="text-xl font-bold flex items-center justify-center md:justify-start gap-2">
+                        <span className="text-2xl">⚡</span>
+                        Importación Instantánea
+                      </h2>
+                      <p className="mt-1 text-amber-50 text-sm">
+                        Conéctate directamente a la App de Catastro UT para importar registros y fotos sin usar archivos Excel.
+                      </p>
+
+                      {/* Status de datos en memoria */}
+                      {(isMounted && pozos.size > 0) && (
+                        <div className="mt-3 flex gap-2 justify-center md:justify-start">
+                          <span className="bg-amber-400/30 text-white px-2 py-1 rounded-lg text-xs font-bold border border-white/20">
+                            📦 {pozos.size} registros listos
+                          </span>
+                          <span className="bg-amber-400/30 text-white px-2 py-1 rounded-lg text-xs font-bold border border-white/20">
+                            📸 {photos.size} fotos asociadas
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => setIsCloudModalOpen(true)}
+                      className="px-8 py-3 bg-white text-amber-600 font-extrabold rounded-xl shadow-lg hover:bg-amber-50 transition-all active:scale-95 flex items-center gap-2 whitespace-nowrap"
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+                      </svg>
+                      TRAER DE LA NUBE
+                    </button>
+                  </div>
+                </div>
+
+                <p className="text-xs text-green-700 mb-4 ml-7">
+                  He creado archivos de prueba completos (Excel con 5 pozos y 18 fotos asociadas) para que puedas probar el flujo completo de inmediato.
+                </p>
+
+                <div className="flex flex-wrap gap-3 ml-7">
+                  <a
+                    href="/archivos-prueba.zip"
+                    download="archivos-prueba-sistema.zip"
+                    className="inline-flex items-center gap-2 px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all shadow-sm font-medium"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    Descargar Todo (.zip)
+                  </a>
+
+                  <div className="flex gap-2">
+                    <a
+                      href="/archivos-prueba/ejemplo_completo_33campos.xlsx"
+                      download
+                      className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-green-700 bg-white border border-green-200 rounded-lg hover:bg-green-100 transition-colors"
+                    >
+                      Excel (33 campos)
+                    </a>
+                    <a
+                      href="/archivos-prueba/README.md"
+                      target="_blank"
+                      className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-green-700 bg-white border border-green-200 rounded-lg hover:bg-green-100 transition-colors"
+                    >
+                      Ver Instrucciones
+                    </a>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <p className="text-xs text-green-700 mb-4 ml-7">
-              He creado archivos de prueba completos (Excel con 5 pozos y 18 fotos asociadas) para que puedas probar el flujo completo de inmediato.
-            </p>
+            {/* Panel de recomendaciones del modo guiado */}
+            <RecommendationsPanel className="mb-6" maxItems={2} />
 
-            <div className="flex flex-wrap gap-3 ml-7">
-              <a
-                href="/archivos-prueba.zip"
-                download="archivos-prueba-sistema.zip"
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all shadow-sm font-medium"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            {/* Indicador del siguiente paso */}
+            {canContinue && (
+              <NextStepIndicator className="mb-6" variant="banner" />
+            )}
+
+            {/* Indicador de modo de procesamiento */}
+            <div className={`mb-4 px-4 py-2 rounded-lg text-sm flex items-center gap-2 ${serverAvailable === null
+              ? 'bg-gray-50 text-gray-500 border border-gray-200'
+              : serverAvailable
+                ? 'bg-green-50 text-green-800 border border-green-200'
+                : 'bg-yellow-50 text-yellow-800 border border-yellow-200'
+              }`}>
+              {serverAvailable === null && <span>⏳ Verificando modo de procesamiento...</span>}
+              {serverAvailable === true && (
+                <>
+                  <span className="text-lg">⚡</span>
+                  <span><strong>Modo servidor activo</strong> — Sharp procesa las fotos 10-20x más rápido en el servidor</span>
+                </>
+              )}
+              {serverAvailable === false && (
+                <>
+                  <span className="text-lg">🌐</span>
+                  <span><strong>Modo browser</strong> — procesamiento en tu equipo (instala Sharp para mayor velocidad)</span>
+                </>
+              )}
+            </div>
+
+            {/* Monitor de rendimiento */}
+            {(isProcessing || files.length > 100) && (
+              <PerformanceMonitor
+                isActive={isProcessing || files.length > 100}
+                onRecommendation={setPerformanceRecommendation}
+                className="mb-6"
+              />
+            )}
+
+            {/* Recomendación de rendimiento */}
+            {performanceRecommendation && (
+              <div className="mb-6 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center gap-2 text-blue-800">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="text-sm font-medium">{performanceRecommendation}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Banner de filtro inteligente */}
+            {filtradoInfo && (
+              <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
+                <div className="flex items-start gap-2">
+                  <span className="text-xl">⚡</span>
+                  <div>
+                    <p className="text-sm font-semibold text-emerald-800 mb-1">Filtro inteligente activo</p>
+                    <pre className="text-xs text-emerald-700 whitespace-pre-wrap font-mono">{filtradoInfo}</pre>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Modo de carga chunked para grandes volúmenes */}
+            {showChunkedUploader && (
+              <div className="mb-6 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-blue-900">
+                    Modo de Carga Optimizada
+                  </h3>
+                  <button
+                    onClick={() => setShowChunkedUploader(false)}
+                    className="text-blue-600 hover:text-blue-800"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                <p className="text-sm text-blue-700 mb-4">
+                  Este modo procesa archivos en lotes pequeños para evitar saturar el navegador.
+                  Ideal para cargas de 1000+ archivos.
+                </p>
+
+                <ChunkedUploader
+                  files={realFilesRef.current} // Archivos reales para procesamiento
+                  chunkSize={100}
+                  onProgress={(processed, total, currentChunk, totalChunks) => {
+                    setProgress((processed / total) * 100);
+                    setProcessingMessage(`Chunk ${currentChunk}/${totalChunks}: ${processed}/${total} archivos`);
+                  }}
+                  onComplete={(results) => {
+                    // Aplanar los arrays de FotoInfo[] resultantes
+                    const validPhotos = results
+                      .filter((r): r is FotoInfo[] => r !== null && Array.isArray(r))
+                      .flat();
+
+                    setProcessedPhotos(prev => [...prev, ...validPhotos]);
+                    setCanContinue(true);
+                    setShowChunkedUploader(false);
+                    setIsProcessing(false);
+                    showSuccess(`Carga completada: ${validPhotos.length} fotos procesadas exitosamente`);
+                  }}
+                  processor={async (file, index) => {
+                    // Sincronizar con el estado de la lista de archivos (FileItem)
+                    const fileId = files[index]?.id;
+                    if (fileId) {
+                      scheduleFileUpdate(fileId, { status: 'processing', progress: 0 });
+                    }
+
+                    const result = await processImageFile(file);
+
+                    if (fileId) {
+                      const hasPhotos = result && result.length > 0;
+                      const primary = hasPhotos ? result[0] : null;
+
+                      scheduleFileUpdate(fileId, {
+                        status: hasPhotos ? 'success' : 'error',
+                        message: primary
+                          ? (primary.categoria !== 'OTRO'
+                            ? `✅ ${result.length > 1 ? 'Múltiple: ' : ''}${primary.descripcion}`
+                            : 'Procesada (sin asociar)')
+                          : 'Error al procesar'
+                      });
+                    }
+
+                    return result;
+                  }}
+                  disabled={isProcessing}
+                />
+              </div>
+            )}
+
+            {/* Advertencia si hay datos existentes */}
+            {(isMounted && hasExistingData) && (
+              <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <svg className="w-5 h-5 text-yellow-600 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <div>
+                    <p className="text-sm font-medium text-yellow-800">
+                      Ya hay datos cargados ({pozos.size} pozos, {photos.size} fotos)
+                    </p>
+                    <p className="text-sm text-yellow-700 mt-1">
+                      Cargar nuevos archivos agregará a los datos existentes.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Guía de formato Excel con plantilla descargable */}
+            <ExcelFormatGuide className="mb-6" />
+
+            {/* Guía de nomenclatura de fotos */}
+            <div className="mb-6 p-6 bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl shadow-sm relative overflow-hidden group">
+              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
+                <svg className="w-16 h-16 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
-                Descargar Todo (.zip)
-              </a>
+              </div>
+              
+              <div className="relative z-10">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-bold text-blue-900 flex items-center gap-2">
+                    <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Guía de nomenclatura de fotos
+                  </h3>
+                  <button 
+                    onClick={() => setShowAuditTool(true)}
+                    className="text-xs bg-white text-blue-600 px-3 py-1.5 rounded-lg border border-blue-200 font-bold shadow-sm hover:bg-blue-600 hover:text-white transition-all active:scale-95"
+                  >
+                    🔍 AUDITAR EXCEL PRIMERO
+                  </button>
+                </div>
+                
+                <p className="text-xs text-blue-700 mb-4 leading-relaxed max-w-2xl">
+                  Cada foto debe tener un nombre que comience con el código del pozo (ej: <strong>M680</strong>) seguido de un guión y el tipo de foto. El sistema las asociará automáticamente.
+                </p>
 
-              <div className="flex gap-2">
-                <a
-                  href="/archivos-prueba/ejemplo_completo_33campos.xlsx"
-                  download
-                  className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-green-700 bg-white border border-green-200 rounded-lg hover:bg-green-100 transition-colors"
-                >
-                  Excel (33 campos)
-                </a>
-                <a
-                  href="/archivos-prueba/README.md"
-                  target="_blank"
-                  className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-green-700 bg-white border border-green-200 rounded-lg hover:bg-green-100 transition-colors"
-                >
-                  Ver Instrucciones
-                </a>
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-[10px] font-extrabold text-blue-400 uppercase tracking-widest mb-2">Fotos principales (una letra):</p>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs text-blue-800">
+                      <div className="flex items-center gap-2 bg-white/60 p-1.5 rounded-lg border border-white/50"><code className="bg-blue-100 text-blue-700 px-1 rounded">-P</code> Panorámica</div>
+                      <div className="flex items-center gap-2 bg-white/60 p-1.5 rounded-lg border border-white/50"><code className="bg-blue-100 text-blue-700 px-1 rounded">-T</code> Tapa</div>
+                      <div className="flex items-center gap-2 bg-white/60 p-1.5 rounded-lg border border-white/50"><code className="bg-blue-100 text-blue-700 px-1 rounded">-I</code> Interna</div>
+                      <div className="flex items-center gap-2 bg-white/60 p-1.5 rounded-lg border border-white/50"><code className="bg-blue-100 text-blue-700 px-1 rounded">-A</code> Acceso</div>
+                      <div className="flex items-center gap-2 bg-white/60 p-1.5 rounded-lg border border-white/50"><code className="bg-blue-100 text-blue-700 px-1 rounded">-F</code> Fondo</div>
+                      <div className="flex items-center gap-2 bg-white/60 p-1.5 rounded-lg border border-white/50"><code className="bg-blue-100 text-blue-700 px-1 rounded">-M</code> Medición</div>
+                    </div>
+                  </div>
+
+                  <div className="pt-2">
+                    <p className="text-[10px] font-extrabold text-blue-400 uppercase tracking-widest mb-2">Entradas / Salidas / Sumideros:</p>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs text-blue-800">
+                      <div className="bg-white/40 p-2 rounded-lg"><code className="text-blue-700 font-bold">-E1-T</code> Ent. 1 Tubo</div>
+                      <div className="bg-white/40 p-2 rounded-lg"><code className="text-blue-700 font-bold">-E1-Z</code> Ent. 1 Zona</div>
+                      <div className="bg-white/40 p-2 rounded-lg"><code className="text-blue-700 font-bold">-S-T</code> Salida Tubo</div>
+                      <div className="bg-white/40 p-2 rounded-lg"><code className="text-blue-700 font-bold">-S-Z</code> Salida Zona</div>
+                      <div className="bg-white/40 p-2 rounded-lg"><code className="text-blue-700 font-bold">-SUM1</code> Sumidero 1</div>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 p-3 bg-white/80 rounded-xl border border-blue-200">
+                    <p className="text-[11px] text-blue-800 leading-tight">
+                      <strong>💡 Tip Pro:</strong> No combines tipos en un nombre (ej: No usar <code>-AT</code>). Usa archivos separados para Acceso y Tapa para generar fichas más profesionales.
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
 
-        {/* Panel de recomendaciones del modo guiado - Requirements 14.1-14.4 */}
-        <RecommendationsPanel className="mb-6" maxItems={2} />
-
-        {/* Indicador del siguiente paso - Requirements 18.4, 18.5 */}
-        {canContinue && (
-          <NextStepIndicator className="mb-6" variant="banner" />
-        )}
-
-        {/* Indicador de modo de procesamiento */}
-        <div className={`mb-4 px-4 py-2 rounded-lg text-sm flex items-center gap-2 ${serverAvailable === null
-          ? 'bg-gray-50 text-gray-500 border border-gray-200'
-          : serverAvailable
-            ? 'bg-green-50 text-green-800 border border-green-200'
-            : 'bg-yellow-50 text-yellow-800 border border-yellow-200'
-          }`}>
-          {serverAvailable === null && <span>⏳ Verificando modo de procesamiento...</span>}
-          {serverAvailable === true && (
-            <>
-              <span className="text-lg">⚡</span>
-              <span><strong>Modo servidor activo</strong> — Sharp procesa las fotos 10-20x más rápido en el servidor</span>
-            </>
-          )}
-          {serverAvailable === false && (
-            <>
-              <span className="text-lg">🌐</span>
-              <span><strong>Modo browser</strong> — procesamiento en tu equipo (instala Sharp para mayor velocidad)</span>
-            </>
-          )}
-        </div>
-
-        {/* Monitor de rendimiento */}
-        {(isProcessing || files.length > 100) && (
-          <PerformanceMonitor
-            isActive={isProcessing || files.length > 100}
-            onRecommendation={setPerformanceRecommendation}
-            className="mb-6"
-          />
-        )}
-
-        {/* Recomendación de rendimiento */}
-        {performanceRecommendation && (
-          <div className="mb-6 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-            <div className="flex items-center gap-2 text-blue-800">
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span className="text-sm font-medium">{performanceRecommendation}</span>
-            </div>
-          </div>
-        )}
-
-        {/* ✅ NUEVO: Banner de filtro inteligente */}
-        {filtradoInfo && (
-          <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-lg">
-            <div className="flex items-start gap-2">
-              <span className="text-xl">⚡</span>
-              <div>
-                <p className="text-sm font-semibold text-emerald-800 mb-1">Filtro inteligente activo</p>
-                <pre className="text-xs text-emerald-700 whitespace-pre-wrap font-mono">{filtradoInfo}</pre>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Modo de carga chunked para grandes volúmenes */}
-        {showChunkedUploader && (
-          <div className="mb-6 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-blue-900">
-                Modo de Carga Optimizada
-              </h3>
-              <button
-                onClick={() => setShowChunkedUploader(false)}
-                className="text-blue-600 hover:text-blue-800"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            <p className="text-sm text-blue-700 mb-4">
-              Este modo procesa archivos en lotes pequeños para evitar saturar el navegador.
-              Ideal para cargas de 1000+ archivos.
-            </p>
-
-            <ChunkedUploader
-              files={realFilesRef.current} // Archivos reales para procesamiento
-              chunkSize={100}
-              onProgress={(processed, total, currentChunk, totalChunks) => {
-                setProgress((processed / total) * 100);
-                setProcessingMessage(`Chunk ${currentChunk}/${totalChunks}: ${processed}/${total} archivos`);
-              }}
-              onComplete={(results) => {
-                // Aplanar los arrays de FotoInfo[] resultantes
-                const validPhotos = results
-                  .filter((r): r is FotoInfo[] => r !== null && Array.isArray(r))
-                  .flat();
-
-                setProcessedPhotos(prev => [...prev, ...validPhotos]);
-                setCanContinue(true);
-                setShowChunkedUploader(false);
-                setIsProcessing(false);
-                showSuccess(`Carga completada: ${validPhotos.length} fotos procesadas exitosamente`);
-              }}
-              processor={async (file, index) => {
-                // Sincronizar con el estado de la lista de archivos (FileItem)
-                const fileId = files[index]?.id;
-                if (fileId) {
-                  scheduleFileUpdate(fileId, { status: 'processing', progress: 0 });
-                }
-
-                const result = await processImageFile(file);
-
-                if (fileId) {
-                  const hasPhotos = result && result.length > 0;
-                  const primary = hasPhotos ? result[0] : null;
-
-                  scheduleFileUpdate(fileId, {
-                    status: hasPhotos ? 'success' : 'error',
-                    message: primary
-                      ? (primary.categoria !== 'OTRO'
-                        ? `✅ ${result.length > 1 ? 'Múltiple: ' : ''}${primary.descripcion}`
-                        : 'Procesada (sin asociar)')
-                      : 'Error al procesar'
-                  });
-                }
-
-                return result;
-              }}
+            {/* DropZone */}
+            <DropZone
+              onFilesAccepted={handleFilesAccepted}
+              externalStatus={dropZoneStatus}
               disabled={isProcessing}
+              className="mb-6"
             />
-          </div>
+          </>
         )}
-
-        {/* Advertencia si hay datos existentes */}
-        {(isMounted && hasExistingData) && (
-          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <div className="flex items-start gap-3">
-              <svg className="w-5 h-5 text-yellow-600 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-              <div>
-                <p className="text-sm font-medium text-yellow-800">
-                  Ya hay datos cargados ({pozos.size} pozos, {photos.size} fotos)
-                </p>
-                <p className="text-sm text-yellow-700 mt-1">
-                  Cargar nuevos archivos agregará a los datos existentes.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Guía de formato Excel con plantilla descargable */}
-        <ExcelFormatGuide className="mb-6" />
-
-        {/* Guía de nomenclatura de fotos */}
-        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <h3 className="text-sm font-medium text-blue-800 mb-3">
-            Guía de nomenclatura de fotos
-          </h3>
-          <p className="text-xs text-blue-700 mb-3">
-            Cada foto debe tener un nombre que comience con el código del pozo (ej: M680) seguido de un guión y el tipo de foto. Cada tipo es una foto separada.
-          </p>
-
-          <div className="space-y-3">
-            <div>
-              <p className="text-xs font-semibold text-blue-800 mb-2">Fotos principales (una letra):</p>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs text-blue-700">
-                <div><code className="bg-blue-100 px-2 py-1 rounded">M680-P.jpg</code> Panorámica</div>
-                <div><code className="bg-blue-100 px-2 py-1 rounded">M680-T.jpg</code> Tapa</div>
-                <div><code className="bg-blue-100 px-2 py-1 rounded">M680-I.jpg</code> Interna</div>
-                <div><code className="bg-blue-100 px-2 py-1 rounded">M680-A.jpg</code> Acceso</div>
-                <div><code className="bg-blue-100 px-2 py-1 rounded">M680-F.jpg</code> Fondo</div>
-                <div><code className="bg-blue-100 px-2 py-1 rounded">M680-M.jpg</code> Medición</div>
-              </div>
-            </div>
-
-            <div>
-              <p className="text-xs font-semibold text-blue-800 mb-2">Fotos de entradas/salidas/sumideros:</p>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs text-blue-700">
-                <div><code className="bg-blue-100 px-2 py-1 rounded">M680-E1-T.jpg</code> Entrada 1 Tubería</div>
-                <div><code className="bg-blue-100 px-2 py-1 rounded">M680-E1-Z.jpg</code> Entrada 1 Zona</div>
-                <div><code className="bg-blue-100 px-2 py-1 rounded">M680-S-T.jpg</code> Salida Tubería</div>
-                <div><code className="bg-blue-100 px-2 py-1 rounded">M680-S-Z.jpg</code> Salida Zona</div>
-                <div><code className="bg-blue-100 px-2 py-1 rounded">M680-SUM1.jpg</code> Sumidero 1</div>
-                <div><code className="bg-blue-100 px-2 py-1 rounded">M680-SUM2.jpg</code> Sumidero 2</div>
-              </div>
-            </div>
-
-            <div className="mt-3 p-2 bg-blue-100 rounded">
-              <p className="text-xs text-blue-800">
-                <strong>Importante:</strong> Cada archivo es una foto diferente. No combines tipos en un mismo nombre (ej: NO usar M680-AT, usar M680-A.jpg y M680-T.jpg por separado).
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* DropZone */}
-        <DropZone
-          onFilesAccepted={handleFilesAccepted}
-          externalStatus={dropZoneStatus}
-          disabled={isProcessing}
-          className="mb-6"
-        />
 
         {/* Progreso de carga */}
         {(isProcessing || progress > 0) && (

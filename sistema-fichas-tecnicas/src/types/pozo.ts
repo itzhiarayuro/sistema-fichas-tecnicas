@@ -105,6 +105,9 @@ export interface IdentificacionPozo {
   estado: FieldValue; // Estado general (Bueno/Regular/Malo/Muy Malo/No Aplica)
 
   // 🟢 Opcional
+  municipio?: FieldValue; // Municipio
+
+  // 🟢 Opcional
   enlace: FieldValue; // Enlace asociado
 }
 
@@ -117,6 +120,9 @@ export interface UbicacionPozo {
 
   // 🟠 Importante
   barrio: FieldValue; // Barrio o sector
+
+  // 🟠 Importante
+  municipio?: FieldValue; // Municipio
 
   // 🟠 Importante
   elevacion: FieldValue; // Elevación sobre nivel del mar (m)
@@ -379,18 +385,26 @@ export interface Pozo {
   // Identificador único
   id: string;
 
-  // --- CAPA DE ALINEACIÓN PLANA (Aliases para facilitar acceso y reducir errores TS) ---
+  // --- CAPA DE ALINEACIÓN PLANA ---
   idPozo?: FieldValue;
+  pozo_id?: FieldValue;
   coordenadaX?: FieldValue;
+  pozo_coordX?: FieldValue;
   coordenadaY?: FieldValue;
+  pozo_coordY?: FieldValue;
   latitud?: FieldValue;
+  pozo_latitud?: FieldValue;
   longitud?: FieldValue;
+  pozo_longitud?: FieldValue;
   enlace?: FieldValue;
   fecha?: FieldValue;
+  pozo_fecha?: FieldValue;
   levanto?: FieldValue;
   estado?: FieldValue;
   direccion?: FieldValue;
   barrio?: FieldValue;
+  municipio?: FieldValue;
+  ['{{mObglBe5gLbSFKELv6WD}}']?: FieldValue;
   elevacion?: FieldValue;
   profundidad?: FieldValue;
   sistema?: FieldValue;
@@ -413,12 +427,13 @@ export interface Pozo {
   existeCanuela?: FieldValue;
   materialCanuela?: FieldValue;
   estadoCaniuela?: FieldValue;
-  estadoCanuela?: FieldValue; // Redundant but safe
+  estadoCanuela?: FieldValue; 
   existePeldanos?: FieldValue;
   materialPeldanos?: FieldValue;
   numeroPeldanos?: FieldValue;
   estadoPeldanos?: FieldValue;
-  observacionesPozo?: FieldValue; // Alias para evitar conflicto con seccion 'observaciones'
+  observacionesPozo?: FieldValue; 
+  pozo_observaciones?: FieldValue;
 
   // --- ESTRUCTURA JERÁRQUICA (Fuente de verdad para persistencia) ---
   identificacion: IdentificacionPozo;

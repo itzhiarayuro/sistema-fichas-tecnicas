@@ -51,11 +51,6 @@ export function parseNomenclatura(filename: string): NomenclaturaResult[] {
     return [createInvalidResult(filename, 'Caso omiso (Keywords)')];
   }
 
-  // Omitir si alguna parte contiene 'Z'
-  if (rawFirst.includes('Z') || restParts.some(p => p.includes('Z'))) {
-    return [createInvalidResult(filename, 'Caso omiso (Contiene Z)')];
-  }
-
   // --- ANALIZAR POZO ID Y COMPONENTES ---
   let pozoId = rawFirst;
   let entradaNum: string | null = null;

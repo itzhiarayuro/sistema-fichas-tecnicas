@@ -228,49 +228,81 @@ export default function PozosPage() {
           const preloadStart = Date.now();
 
           // Función para llamar GAS directamente desde el cliente (fallback si proxy-image falla)
+          // Replica EXACTAMENTE el patrón de catastro-ut-star-app/src/utils/driveSync.ts → fetchPhotoFromDrive
           const fetchPhotoFromGasDirect = async (filename: string): Promise<string | null> => {
             const gasUrl = process.env.NEXT_PUBLIC_GAS_URL;
             const token = process.env.NEXT_PUBLIC_SECRET_TOKEN;
-            if (!gasUrl || !filename) return null;
+            if (!gasUrl || !filename) {
+              console.warn(`❌ GAS directo: gasUrl=${!!gasUrl}, filename=${filename}`);
+              return null;
+            }
             try {
+              console.log(`🔄 GAS directo: POST a ${gasUrl.substring(0, 60)}... con filename=${filename}`);
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+              
               const response = await fetch(gasUrl, {
                 method: 'POST',
-                mode: 'cors',
-                body: JSON.stringify({ token, action: 'download', filename })
+                mode: 'cors', // CRÍTICO: GAS necesita mode cors para poder leer la respuesta JSON
+                // NO enviar Content-Type header — evita preflight CORS que GAS no maneja
+                body: JSON.stringify({ token, action: 'download', filename }),
+                signal: controller.signal
               });
-              if (!response.ok) return null;
+              clearTimeout(timeoutId);
+              
+              if (!response.ok) {
+                console.warn(`❌ GAS directo HTTP error: ${response.status} ${response.statusText}`);
+                return null;
+              }
               const result = await response.json();
               if (result.success && result.base64) {
                 // Asegurar formato data URL
-                const b64 = result.base64;
-                if (b64.startsWith('data:')) return b64;
+                let b64 = result.base64;
+                // Limpiar prefijo data URI si viene incluido
+                const base64Marker = 'base64,';
+                const markerIdx = b64.indexOf(base64Marker);
+                if (markerIdx !== -1 && markerIdx < 100) {
+                  b64 = b64.substring(markerIdx + base64Marker.length);
+                }
                 const mime = result.mimeType || 'image/jpeg';
                 return `data:${mime};base64,${b64}`;
               }
+              console.warn(`❌ GAS directo: success=${result.success}, error=${result.error || 'none'}`);
               return null;
-            } catch { return null; }
+            } catch (err: any) {
+              console.error(`❌ GAS directo excepción para ${filename}:`, err.message || err);
+              return null;
+            }
           };
           
           const preloadResults = await Promise.allSettled(
             proxyPhotos.map(async (foto) => {
               try {
                 // Intento 1: via proxy-image API route
-                const response = await fetch(foto.blobId, { cache: 'force-cache' });
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const proxyController = new AbortController();
+                const proxyTimeout = setTimeout(() => proxyController.abort(), 15000); // 15s timeout
+                console.log(`🔄 Proxy: cargando ${foto.filename} desde ${foto.blobId?.substring(0, 80)}...`);
+                const response = await fetch(foto.blobId, { 
+                  cache: 'force-cache',
+                  signal: proxyController.signal
+                });
+                clearTimeout(proxyTimeout);
+                if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 const blob = await response.blob();
                 // Validar que el blob sea realmente una imagen (no un error HTML/JSON)
                 if (blob.size < 100 || !blob.type.startsWith('image/')) {
                   throw new Error(`Invalid blob: size=${blob.size}, type=${blob.type}`);
                 }
+                console.log(`✅ Proxy exitoso para ${foto.filename} (${blob.size} bytes)`);
                 return new Promise<{ id: string; dataUrl: string }>((resolve, reject) => {
                   const reader = new FileReader();
                   reader.onloadend = () => resolve({ id: foto.id, dataUrl: reader.result as string });
                   reader.onerror = reject;
                   reader.readAsDataURL(blob);
                 });
-              } catch (proxyErr) {
+              } catch (proxyErr: any) {
                 // Intento 2: llamar GAS directamente (como hace el catastro app)
-                console.warn(`⚠️ Proxy falló para ${foto.filename}, intentando GAS directo...`);
+                console.warn(`⚠️ Proxy falló para ${foto.filename}: ${proxyErr.message}. Intentando GAS directo...`);
                 const directDataUrl = await fetchPhotoFromGasDirect(foto.filename || '');
                 if (directDataUrl) {
                   console.log(`✅ GAS directo exitoso para ${foto.filename}`);
@@ -478,6 +510,16 @@ export default function PozosPage() {
                   ))}
                 </select>
               </div>
+
+              <button
+                onClick={() => router.push('/upload?tab=audit')}
+                className="px-4 py-2 text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors flex items-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Auditar Excel
+              </button>
 
               <button
                 onClick={handleGoToUpload}
@@ -775,8 +817,36 @@ function PozoPreviewPanel({
           </div>
 
           {fotosCount > 0 && (
-            <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-gray-600">
-              <div>Total: {fotosCount}</div>
+            <div className="mt-3 text-sm text-gray-600">
+              <div className="mb-2 grid grid-cols-2 gap-2 text-xs">
+                <div>Nube: {fotosIncrustadasCount}</div>
+                <div>ArcGIS/Local: {fotosGlobalesNuevasCount}</div>
+              </div>
+              
+              <details className="cursor-pointer group">
+                <summary className="font-medium text-primary hover:text-primary-dark transition-colors list-none flex items-center gap-1">
+                  <svg className="w-4 h-4 transform group-open:rotate-90 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                  Ver detalle de fotos
+                </summary>
+                <div className="mt-2 pl-5 space-y-2 border-l-2 border-gray-200">
+                  {pozo.fotos?.fotos?.map((f: any) => (
+                    <div key={`nube-${f.id}`} className="text-xs flex items-center gap-2">
+                      <span className="bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded mr-1">☁️ Nube</span>
+                      <span className="font-medium">[{f.categoria || 'N/A'}]</span>
+                      <span className="truncate" title={f.filename}>{f.filename || 'Foto'}</span>
+                    </div>
+                  ))}
+                  {fotosGlobales.filter(f => !fotosIncrustadasIds.has(f.id)).map(f => (
+                    <div key={`local-${f.id}`} className="text-xs flex items-center gap-2">
+                      <span className="bg-green-100 text-green-800 px-1.5 py-0.5 rounded mr-1">📂 Local</span>
+                      <span className="font-medium">[{f.categoria || 'N/A'}]</span>
+                      <span className="truncate" title={f.filename}>{f.filename || 'Foto'}</span>
+                    </div>
+                  ))}
+                </div>
+              </details>
             </div>
           )}
         </div>

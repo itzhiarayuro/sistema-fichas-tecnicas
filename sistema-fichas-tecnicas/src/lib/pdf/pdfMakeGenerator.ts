@@ -469,7 +469,7 @@ export class PDFMakeGenerator {
                 const idMap: Record<string, FieldValue> = {
                     'Código': pozo.idPozo || pozo.identificacion?.idPozo || { value: 'S/N', source: 'default' },
                     'Dirección': pozo.direccion || pozo.ubicacion?.direccion || { value: 'S/D', source: 'default' },
-                    'Barrio': pozo.barrio || pozo.ubicacion?.barrio || { value: '-', source: 'default' },
+                    'Municipio': pozo.municipio || pozo.identificacion?.municipio || pozo.ubicacion?.municipio || { value: '-', source: 'default' },
                     'Sistema': pozo.sistema || pozo.componentes?.sistema || { value: '-', source: 'default' },
                     'Estado': pozo.estado || pozo.identificacion?.estado || { value: '-', source: 'default' },
                     'Fecha': pozo.fecha || pozo.identificacion?.fecha || { value: '-', source: 'default' },
@@ -723,7 +723,7 @@ export class PDFMakeGenerator {
             const img = new Image();
             img.onload = () => {
                 try {
-                    const maxSize = 600; // Reducido de 800px
+                    const maxSize = 1200; // Aumentado de 600px para mayor nitidez
                     let width = img.width;
                     let height = img.height;
 
@@ -751,8 +751,8 @@ export class PDFMakeGenerator {
 
                     ctx.drawImage(img, 0, 0, width, height);
 
-                    // Comprimir a JPEG 0.6 calidad (reducido para evitar timeout de pdfMake)
-                    const compressed = canvas.toDataURL('image/jpeg', 0.6);
+                    // Comprimir a JPEG 0.8 calidad (subido de 0.6 para mejor calidad)
+                    const compressed = canvas.toDataURL('image/jpeg', 0.8);
 
                     logger.debug('Imagen comprimida', {
                         originalSize: dataUrl.length,
@@ -1084,7 +1084,7 @@ export class PDFMakeGenerator {
                             const identFields = [
                                 { label: 'Código', value: idPozo },
                                 { label: 'Dirección', value: pozo.direccion?.value || pozo.ubicacion?.direccion?.value || '-' },
-                                { label: 'Barrio', value: pozo.barrio?.value || pozo.ubicacion?.barrio?.value || '-' },
+                                { label: 'Municipio', value: pozo.municipio?.value || pozo.identificacion?.municipio?.value || pozo.ubicacion?.municipio?.value || '-' },
                                 { label: 'Sistema', value: pozo.sistema?.value || pozo.componentes?.sistema?.value || '-' },
                                 { label: 'Estado', value: pozo.estado?.value || pozo.identificacion?.estado?.value || '-' },
                                 { label: 'Fecha', value: pozo.fecha?.value || pozo.identificacion?.fecha?.value || '-' },

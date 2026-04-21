@@ -18,6 +18,10 @@ import { BottomNav } from './BottomNav';
 import { ToastContainer } from '@/components/ui/Toast';
 import { useUIStore } from '@/stores';
 import { logger } from '@/lib/logger';
+import { useEffect, useState } from 'react';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from '@/lib/services/firebaseClient';
+import { useRouter } from 'next/navigation';
 
 interface AppShellProps {
   children: ReactNode;
@@ -30,6 +34,34 @@ export function AppShell({ children, noPadding = false }: AppShellProps) {
   const loadingMessage = useUIStore((state) => state.loadingMessage);
   const mobileMenuOpen = useUIStore((state) => state.mobileMenuOpen);
   const setMobileMenuOpen = useUIStore((state) => state.setMobileMenuOpen);
+
+  const router = useRouter();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        const ADMINS = ['juanvegas003@gmail.com', 'juan.vega.icya@gmail.com'];
+        if (ADMINS.includes(user.email || '')) {
+          setIsAuthenticated(true);
+        } else {
+          window.location.href = '/registro/index.html';
+        }
+      } else {
+        router.replace('/login');
+      }
+    });
+
+    return () => unsub();
+  }, [router]);
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-[#020617] flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-blue-600/30 border-t-blue-600 rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
