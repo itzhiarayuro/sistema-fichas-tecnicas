@@ -237,8 +237,8 @@ export function transformFirebaseToPozo(firebaseData: any): Pozo {
     return {
         id,
         idPozo: toFieldValue(firebaseData.pozo || firebaseData.codigo || firebaseData.idPozo || id, 'manual'),
-        coordenadaX: toFieldValue('', 'manual', false),
-        coordenadaY: toFieldValue('', 'manual', false),
+        coordenadaX: toFieldValue(parseFloat(String(firebaseData.coordenada_x ?? firebaseData.gps?.x ?? '')) || '', 'manual', false),
+        coordenadaY: toFieldValue(parseFloat(String(firebaseData.coordenada_y ?? firebaseData.gps?.y ?? '')) || '', 'manual', false),
         latitud: toFieldValue(lat, 'manual', false),
         longitud: toFieldValue(lng, 'manual', false),
         fecha: toFieldValue(firebaseData.fecha || new Date().toISOString().split('T')[0], 'manual', false),
@@ -283,8 +283,8 @@ export function transformFirebaseToPozo(firebaseData: any): Pozo {
 
         identificacion: {
             idPozo: toFieldValue(firebaseData.pozo || firebaseData.codigo || firebaseData.idPozo || id, 'manual', false),
-            coordenadaX: toFieldValue('', 'manual', false),
-            coordenadaY: toFieldValue('', 'manual', false),
+            coordenadaX: toFieldValue(parseFloat(String(firebaseData.coordenada_x ?? firebaseData.gps?.x ?? '')) || '', 'manual', false),
+            coordenadaY: toFieldValue(parseFloat(String(firebaseData.coordenada_y ?? firebaseData.gps?.y ?? '')) || '', 'manual', false),
             latitud: toFieldValue(lat, 'manual', false),
             longitud: toFieldValue(lng, 'manual', false),
             fecha: toFieldValue(firebaseData.fecha || new Date().toISOString().split('T')[0], 'manual', false),

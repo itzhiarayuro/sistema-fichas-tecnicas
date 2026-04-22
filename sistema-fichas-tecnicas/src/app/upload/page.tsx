@@ -37,6 +37,7 @@ import { CloudImportModal } from '@/components/upload/CloudImportModal';
 import type { Pozo, FotoInfo } from '@/types';
 import { useMounted } from '@/hooks/useMounted';
 import { downloadPhotoFromGAS, dataUrlToBlob } from '@/lib/services/drivePhotoDownloader';
+import { RobustDrivePhotoDownloader } from '@/lib/services/robustDrivePhotoDownloader';
 
 export default function UploadPageWrapper() {
   return (
@@ -800,44 +801,107 @@ function UploadContent() {
 
     const importedPhotos: FotoInfo[] = [];
 
-    // Recolectar todas las fotos
+    // Recolectar todas las fotos a descargar, guardando referencia al pozo
+    const tareasDescarga: { foto: any; pozo: any }[] = [];
     for (const pozo of importedPozos) {
       if (pozo.fotos?.fotos) {
         for (const foto of pozo.fotos.fotos) {
-          let resolvedBlobId = foto.blobId;
-
-          try {
-            const dataUrl = await downloadPhotoFromGAS(foto.filename, foto.driveId);
-            if (dataUrl) {
-              const blob = dataUrlToBlob(dataUrl);
-              resolvedBlobId = await blobStore.store(blob, foto.filename);
-            } else {
-              console.warn(`No se pudo descargar dataUrl para ${foto.filename} — se omite la foto.`);
-              continue;
-            }
-          } catch (err) {
-            console.error(`Excepcion descargando foto de nube ${foto.filename}:`, err);
-            continue;
-          }
-
-          // Crear un objeto FotoInfo limpio (no mutar el original de Firebase)
-          const fotoLocal: FotoInfo = {
-            id: foto.id || generateFileId(),
-            idPozo: foto.idPozo || pozo.id,
-            tipo: foto.tipo || 'otro',
-            categoria: foto.categoria || 'OTRO',
-            subcategoria: foto.subcategoria,
-            descripcion: foto.descripcion,
-            blobId: resolvedBlobId,
-            filename: foto.filename,
-            fechaCaptura: foto.fechaCaptura ?? Date.now(),
-            driveId: foto.driveId,
-          };
-
-          importedPhotos.push(fotoLocal);
+          tareasDescarga.push({ foto, pozo });
         }
       }
     }
+
+    // Index por filename para poder reconstruir FotoInfo después del download
+    const porFilename = new Map<string, { foto: any; pozo: any }>();
+    tareasDescarga.forEach(t => porFilename.set(t.foto.filename, t));
+
+    // Downloader inline — secuencial, con parámetros completos al GAS (Level 0 = búsqueda exacta rápida)
+    const GAS_URL = process.env.NEXT_PUBLIC_GAS_URL!;
+    const GAS_TOKEN = process.env.NEXT_PUBLIC_SECRET_TOKEN!;
+    console.log('[Import] GAS_URL:', GAS_URL?.substring(0, 60), '... token:', !!GAS_TOKEN);
+    console.log('[Import] Total fotos a descargar:', tareasDescarga.length);
+
+    const bajarUna = async (filename: string, municipio: string, pozoId: string, categoria: string, driveId?: string): Promise<string | null> => {
+      const payload: any = {
+        token: GAS_TOKEN,
+        action: 'download',
+        filename,
+        municipio: (municipio || '').toUpperCase(),
+        pozoId: (pozoId || '').toUpperCase(),
+        categoria: (categoria || 'CATASTRO').toUpperCase(),
+      };
+      if (driveId) payload.fileId = driveId;
+
+      try {
+        const ctrl = new AbortController();
+        const tid = setTimeout(() => ctrl.abort(), 45000);
+        const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload), signal: ctrl.signal });
+        clearTimeout(tid);
+        if (!res.ok) { console.warn(`[Import] HTTP ${res.status} en ${filename}`); return null; }
+        const data = await res.json();
+        if (!data.success || !data.base64) { console.warn(`[Import] GAS falló ${filename}:`, data.error); return null; }
+        let b64 = data.base64 as string;
+        const idx = b64.indexOf('base64,');
+        if (idx !== -1) b64 = b64.substring(idx + 7);
+        return `data:${data.mimeType || 'image/jpeg'};base64,${b64}`;
+      } catch (e: any) {
+        console.warn(`[Import] Excepción en ${filename}:`, e?.message || e);
+        return null;
+      }
+    };
+
+    let completadas = 0, ok = 0, fallidas = 0;
+    for (const { foto, pozo } of tareasDescarga) {
+      const filename = foto.filename;
+      // El tipoRegistro nos dice si es CATASTRO o MARCACION
+      const tipoReg = String((pozo as any).tipoRegistro || '');
+      const categoria = tipoReg.toUpperCase().includes('MARCACION') ? 'MARCACION' : 'CATASTRO';
+      // Extraer string aunque venga como {value: "SOPO"} o similar
+      const extraer = (v: any): string => {
+        if (!v) return '';
+        if (typeof v === 'string') return v;
+        if (typeof v === 'object' && v.value !== undefined) return String(v.value);
+        return String(v);
+      };
+      const municipio = extraer((pozo as any).municipio) ||
+                        extraer((pozo as any).identificacion?.municipio) ||
+                        extraer((pozo as any).identificacion?.municipio?.value);
+      const pozoId = extraer((pozo as any).identificacion?.idPozo) ||
+                     extraer((pozo as any).idPozo) ||
+                     extraer(pozo.id);
+
+      setProcessingMessage(`Descargando fotos ${completadas}/${tareasDescarga.length} — OK:${ok} Fallidas:${fallidas} — ${filename}`);
+      console.log(`[Import] ${completadas + 1}/${tareasDescarga.length} ${filename} (${municipio}/${categoria}/${pozoId})`);
+
+      const dataUrl = await bajarUna(filename, municipio, pozoId, categoria, foto.driveId);
+      completadas++;
+      if (!dataUrl) {
+        fallidas++;
+        continue;
+      }
+      ok++;
+
+      try {
+        const blob = dataUrlToBlob(dataUrl);
+        const resolvedBlobId = await blobStore.store(blob, filename);
+        importedPhotos.push({
+          id: foto.id || generateFileId(),
+          idPozo: foto.idPozo || pozo.id,
+          tipo: foto.tipo || 'otro',
+          categoria: foto.categoria || 'OTRO',
+          subcategoria: foto.subcategoria,
+          descripcion: foto.descripcion,
+          blobId: resolvedBlobId,
+          filename,
+          fechaCaptura: foto.fechaCaptura ?? Date.now(),
+          driveId: foto.driveId,
+        });
+      } catch (err) {
+        console.error(`[Import] Error persistiendo ${filename}:`, err);
+      }
+    }
+    setProcessingMessage(`Fotos descargadas: ${ok}/${tareasDescarga.length} (${fallidas} fallidas)`);
+    console.log(`[Import] FINAL: OK=${ok} Fallidas=${fallidas} Total=${tareasDescarga.length}`);
 
     // 1. Commit INMEDIATAMENTE al store global para que aparezcan en /pozos
     addPozosBulk(importedPozos);

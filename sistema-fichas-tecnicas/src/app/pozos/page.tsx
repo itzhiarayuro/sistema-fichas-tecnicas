@@ -25,6 +25,42 @@ import { Pozo } from '@/types';
 import { useDesignStore } from '@/stores/designStore';
 import { useFieldsStore } from '@/stores/fieldsStore';
 import { useMounted } from '@/hooks/useMounted';
+import { blobStore } from '@/lib/storage/blobStore';
+import proj4 from 'proj4';
+
+const EPSG9377 = "+proj=tmerc +lat_0=4 +lon_0=-73 +k=0.9992 +x_0=5000000 +y_0=2000000 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs";
+proj4.defs('EPSG:9377', EPSG9377);
+
+function calcularCoordenadas(lat: number, lng: number): { x: string; y: string } | null {
+    if (!lat || !lng || isNaN(lat) || isNaN(lng)) return null;
+    try {
+        const [x, y] = proj4('EPSG:4326', 'EPSG:9377', [lng, lat]);
+        return { x: (Math.round(x * 1000) / 1000).toFixed(3), y: (Math.round(y * 1000) / 1000).toFixed(3) };
+    } catch { return null; }
+}
+
+function enriquecerCoordenadas(pozo: any): any {
+    const xVal = pozo.coordenadaX?.value || pozo.identificacion?.coordenadaX?.value;
+    const yVal = pozo.coordenadaY?.value || pozo.identificacion?.coordenadaY?.value;
+    if (xVal && xVal !== 'DESCONOCIDO' && yVal && yVal !== 'DESCONOCIDO') return pozo;
+
+    const lat = parseFloat(pozo.identificacion?.latitud?.value || pozo.latitud?.value || '0');
+    const lng = parseFloat(pozo.identificacion?.longitud?.value || pozo.longitud?.value || '0');
+    const coords = calcularCoordenadas(lat, lng);
+    if (!coords) return pozo;
+
+    const fv = (v: string) => ({ value: v, source: 'manual' as const });
+    return {
+        ...pozo,
+        coordenadaX: fv(coords.x),
+        coordenadaY: fv(coords.y),
+        identificacion: {
+            ...pozo.identificacion,
+            coordenadaX: fv(coords.x),
+            coordenadaY: fv(coords.y),
+        }
+    };
+}
 
 export default function PozosPage() {
   const router = useRouter();
@@ -211,10 +247,10 @@ export default function PozosPage() {
           return f;
         });
 
-        let enrichedPozo = {
+        let enrichedPozo = enriquecerCoordenadas({
           ...pozo,
           fotos: { ...pozo.fotos, fotos: saneFotos }
-        };
+        });
 
         // Debug de URLs de fotos (solo nombres para no saturar)
         console.log(`📸 Preparando PDF (${pozoId}):`, saneFotos.map(sf => sf.filename));
@@ -229,6 +265,18 @@ export default function PozosPage() {
 
           // Función para llamar GAS directamente desde el cliente (fallback si proxy-image falla)
           // Replica EXACTAMENTE el patrón de catastro-ut-star-app/src/utils/driveSync.ts → fetchPhotoFromDrive
+          // Extraer municipio/pozoId del objeto pozo para pasarlos al GAS (Level 0 = búsqueda rápida)
+          const extraerStr = (v: any): string => {
+            if (!v) return '';
+            if (typeof v === 'string') return v;
+            if (typeof v === 'object' && v.value !== undefined) return String(v.value);
+            return String(v);
+          };
+          const gasMunicipio = (extraerStr((pozo as any).municipio) || extraerStr((pozo as any).identificacion?.municipio)).toUpperCase();
+          const gasPozoId = (extraerStr((pozo as any).identificacion?.idPozo) || extraerStr((pozo as any).idPozo) || String(pozo.id || '')).toUpperCase();
+          const tipoReg = String((pozo as any).tipoRegistro || '').toUpperCase();
+          const gasCategoria = tipoReg.includes('MARCACION') ? 'MARCACION' : 'CATASTRO';
+
           const fetchPhotoFromGasDirect = async (filename: string): Promise<string | null> => {
             const gasUrl = process.env.NEXT_PUBLIC_GAS_URL;
             const token = process.env.NEXT_PUBLIC_SECRET_TOKEN;
@@ -237,15 +285,21 @@ export default function PozosPage() {
               return null;
             }
             try {
-              console.log(`🔄 GAS directo: POST a ${gasUrl.substring(0, 60)}... con filename=${filename}`);
+              console.log(`🔄 GAS directo: ${filename} (${gasMunicipio}/${gasCategoria}/${gasPozoId})`);
               const controller = new AbortController();
-              const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
-              
+              const timeoutId = setTimeout(() => controller.abort(), 45000);
+
               const response = await fetch(gasUrl, {
                 method: 'POST',
-                mode: 'cors', // CRÍTICO: GAS necesita mode cors para poder leer la respuesta JSON
-                // NO enviar Content-Type header — evita preflight CORS que GAS no maneja
-                body: JSON.stringify({ token, action: 'download', filename }),
+                mode: 'cors',
+                body: JSON.stringify({
+                  token,
+                  action: 'download',
+                  filename,
+                  municipio: gasMunicipio,
+                  pozoId: gasPozoId,
+                  categoria: gasCategoria,
+                }),
                 signal: controller.signal
               });
               clearTimeout(timeoutId);
@@ -275,44 +329,59 @@ export default function PozosPage() {
             }
           };
           
-          const preloadResults = await Promise.allSettled(
-            proxyPhotos.map(async (foto) => {
-              try {
-                // Intento 1: via proxy-image API route
-                const proxyController = new AbortController();
-                const proxyTimeout = setTimeout(() => proxyController.abort(), 15000); // 15s timeout
-                console.log(`🔄 Proxy: cargando ${foto.filename} desde ${foto.blobId?.substring(0, 80)}...`);
-                const response = await fetch(foto.blobId, { 
-                  cache: 'force-cache',
-                  signal: proxyController.signal
-                });
-                clearTimeout(proxyTimeout);
-                if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                const blob = await response.blob();
-                // Validar que el blob sea realmente una imagen (no un error HTML/JSON)
-                if (blob.size < 100 || !blob.type.startsWith('image/')) {
-                  throw new Error(`Invalid blob: size=${blob.size}, type=${blob.type}`);
-                }
-                console.log(`✅ Proxy exitoso para ${foto.filename} (${blob.size} bytes)`);
-                return new Promise<{ id: string; dataUrl: string }>((resolve, reject) => {
-                  const reader = new FileReader();
-                  reader.onloadend = () => resolve({ id: foto.id, dataUrl: reader.result as string });
-                  reader.onerror = reject;
-                  reader.readAsDataURL(blob);
-                });
-              } catch (proxyErr: any) {
-                // Intento 2: llamar GAS directamente (como hace el catastro app)
-                console.warn(`⚠️ Proxy falló para ${foto.filename}: ${proxyErr.message}. Intentando GAS directo...`);
+          // Helper: leer Blob del blobStore local y convertir a dataUrl
+          const blobToDataUrl = (blob: Blob): Promise<string> => new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+
+          // PASO 1: Intentar leer TODAS las fotos desde blobStore local (instantáneo si ya fueron importadas)
+          console.log(`🏪 Buscando ${proxyPhotos.length} fotos en caché local (blobStore)...`);
+          const desdeCache: { id: string; dataUrl: string }[] = [];
+          const pendientes: typeof proxyPhotos = [];
+          for (const foto of proxyPhotos) {
+            try {
+              const cached = blobStore.getBlob(foto.filename || '');
+              if (cached && cached.size > 100) {
+                const du = await blobToDataUrl(cached);
+                desdeCache.push({ id: foto.id, dataUrl: du });
+                console.log(`✅ CACHÉ: ${foto.filename} (${cached.size} bytes)`);
+                continue;
+              }
+            } catch {}
+            pendientes.push(foto);
+          }
+          console.log(`🏪 Caché resolvió ${desdeCache.length}/${proxyPhotos.length} fotos. Pendientes: ${pendientes.length}`);
+
+          // PASO 2: Las pendientes sí van por GAS (Level 0 con municipio/categoria — rápido)
+          const CONCURRENCY = 2;
+          const preloadResults: PromiseSettledResult<{ id: string; dataUrl: string } | null>[] = [];
+
+          // Resultados del caché como fulfilled
+          desdeCache.forEach(r => preloadResults.push({ status: 'fulfilled', value: r }));
+
+          for (let i = 0; i < pendientes.length; i += CONCURRENCY) {
+            const chunk = pendientes.slice(i, i + CONCURRENCY);
+            const chunkResults = await Promise.allSettled(
+              chunk.map(async (foto) => {
+                // Ir directo a GAS — el proxy siempre da 404 porque las Cloud Functions están caídas
+                console.log(`🌐 GAS: ${foto.filename}`);
                 const directDataUrl = await fetchPhotoFromGasDirect(foto.filename || '');
                 if (directDataUrl) {
-                  console.log(`✅ GAS directo exitoso para ${foto.filename}`);
+                  // Guardar en caché para próxima vez
+                  try {
+                    const b = await (await fetch(directDataUrl)).blob();
+                    await blobStore.store(b, foto.filename || '');
+                  } catch {}
                   return { id: foto.id, dataUrl: directDataUrl };
                 }
-                console.warn(`❌ GAS directo también falló para ${foto.filename}`);
                 return null;
-              }
-            })
-          );
+              })
+            );
+            preloadResults.push(...chunkResults);
+          }
 
           // Reemplazar blobIds de proxy con data URLs pre-cargadas
           const dataUrlMap = new Map<string, string>();

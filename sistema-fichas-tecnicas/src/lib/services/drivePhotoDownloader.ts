@@ -42,14 +42,14 @@ export async function downloadPhotoFromGAS(filename: string, driveId?: string): 
       payload.fileId = driveId;
     }
 
-    // LLAMADA DIRECTA A GAS (ya no hay proxy local en export estático)
-    // Usamos POST simple para evitar problemas complejos de CORS si el script lo soporta
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s máximo por foto
     const response = await fetch(gasUrl, {
       method: 'POST',
       body: JSON.stringify(payload),
-      // No mandamos Content-Type para evitar el preflight de CORS en navegadores
-      // GAS recibirá el body igualmente en e.postData.contents
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
         throw new Error(`HTTP Error: ${response.status}`);
