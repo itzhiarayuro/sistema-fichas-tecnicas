@@ -38,6 +38,10 @@ import type { Pozo, FotoInfo } from '@/types';
 import { useMounted } from '@/hooks/useMounted';
 import { downloadPhotoFromGAS, dataUrlToBlob } from '@/lib/services/drivePhotoDownloader';
 import { RobustDrivePhotoDownloader } from '@/lib/services/robustDrivePhotoDownloader';
+import { fetchPhotosByDriveIds } from '@/lib/services/driveFastDownloader';
+import { PhotoQueue } from '@/lib/services/photoQueue';
+import { photoCache } from '@/lib/services/photoCache';
+import { perf } from '@/lib/utils/perfLogger';
 
 export default function UploadPageWrapper() {
   return (
@@ -83,6 +87,7 @@ function UploadContent() {
 
   // Estado de la nube
   const [isCloudModalOpen, setIsCloudModalOpen] = useState(false);
+  const [cloudImportMode, setCloudImportMode] = useState<'data' | 'full'>('full');
   const [serverAvailable, setServerAvailable] = useState<boolean | null>(null); // null = verificando
 
   // Verificar si el servidor Sharp está disponible al cargar la página
@@ -784,9 +789,19 @@ function UploadContent() {
   /**
    * Maneja la importación de datos desde la nube
    */
-  const handleCloudImport = useCallback(async (importedPozos: Pozo[]) => {
+  const handleCloudImport = useCallback(async (importedPozos: Pozo[], includePhotos: boolean = true) => {
     if (importedPozos.length === 0) return;
 
+    // Registrar el modo de import: el generador de PDF usa esto para decidir
+    // si debe ir a la nube a buscar fotos faltantes, o solo usar las locales.
+    useGlobalStore.getState().setLastImportWithPhotos(includePhotos);
+
+    setIsProcessing(true);
+    setProcessingMessage(includePhotos ? 'Descargando las fotos de los pozos seleccionados... (Esto puede tardar)' : 'Importando datos desde la nube...');
+
+    const importedPhotos: FotoInfo[] = [];
+
+    if (includePhotos) {
     // Verificar credenciales antes de intentar descargar fotos
     if (!process.env.NEXT_PUBLIC_GAS_URL || !process.env.NEXT_PUBLIC_SECRET_TOKEN) {
       showError(
@@ -794,12 +809,6 @@ function UploadContent() {
         'Las fotos no se descargarán. Configúralas en el archivo .env.local y reinicia el servidor.'
       );
     }
-
-    // Mostrar progreso de preparación
-    setIsProcessing(true);
-    setProcessingMessage('Descargando las fotos de los pozos seleccionados... (Esto puede tardar)');
-
-    const importedPhotos: FotoInfo[] = [];
 
     // Recolectar todas las fotos a descargar, guardando referencia al pozo
     const tareasDescarga: { foto: any; pozo: any }[] = [];
@@ -850,58 +859,165 @@ function UploadContent() {
       }
     };
 
-    let completadas = 0, ok = 0, fallidas = 0;
-    for (const { foto, pozo } of tareasDescarga) {
-      const filename = foto.filename;
-      // El tipoRegistro nos dice si es CATASTRO o MARCACION
-      const tipoReg = String((pozo as any).tipoRegistro || '');
-      const categoria = tipoReg.toUpperCase().includes('MARCACION') ? 'MARCACION' : 'CATASTRO';
-      // Extraer string aunque venga como {value: "SOPO"} o similar
-      const extraer = (v: any): string => {
-        if (!v) return '';
-        if (typeof v === 'string') return v;
-        if (typeof v === 'object' && v.value !== undefined) return String(v.value);
-        return String(v);
-      };
-      const municipio = extraer((pozo as any).municipio) ||
-                        extraer((pozo as any).identificacion?.municipio) ||
-                        extraer((pozo as any).identificacion?.municipio?.value);
-      const pozoId = extraer((pozo as any).identificacion?.idPozo) ||
-                     extraer((pozo as any).idPozo) ||
-                     extraer(pozo.id);
+    const extraer = (v: any): string => {
+      if (!v) return '';
+      if (typeof v === 'string') return v;
+      if (typeof v === 'object' && v.value !== undefined) return String(v.value);
+      return String(v);
+    };
 
-      setProcessingMessage(`Descargando fotos ${completadas}/${tareasDescarga.length} — OK:${ok} Fallidas:${fallidas} — ${filename}`);
-      console.log(`[Import] ${completadas + 1}/${tareasDescarga.length} ${filename} (${municipio}/${categoria}/${pozoId})`);
+    await photoCache.init();
+    const doneTotal = perf.start('cloud_import.total');
 
-      const dataUrl = await bajarUna(filename, municipio, pozoId, categoria, foto.driveId);
-      completadas++;
-      if (!dataUrl) {
-        fallidas++;
-        continue;
-      }
-      ok++;
-
+    let ok = 0, fallidas = 0, cacheHits = 0, skippedMissing = 0;
+    const total = tareasDescarga.length;
+    const persistirFoto = async (foto: any, pozo: any, dataUrl: string, resolvedBlobIdOpt?: string) => {
       try {
-        const blob = dataUrlToBlob(dataUrl);
-        const resolvedBlobId = await blobStore.store(blob, filename);
+        let resolvedBlobId = resolvedBlobIdOpt;
+        if (!resolvedBlobId) {
+          const blob = dataUrlToBlob(dataUrl);
+          if (!blob) return;
+          resolvedBlobId = await blobStore.store(blob, foto.filename);
+          photoCache.recordAvailable(foto.filename, {
+            blobId: resolvedBlobId,
+            driveId: foto.driveId,
+            size: blob.size,
+          });
+        }
+
+        // Resolver el ID del pozo (idPozo real, ej: PZ02)
+        const pId = extraer((pozo as any).identificacion?.idPozo) || 
+                    extraer((pozo as any).idPozo) || 
+                    extraer(pozo.id);
+
         importedPhotos.push({
           id: foto.id || generateFileId(),
-          idPozo: foto.idPozo || pozo.id,
+          idPozo: pId, // Siempre usar el ID real para el match
           tipo: foto.tipo || 'otro',
           categoria: foto.categoria || 'OTRO',
-          subcategoria: foto.subcategoria,
-          descripcion: foto.descripcion,
+          subcategoria: foto.subcategoria || '',
+          descripcion: foto.descripcion || foto.tipo || '',
           blobId: resolvedBlobId,
-          filename,
+          filename: foto.filename,
           fechaCaptura: foto.fechaCaptura ?? Date.now(),
           driveId: foto.driveId,
         });
       } catch (err) {
-        console.error(`[Import] Error persistiendo ${filename}:`, err);
+        console.error(`[Import] Error persistiendo ${foto.filename}:`, err);
+      }
+    };
+
+    // ── PASO 0: Caché local (OPFS persistente) — instantáneo ──────────
+    const doneCache = perf.start('cloud_import.cache_lookup');
+    const pendientes: typeof tareasDescarga = [];
+    const missing: typeof tareasDescarga = [];
+    for (const t of tareasDescarga) {
+      // Pre-filtro de missing: nunca reintentar
+      if (photoCache.isMissing(t.foto.filename) || (t.foto.driveId && photoCache.isMissing(t.foto.driveId))) {
+        missing.push(t);
+        skippedMissing++;
+        continue;
+      }
+      // Lookup en OPFS (persistente) — asíncrono pero paralelizable
+      const cached = await blobStore.getBlobAsync(t.foto.filename);
+      if (cached && cached.size > 100) {
+        const blobId = await blobStore.store(cached, t.foto.filename);
+        await persistirFoto(t.foto, t.pozo, '', blobId);
+        cacheHits++;
+        ok++;
+      } else {
+        pendientes.push(t);
       }
     }
-    setProcessingMessage(`Fotos descargadas: ${ok}/${tareasDescarga.length} (${fallidas} fallidas)`);
+    doneCache({ total, hits: cacheHits, missing_skipped: skippedMissing, pendientes: pendientes.length });
+    setProcessingMessage(`💾 Caché: ${cacheHits}/${total} • Skipped missing: ${skippedMissing} • Pendientes: ${pendientes.length}`);
+
+    // ── PASO 1: Drive API rápido — fotos con driveId ───────────────────
+    const conDriveId = pendientes.filter(t => !!t.foto.driveId);
+    const sinDriveId = pendientes.filter(t => !t.foto.driveId);
+
+    if (conDriveId.length > 0) {
+      const doneDrive = perf.start('cloud_import.drive_api');
+      setProcessingMessage(`⚡ Drive API: 0/${conDriveId.length}...`);
+      const ids = conDriveId.map(t => t.foto.driveId as string);
+      const driveMap = await fetchPhotosByDriveIds(ids, (p) => {
+        setProcessingMessage(`⚡ Drive API: ${p.done}/${conDriveId.length}${p.waitingNetwork ? ' — esperando red...' : ''}`);
+      });
+
+      for (const { foto, pozo } of conDriveId) {
+        const dataUrl = driveMap[foto.driveId];
+        if (dataUrl) {
+          ok++;
+          await persistirFoto(foto, pozo, dataUrl);
+        } else {
+          // Drive API falló → degradar a GAS (solo si no se marcó ya como missing dentro de driveFastDownloader)
+          if (!photoCache.isMissing(foto.driveId)) {
+            sinDriveId.push({ foto, pozo });
+          } else {
+            fallidas++;
+          }
+        }
+      }
+      doneDrive({ n: conDriveId.length, ok });
+    }
+
+    // ── PASO 2: GAS con queue dinámica (concurrencia 16) ───────────────
+    if (sinDriveId.length > 0) {
+      const doneGas = perf.start('cloud_import.gas_queue');
+      setProcessingMessage(`🌐 GAS queue: 0/${sinDriveId.length} (concurrencia 16)...`);
+
+      let gasCompletadas = 0;
+      const queue = new PhotoQueue({
+        concurrency: 16,
+        onItem: (key, dur, okTask) => {
+          if (!okTask) perf.info('gas_item_fail', { key, took: `${dur}ms` });
+        },
+      });
+
+      await Promise.all(
+        sinDriveId.map(({ foto, pozo }) =>
+          queue.enqueue(foto.filename, async () => {
+            const tipoReg = String((pozo as any).tipoRegistro || '');
+            const categoria = tipoReg.toUpperCase().includes('MARCACION') ? 'MARCACION' : 'CATASTRO';
+            const municipio = extraer((pozo as any).municipio) ||
+                              extraer((pozo as any).identificacion?.municipio) ||
+                              extraer((pozo as any).identificacion?.municipio?.value);
+            const pozoId = extraer((pozo as any).identificacion?.idPozo) ||
+                           extraer((pozo as any).idPozo) ||
+                           extraer(pozo.id);
+
+            // Un solo intento — si GAS dice 404, marcamos missing y terminamos.
+            // Los errores de RED transitorios ya se reintentan a nivel fetch.
+            const dataUrl = await bajarUna(foto.filename, municipio, pozoId, categoria, foto.driveId);
+
+            gasCompletadas++;
+            setProcessingMessage(`🌐 GAS: ${gasCompletadas}/${sinDriveId.length} — OK:${ok} Fail:${fallidas}`);
+
+            if (dataUrl) {
+              ok++;
+              await persistirFoto(foto, pozo, dataUrl);
+              return true;
+            } else {
+              fallidas++;
+              photoCache.markMissing(foto.filename, 'gas_not_found');
+              return null;
+            }
+          })
+        )
+      );
+      doneGas({ n: sinDriveId.length, ok: gasCompletadas - fallidas, failed: fallidas });
+    }
+
+    doneTotal({
+      total,
+      ok,
+      fallidas,
+      cache_hits: cacheHits,
+      skipped_missing: skippedMissing,
+    });
+    setProcessingMessage(`✅ Fotos: ${ok}/${total} • Caché: ${cacheHits} • Skipped: ${skippedMissing} • Fail: ${fallidas}`);
     console.log(`[Import] FINAL: OK=${ok} Fallidas=${fallidas} Total=${tareasDescarga.length}`);
+    } // fin if (includePhotos)
 
     // 1. Commit INMEDIATAMENTE al store global para que aparezcan en /pozos
     addPozosBulk(importedPozos);
@@ -932,8 +1048,9 @@ function UploadContent() {
     expectedIndexRef.current = buildExpectedPhotoIndex(combinedPozosMap);
 
     showSuccess(
-      `Importados ${importedPozos.length} registros y descargadas ${importedPhotos.length} fotos desde la nube. ` +
-      `Ya puedes generar las fichas PDF correctamente.`
+      includePhotos
+        ? `Importados ${importedPozos.length} registros y descargadas ${importedPhotos.length} fotos desde la nube. Ya puedes generar las fichas PDF correctamente.`
+        : `Importados ${importedPozos.length} registros desde la nube (sin fotos). Adjunta las fotos manualmente.`
     );
   }, [addPozosBulk, addPhotosBulk, showSuccess, pozos]);
 
@@ -1036,15 +1153,26 @@ function UploadContent() {
                         </div>
                       )}
                     </div>
-                    <button
-                      onClick={() => setIsCloudModalOpen(true)}
-                      className="px-8 py-3 bg-white text-amber-600 font-extrabold rounded-xl shadow-lg hover:bg-amber-50 transition-all active:scale-95 flex items-center gap-2 whitespace-nowrap"
-                    >
-                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
-                      </svg>
-                      TRAER DE LA NUBE
-                    </button>
+                    <div className="flex flex-col gap-2">
+                      <button
+                        onClick={() => { setCloudImportMode('data'); setIsCloudModalOpen(true); }}
+                        className="px-6 py-2.5 bg-white text-amber-600 font-bold rounded-xl shadow-lg hover:bg-amber-50 transition-all active:scale-95 flex items-center gap-2 whitespace-nowrap text-sm"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+                        </svg>
+                        SOLO DATOS
+                      </button>
+                      <button
+                        onClick={() => { setCloudImportMode('full'); setIsCloudModalOpen(true); }}
+                        className="px-6 py-2.5 bg-white text-amber-600 font-bold rounded-xl shadow-lg hover:bg-amber-50 transition-all active:scale-95 flex items-center gap-2 whitespace-nowrap text-sm"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+                        </svg>
+                        DATOS + FOTOS
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -1375,7 +1503,7 @@ function UploadContent() {
       <CloudImportModal
         isOpen={isCloudModalOpen}
         onClose={() => setIsCloudModalOpen(false)}
-        onImport={handleCloudImport}
+        onImport={(pozos) => handleCloudImport(pozos, cloudImportMode === 'full')}
       />
     </AppShell>
   );

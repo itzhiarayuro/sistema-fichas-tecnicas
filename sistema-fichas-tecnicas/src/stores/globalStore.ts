@@ -57,6 +57,12 @@ interface GlobalState {
   guidedMode: boolean;
   isLoading: boolean;
 
+  // Controla si el generador de PDF puede ir a Drive/GAS a buscar fotos faltantes.
+  // Solo true cuando el usuario elige explícitamente "DATOS + FOTOS" al importar
+  // de la nube. En los demás casos (upload Excel + arrastre, "SOLO DATOS") el
+  // FLEXIBLE usa solo fotos locales y omite las que no estén.
+  lastImportWithPhotos: boolean;
+
   // Acciones de datos
   loadPozos: (pozos: Pozo[]) => void;
   setPozos: (pozos: Map<string, Pozo>) => void;
@@ -87,6 +93,7 @@ interface GlobalState {
   // Acciones de estado
   setCurrentStep: (step: WorkflowStep) => void;
   setLoading: (loading: boolean) => void;
+  setLastImportWithPhotos: (value: boolean) => void;
   reset: () => void;
 
   // Getters
@@ -230,6 +237,7 @@ export const useGlobalStore = create<GlobalState>()(
       currentStep: 'upload',
       guidedMode: true,
       isLoading: false,
+      lastImportWithPhotos: false,
 
       // Data actions
       loadPozos: (pozos) => set(() => {
@@ -320,6 +328,9 @@ export const useGlobalStore = create<GlobalState>()(
         const newCache = new Map(state.photosByCodeCache);
 
         newPhotosList.forEach(photo => {
+          // Validar que la foto sea válida antes de indexar
+          if (!photo || !photo.id) return;
+
           newPhotos.set(photo.id, photo);
           if (photo.idPozo) {
             const code = photo.idPozo.toUpperCase();
@@ -373,6 +384,8 @@ export const useGlobalStore = create<GlobalState>()(
 
       setLoading: (loading) => set({ isLoading: loading }),
 
+      setLastImportWithPhotos: (value) => set({ lastImportWithPhotos: value }),
+
       reset: () => set({
         pozos: new Map(),
         photos: new Map(),
@@ -381,6 +394,7 @@ export const useGlobalStore = create<GlobalState>()(
         currentStep: 'upload',
         guidedMode: true,
         isLoading: false,
+        lastImportWithPhotos: false,
       }),
 
       // Getters
@@ -392,34 +406,36 @@ export const useGlobalStore = create<GlobalState>()(
         if (!pozoId) return [];
         const state = get();
 
-        // Check if pozoId is a document ID and resolve its true idPozo
+        // 1. Obtener el código base y normalizar
         let targetCode = String(pozoId).toUpperCase();
-        const pozo = state.pozos.get(pozoId);
         
-        if (pozo) {
-            const rawId = pozo.idPozo || pozo.identificacion?.idPozo;
-            if (typeof rawId === 'object' && rawId !== null && 'value' in rawId) {
-                targetCode = String(rawId.value).trim().toUpperCase();
-            } else if (rawId) {
-                targetCode = String(rawId).trim().toUpperCase();
-            }
-        }
+        // --- NORMALIZACIÓN FLEXIBLE ---
+        // Si tiene un prefijo con guion bajo (ej: SOPO_PZ02), extraer solo la parte del pozo (PZ02)
+        const parts = targetCode.split('_');
+        const cleanCode = parts.length > 1 ? parts[parts.length - 1] : targetCode;
+        
+        const codesToTry = new Set([targetCode, cleanCode]);
+        
+        // Si el código (limpio o total) es Pxx, intentar con PZxx y viceversa
+        [targetCode, cleanCode].forEach(code => {
+          if (/^P\d+$/.test(code)) codesToTry.add(code.replace('P', 'PZ'));
+          if (/^PZ\d+$/.test(code)) codesToTry.add(code.replace('PZ', 'P'));
+        });
 
-        // Fallback for POZO- naming convention
-        if (targetCode.startsWith('POZO-')) {
-          const parts = targetCode.split('-');
-          if (parts.length >= 4) {
-            targetCode = parts.slice(1, -2).join('-');
-          } else if (parts.length >= 3) {
-            targetCode = parts[1];
+        // 2. Buscar en caché para todos los códigos posibles
+        let photoIds: string[] = [];
+        for (const code of codesToTry) {
+          const ids = state.photosByCodeCache.get(code);
+          if (ids && ids.length > 0) {
+            photoIds = [...photoIds, ...ids];
           }
         }
 
-        // 2. Buscar en caché (O(1) o muy cercano)
-        const photoIds = state.photosByCodeCache.get(targetCode) || [];
+        // Eliminar duplicados si los hay
+        const uniqueIds = Array.from(new Set(photoIds));
 
         // 3. Devolver objetos completos
-        return photoIds
+        return uniqueIds
           .map(id => state.photos.get(id))
           .filter((p): p is FotoInfo => !!p);
       },
@@ -433,6 +449,7 @@ export const useGlobalStore = create<GlobalState>()(
         guidedMode: state.guidedMode,
         pozos: state.pozos,
         photos: state.photos,
+        lastImportWithPhotos: state.lastImportWithPhotos,
         // No persistir uploadedImages para evitar exceder el límite de cuota (Base64 es muy pesado)
       }),
     }

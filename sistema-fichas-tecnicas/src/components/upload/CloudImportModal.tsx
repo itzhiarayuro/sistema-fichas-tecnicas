@@ -73,7 +73,20 @@ export function CloudImportModal({ isOpen, onClose, onImport }: CloudImportModal
             );
 
             const snapshot = await getDocs(q);
-            const newDocs = snapshot.docs.map(doc => {
+
+            // Filtrar soft-deletes: la app de campo (catastro-ut-star-app) marca
+            // los registros eliminados con `deleted: true` en lugar de borrarlos.
+            // Sin este filtro aparecerían fichas/marcaciones que el usuario ya eliminó.
+            const rawDocs = snapshot.docs.filter(d => {
+                const data = d.data();
+                return data && !data.deleted;
+            });
+            const omittedDeleted = snapshot.docs.length - rawDocs.length;
+            if (omittedDeleted > 0) {
+                console.log(`🗑️ Omitidos ${omittedDeleted} registros marcados como eliminados en Firestore`);
+            }
+
+            const newDocs = rawDocs.map(doc => {
                 const data = doc.data();
                 return transformFirebaseToPozo({
                     ...data,

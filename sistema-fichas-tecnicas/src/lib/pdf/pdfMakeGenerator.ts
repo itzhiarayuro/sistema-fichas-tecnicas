@@ -1535,7 +1535,7 @@ export class PDFMakeGenerator {
             }
 
             // Agregar Hipervínculo para coordenadas (Requirement)
-            if ((field.id === 'pozo_latitud' || field.id === 'pozo_longitud') && value && value !== '-') {
+            if ((field.id === 'pozo_latitud' || field.id === 'pozo_longitud' || field.id === 'pozo_coordX' || field.id === 'pozo_coordY') && value && value !== '-') {
                 const latVal = this.getFieldValueByObjectPath(pozo, 'identificacion.latitud.value');
                 const lngVal = this.getFieldValueByObjectPath(pozo, 'identificacion.longitud.value');
                 if (latVal && lngVal && !isNaN(parseFloat(latVal)) && !isNaN(parseFloat(lngVal))) {

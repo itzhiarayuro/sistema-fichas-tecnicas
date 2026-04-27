@@ -12,7 +12,7 @@
 // ============================================
 
 /** Máximo blobs en RAM simultáneamente */
-const MAX_IN_MEMORY = 200;
+const MAX_IN_MEMORY = 800;
 
 /** Carpeta dentro de OPFS donde guardamos las fotos */
 const OPFS_FOLDER = 'fotos-sistema';
@@ -43,10 +43,12 @@ interface BlobStats {
 let opfsRoot: FileSystemDirectoryHandle | null = null;
 let opfsFotos: FileSystemDirectoryHandle | null = null;
 
+/** Registro LRU de archivos en OPFS: safeId → timestamp de escritura */
+const opfsRegistry: Map<string, number> = new Map();
+
 /** Inicializa OPFS (solo una vez) */
 async function getOpfsFolder(): Promise<FileSystemDirectoryHandle | null> {
   if (opfsFotos) return opfsFotos;
-
   try {
     opfsRoot = await navigator.storage.getDirectory();
     opfsFotos = await opfsRoot.getDirectoryHandle(OPFS_FOLDER, { create: true });
@@ -57,20 +59,73 @@ async function getOpfsFolder(): Promise<FileSystemDirectoryHandle | null> {
   }
 }
 
-/** Guarda un blob en OPFS */
+/**
+ * Evicta los N archivos más antiguos del OPFS para liberar espacio.
+ * Llama solo cuando QuotaExceededError — no en operación normal.
+ */
+async function evictOldestFromOPFS(folder: FileSystemDirectoryHandle, n = 50): Promise<void> {
+  try {
+    // Obtener lista actual si el registro en memoria está vacío
+    if (opfsRegistry.size === 0) {
+      // @ts-ignore
+      for await (const [name] of folder.entries()) {
+        if (!opfsRegistry.has(name)) opfsRegistry.set(name, 0);
+      }
+    }
+    const sorted = Array.from(opfsRegistry.entries())
+      .sort((a, b) => a[1] - b[1]) // más antiguos primero (timestamp menor)
+      .slice(0, n)
+      .map(([id]) => id);
+    await Promise.allSettled(
+      sorted.map(id => folder.removeEntry(id).then(() => opfsRegistry.delete(id)).catch(() => {}))
+    );
+  } catch { /* silencioso */ }
+}
+
+/** Guarda un blob en OPFS con evicción automática si la cuota se agota. */
 async function saveToOPFS(id: string, blob: Blob): Promise<void> {
   const safeId = id.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-  try {
-    const folder = await getOpfsFolder();
-    if (!folder) return saveBlobToIDB(id, blob); // fallback a IDB si no hay OPFS
+  const folder = await getOpfsFolder();
+  if (!folder) { await saveBlobToIDB(id, blob); return; }
 
+  const doWrite = async () => {
     const fileHandle = await folder.getFileHandle(safeId, { create: true });
     const writable = await fileHandle.createWritable();
     await writable.write(blob);
     await writable.close();
-  } catch (error) {
-    console.warn(`⚠️ Error guardando en OPFS (${id} -> ${safeId}):`, error);
-    await saveBlobToIDB(id, blob); // fallback
+    // Verificación post-escritura: confirmar que los bytes llegaron al disco.
+    // Algunos navegadores resuelven close() antes de que el OS flushee.
+    if (blob.size > 0) {
+      const verify = await folder.getFileHandle(safeId);
+      const vf = await verify.getFile();
+      if (vf.size === 0) {
+        throw new Error(`OPFS write vacío para ${safeId}: esperaba ${blob.size}B`);
+      }
+    }
+    opfsRegistry.set(safeId, Date.now());
+  };
+
+  try {
+    await doWrite();
+  } catch (error: any) {
+    const isQuota = error?.name === 'QuotaExceededError' ||
+                    String(error).includes('QuotaExceeded') ||
+                    String(error?.message).includes('quota');
+    if (isQuota) {
+      // Evictar los 50 archivos más antiguos y reintentar una vez
+      await evictOldestFromOPFS(folder, 50);
+      try {
+        await doWrite();
+        return; // Éxito en el reintento
+      } catch (retryError) {
+        console.warn(`⚠️ OPFS quota llena y falló evicción para ${id}:`, retryError);
+        await saveBlobToIDB(id, blob);
+      }
+    } else {
+      // Escritura fallida (permisos, lock del OS, verificación fallida, etc.)
+      console.warn(`⚠️ OPFS falló al escribir ${id}, cayendo a IndexedDB:`, error);
+      await saveBlobToIDB(id, blob);
+    }
   }
 }
 
@@ -179,11 +234,23 @@ export async function saveBlobsBatch(items: Array<{ id: string; blob: Blob }>): 
   if (folder) {
     // OPFS: operaciones paralelas (hasta 8 a la vez)
     const CONCURRENCY = 8;
+    let failedCount = 0;
     for (let i = 0; i < items.length; i += CONCURRENCY) {
       const batch = items.slice(i, i + CONCURRENCY);
-      await Promise.allSettled(
+      const results = await Promise.allSettled(
         batch.map(({ id, blob }) => saveToOPFS(id, blob))
       );
+      // saveToOPFS tiene su propio fallback a IDB; una rejection aquí
+      // significa que AMBOS fallaron — loggear para diagnóstico.
+      for (const r of results) {
+        if (r.status === 'rejected') {
+          failedCount++;
+          console.error('[BlobStore] Fallo total (OPFS+IDB) al guardar blob:', r.reason);
+        }
+      }
+    }
+    if (failedCount > 0) {
+      console.warn(`[BlobStore] ${failedCount}/${items.length} blobs no pudieron persistirse`);
     }
   } else {
     // IDB fallback: UNA sola transacción para todos
@@ -224,6 +291,8 @@ export class BlobStore {
   /** Buffer para batch saves pendientes */
   private pendingSaves: Array<{ id: string; blob: Blob }> = [];
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Promise del flush en curso (para que flushPending() pueda esperar) */
+  private activeFlush: Promise<void> | null = null;
 
   private constructor() {}
 
@@ -274,21 +343,51 @@ export class BlobStore {
     return id;
   }
 
+  /** Ejecuta la escritura inmediata del buffer pendiente. */
+  private async _runFlush(): Promise<void> {
+    if (this.pendingSaves.length === 0) return;
+    const toSave = [...this.pendingSaves];
+    this.pendingSaves = [];
+    await saveBlobsBatch(toSave);
+  }
+
   /**
    * Acumula saves y los escribe en batch cada 300ms.
    * Reduce drásticamente las operaciones de disco.
    */
   private scheduleBatchFlush(): void {
-    if (this.flushTimer) return;
-    this.flushTimer = setTimeout(async () => {
+    // No programar si ya hay un timer o un flush activo
+    if (this.flushTimer !== null || this.activeFlush !== null) return;
+    this.flushTimer = setTimeout(() => {
       this.flushTimer = null;
-      if (this.pendingSaves.length === 0) return;
-
-      const toSave = [...this.pendingSaves];
-      this.pendingSaves = [];
-
-      await saveBlobsBatch(toSave);
+      this.activeFlush = this._runFlush().finally(() => {
+        this.activeFlush = null;
+        // Si llegaron nuevos blobs durante el flush, procesarlos
+        if (this.pendingSaves.length > 0) {
+          this.scheduleBatchFlush();
+        }
+      });
     }, 300);
+  }
+
+  /**
+   * Espera a que todos los blobs pendientes se persistan en disco.
+   * DEBE llamarse antes de generar PDFs o navegar fuera de la página.
+   */
+  async flushPending(): Promise<void> {
+    // Cancelar timer pendiente y forzar ejecución inmediata
+    if (this.flushTimer !== null) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = null;
+    }
+    // Esperar el flush que ya está corriendo
+    if (this.activeFlush) {
+      await this.activeFlush;
+    }
+    // Persistir cualquier remanente (puede haber llegado durante activeFlush)
+    while (this.pendingSaves.length > 0) {
+      await this._runFlush();
+    }
   }
 
   /** Obtiene la URL de un blob para <img src={...}> */
@@ -309,12 +408,37 @@ export class BlobStore {
     return '';
   }
 
-  /** Obtiene el Blob directamente si está en RAM */
+  /** Obtiene el Blob directamente si está en RAM (no consulta disco) */
   getBlob(blobId: string): Blob | null {
     const entry = this.memoryMap.get(blobId);
     if (entry) {
       this.touchLRU(blobId);
       return entry.blob;
+    }
+    return null;
+  }
+
+  /**
+   * Obtiene el Blob buscando primero RAM, luego OPFS (persistente).
+   * Esto es lo que hay que usar para caché entre sesiones — getBlob() solo ve RAM.
+   */
+  async getBlobAsync(blobId: string): Promise<Blob | null> {
+    const ram = this.getBlob(blobId);
+    if (ram) return ram;
+
+    // Consultar OPFS directamente — no pasa por ensureLoaded para evitar el path URL
+    const blob = await loadFromOPFS(blobId);
+    if (blob && blob.size > 100) {
+      // Cargarlo en RAM para próximas consultas
+      const url = URL.createObjectURL(blob);
+      this.memoryMap.set(blobId, {
+        blob, url, size: blob.size, lastAccessed: Date.now(),
+      });
+      this.allKnownIds.add(blobId);
+      this.allSizes.set(blobId, blob.size);
+      this.pushLRU(blobId);
+      this.evictIfNeeded();
+      return blob;
     }
     return null;
   }

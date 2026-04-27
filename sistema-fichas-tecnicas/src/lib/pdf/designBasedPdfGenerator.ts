@@ -95,48 +95,43 @@ const PHOTO_CODE_MAP: Record<string, string> = {
 function findPhotoByCode(pozo: Pozo, targetCode: string) {
     if (!pozo.fotos?.fotos) return null;
     const upperTarget = targetCode.toUpperCase();
+    const pozoId = String(pozo.idPozo?.value || pozo.identificacion?.idPozo?.value || '').toUpperCase();
+    const cleanPozoId = pozoId.split('_').pop() || '';
 
-    // 1. Coincidencia exacta por subcategoría (La más fiable)
-    let found = pozo.fotos.fotos.find(f =>
-        f && String(f.subcategoria || '').toUpperCase() === upperTarget
-    );
-
-    if (found) return found;
-
-    // 2. Fallbacks basados en nomenclatura del nombre de archivo (Sincronizado con DesignRenderer)
-    return pozo.fotos.fotos.find(f => {
+    // Función de match: ¿esta foto corresponde al código buscado?
+    const matches = (f: any): boolean => {
         if (!f) return false;
-        const filename = String(f.filename || '').toUpperCase().split('.')[0];
-        if (filename.endsWith('-AT') || filename.endsWith('_AT') || filename.endsWith('-Z') || filename.endsWith('_Z')) return false;
+        const fname = String(f.filename || f.name || f.id || '').toUpperCase();
+        const sub = String(f.subcategoria || '').toUpperCase();
+        
+        if (sub === upperTarget) return true;
 
-        if (upperTarget === 'P') return filename === 'P' || filename === 'F-P' || filename === 'S-P' || filename.includes('-P');
-        if (upperTarget === 'T') return filename === 'T' || filename === 'F-T' || filename === 'TT' || filename.includes('-T');
-        if (upperTarget === 'I') return filename === 'I' || filename === 'F-I' || filename === 'II' || /^I\d?$/.test(filename) || /^I\(\d+\)$/.test(filename) || filename.includes('-I');
-
-        if (upperTarget.startsWith('E')) {
-            const num = upperTarget.replace('E', '');
-            if (num === '1' && (filename === 'E-T' || filename.includes('-E-T'))) return true;
-            return new RegExp(`(^|[\\-_])E${num}([\\-_\\.]|$)`).test(filename) || filename.includes(`F-E${num}`);
+        if (upperTarget === 'L') {
+            return fname.includes('MAPA') || fname.includes('LOCALIZACION') || fname.includes('ESQUEMA') || fname.includes('-L.') || fname.includes('_L.');
         }
 
-        if (upperTarget.startsWith('S') && !upperTarget.startsWith('SUM')) {
-            const num = upperTarget.replace('S', '');
-            if (num === '1' && (filename === 'S' || filename === 'S-T' || filename === 'S-HS' || filename === 'F-S-T')) return true;
-            if (filename.includes('-E')) return false; // Evitar confundir con Sumideros en nombres E1-S1
-            const regex = new RegExp(`(^|[\\-_])S${num}([\\-_\\.]|$)`);
-            return regex.test(filename) || regex.test(filename.replace(/-/g, '')) || filename.includes(`F-S${num}`);
-        }
+        const hasPozo = fname.includes(cleanPozoId) || fname.includes(pozoId);
+        const hasCode = fname.includes(`-${upperTarget}.`) || fname.includes(`_${upperTarget}.`) 
+                     || fname.includes(`-${upperTarget}-`) || fname.includes(`_${upperTarget}-`);
+        const isExactCode = fname.startsWith(`${upperTarget}.`);
 
-        if (upperTarget.startsWith('SUM')) {
-            const num = upperTarget.replace('SUM', '');
-            const regexSum = new RegExp(`(^|[\\-_])SUM${num}([\\-_\\.]|$)`);
-            // Eliminamos el fallback de 'S' para evitar colisión con Salidas (Request)
-            return regexSum.test(filename);
-        }
+        return (hasPozo && hasCode) || isExactCode;
+    };
 
-        if (upperTarget === 'L') return filename.includes('_ARGIS') || filename === 'L';
-        return false;
+    // ★ CLAVE: Buscar PRIMERO fotos con blobId válido (locales),
+    //   DESPUÉS las que tienen blobId vacío o remoto (Firestore)
+    const allMatches = pozo.fotos.fotos.filter(f => matches(f));
+    
+    if (allMatches.length === 0) return null;
+    if (allMatches.length === 1) return allMatches[0];
+
+    // Priorizar: fotos con blobId real > fotos con blobId vacío/remoto
+    const withValidBlob = allMatches.find(f => {
+        const bid = f.blobId || '';
+        return bid.length > 0 && !bid.startsWith('/api/') && !bid.startsWith('http');
     });
+    
+    return withValidBlob || allMatches[0];
 }
 
 /**
@@ -159,16 +154,27 @@ async function resolveFieldValue(
                 const bId = photo.blobId || '';
                 // SI YA ES UNA DATA URL O BLOB URL: Usar directamente
                 if (bId.startsWith('data:') || bId.startsWith('blob:')) {
-                    console.log(`${logPrefix} Foto encontrada por subcategoría/regex: ${targetCode}`);
+                    console.log(`${logPrefix} Foto encontrada [${targetCode}]`);
                     return { value: bId };
                 }
                 
-                // ASEGURAR CARGA: En PDF necesitamos la URL real, si no está en RAM la cargamos.
+                // ASEGURAR CARGA
                 const url = await blobStore.ensureLoaded(bId);
-                console.log(`${logPrefix} Foto cargada desde blobStore: ${targetCode}`);
-                return { value: url || (photo as any).dataUrl || '-' };
+                if (url) {
+                    console.log(`${logPrefix} Foto cargada [${targetCode}]`);
+                    return { value: url };
+                }
             }
         }
+        
+        // Búsqueda de respaldo por nombre de campo si el código falla
+        const fallbackId = fieldId.replace('foto_', '').toUpperCase();
+        const fallbackPhoto = findPhotoByCode(pozo, fallbackId);
+        if (fallbackPhoto) {
+            const url = await blobStore.ensureLoaded(fallbackPhoto.blobId || '');
+            if (url) return { value: url };
+        }
+
         console.warn(`${logPrefix} Foto NO encontrada para código: ${targetCode || 'N/A'}`);
         return { value: '-' };
     }
@@ -240,7 +246,7 @@ async function resolveFieldValue(
         }
 
         // Fallback para links de ubicación
-        if (!link && (fieldId.includes('latitud') || fieldId.includes('longitud'))) {
+        if (!link && (fieldId.includes('latitud') || fieldId.includes('longitud') || fieldId.includes('coord') || fieldId.includes('enlace'))) {
             const lat = getValueByPath(pozo, 'identificacion.latitud.value');
             const lon = getValueByPath(pozo, 'identificacion.longitud.value');
             if (lat && lon && lat !== '-' && lon !== '-') {
@@ -546,7 +552,10 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
 
     if (isPhoto && value && value !== '-' && value !== '') {
         try {
-            const format = String(value).toLowerCase().includes('png') ? 'PNG' : 'JPEG';
+            // Detección de formato más robusta
+            const valueStr = String(value);
+            const format = valueStr.includes('image/png') || valueStr.toLowerCase().endsWith('.png') ? 'PNG' : 'JPEG';
+            
             const dims = await getImageDimensions(value);
 
             let finalX = placement.x;
@@ -555,28 +564,31 @@ async function renderField(doc: jsPDF, placement: FieldPlacement, pozo: Pozo, va
             let finalH = availableContentHeight;
 
             if (dims.width > 0 && dims.height > 0) {
-                const naturalW = dims.width;
-                const naturalH = dims.height;
-                const maxW = placement.width;
-                const maxH = availableContentHeight;
+                const imgRatio = dims.width / dims.height;
+                const containerRatio = placement.width / availableContentHeight;
 
-                const scaleW = naturalW > maxW ? maxW / naturalW : 1;
-                const scaleH = naturalH > maxH ? maxH / naturalH : 1;
-                const scale = Math.min(scaleW, scaleH);
-
-                finalW = naturalW * scale;
-                finalH = naturalH * scale;
+                if (imgRatio > containerRatio) {
+                    finalW = placement.width;
+                    finalH = placement.width / imgRatio;
+                    finalY += (availableContentHeight - finalH) / 2;
+                } else {
+                    finalH = availableContentHeight;
+                    finalW = availableContentHeight * imgRatio;
+                    finalX += (placement.width - finalW) / 2;
+                }
             }
 
             console.group(`📸 [PDF] Renderizando Foto: ${placement.fieldId}`);
-            console.log(`📏 Área asignada: ${placement.width.toFixed(1)}x${availableContentHeight.toFixed(1)}mm`);
-            console.log(`📐 Tamaño dibujado: ${finalW.toFixed(1)}x${finalH.toFixed(1)}mm`);
-            console.log(`🖼️ Resolución origen: ${dims.width}x${dims.height}px`);
+            console.log(`📏 Área: ${placement.width.toFixed(1)}x${availableContentHeight.toFixed(1)}mm`);
+            console.log(`📐 Dibujo: ${finalW.toFixed(1)}x${finalH.toFixed(1)}mm`);
+            console.log(`🖼️ Formato: ${format}`);
             console.groupEnd();
 
+            // EJECUCIÓN DEL DIBUJO
             doc.addImage(value, format, finalX, finalY, finalW, finalH, undefined, 'FAST');
+            console.log(`✅ [PDF] Foto ${placement.fieldId} dibujada con éxito.`);
         } catch (e) {
-            console.warn(`Error foto ${placement.fieldId}`, e);
+            console.warn(`Error dibujando foto ${placement.fieldId}:`, e);
         }
         return;
     }

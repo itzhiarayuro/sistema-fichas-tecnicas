@@ -234,17 +234,20 @@ export function transformFirebaseToPozo(firebaseData: any): Pozo {
         return map[key] || val;
     };
 
+    // Generar enlace de Google Maps a partir de lat/lng
+    const mapsLink = firebaseData.enlace || (lat && lng ? `https://www.google.com/maps?q=${lat},${lng}` : '');
+
     return {
         id,
         idPozo: toFieldValue(firebaseData.pozo || firebaseData.codigo || firebaseData.idPozo || id, 'manual'),
-        coordenadaX: toFieldValue(parseFloat(String(firebaseData.coordenada_x ?? firebaseData.gps?.x ?? '')) || '', 'manual', false),
-        coordenadaY: toFieldValue(parseFloat(String(firebaseData.coordenada_y ?? firebaseData.gps?.y ?? '')) || '', 'manual', false),
-        latitud: toFieldValue(lat, 'manual', false),
-        longitud: toFieldValue(lng, 'manual', false),
+        coordenadaX: { ...toFieldValue(parseFloat(String(firebaseData.coordenada_x ?? firebaseData.gps?.x ?? '')) || '', 'manual', false), link: mapsLink || undefined },
+        coordenadaY: { ...toFieldValue(parseFloat(String(firebaseData.coordenada_y ?? firebaseData.gps?.y ?? '')) || '', 'manual', false), link: mapsLink || undefined },
+        latitud: { ...toFieldValue(lat, 'manual', false), link: mapsLink || undefined },
+        longitud: { ...toFieldValue(lng, 'manual', false), link: mapsLink || undefined },
         fecha: toFieldValue(firebaseData.fecha || new Date().toISOString().split('T')[0], 'manual', false),
         levanto: toFieldValue(getInspectorName(firebaseData.creatorEmail || firebaseData.inspector || firebaseData.levanto), 'manual'),
         estado: toFieldValue(firebaseData.estadoPozo || firebaseData.estado || 'DESCONOCIDO', 'manual'),
-        enlace: toFieldValue(firebaseData.enlace || '', 'manual'),
+        enlace: toFieldValue(mapsLink, 'manual', false),
         direccion: toFieldValue(firebaseData.direccion || '', 'manual'),
         barrio: toFieldValue(firebaseData.barrio || firebaseData.municipio || '', 'manual'),
         municipio: toFieldValue(firebaseData.municipio || '', 'manual'),
@@ -283,15 +286,15 @@ export function transformFirebaseToPozo(firebaseData: any): Pozo {
 
         identificacion: {
             idPozo: toFieldValue(firebaseData.pozo || firebaseData.codigo || firebaseData.idPozo || id, 'manual', false),
-            coordenadaX: toFieldValue(parseFloat(String(firebaseData.coordenada_x ?? firebaseData.gps?.x ?? '')) || '', 'manual', false),
-            coordenadaY: toFieldValue(parseFloat(String(firebaseData.coordenada_y ?? firebaseData.gps?.y ?? '')) || '', 'manual', false),
-            latitud: toFieldValue(lat, 'manual', false),
-            longitud: toFieldValue(lng, 'manual', false),
+            coordenadaX: { ...toFieldValue(parseFloat(String(firebaseData.coordenada_x ?? firebaseData.gps?.x ?? '')) || '', 'manual', false), link: mapsLink || undefined },
+            coordenadaY: { ...toFieldValue(parseFloat(String(firebaseData.coordenada_y ?? firebaseData.gps?.y ?? '')) || '', 'manual', false), link: mapsLink || undefined },
+            latitud: { ...toFieldValue(lat, 'manual', false), link: mapsLink || undefined },
+            longitud: { ...toFieldValue(lng, 'manual', false), link: mapsLink || undefined },
             fecha: toFieldValue(firebaseData.fecha || new Date().toISOString().split('T')[0], 'manual', false),
             levanto: toFieldValue(getInspectorName(firebaseData.creatorEmail || firebaseData.inspector || firebaseData.levanto), 'manual'),
             estado: toFieldValue(firebaseData.estadoPozo || firebaseData.estado || 'DESCONOCIDO', 'manual'),
             municipio: toFieldValue(firebaseData.municipio || '', 'manual'),
-            enlace: toFieldValue(firebaseData.enlace || '', 'manual', false),
+            enlace: toFieldValue(mapsLink, 'manual', false),
         },
 
         ubicacion: {

@@ -15,6 +15,10 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { fetchPhotosByDriveIds } from '@/lib/services/driveFastDownloader';
+import { PhotoQueue } from '@/lib/services/photoQueue';
+import { photoCache } from '@/lib/services/photoCache';
+import { perf } from '@/lib/utils/perfLogger';
 import { useGlobalStore, useUIStore } from '@/stores';
 import { logger } from '@/lib/logger';
 import { PozosTable, PozoStatusDetail } from '@/components/pozos';
@@ -40,24 +44,32 @@ function calcularCoordenadas(lat: number, lng: number): { x: string; y: string }
 }
 
 function enriquecerCoordenadas(pozo: any): any {
-    const xVal = pozo.coordenadaX?.value || pozo.identificacion?.coordenadaX?.value;
-    const yVal = pozo.coordenadaY?.value || pozo.identificacion?.coordenadaY?.value;
-    if (xVal && xVal !== 'DESCONOCIDO' && yVal && yVal !== 'DESCONOCIDO') return pozo;
-
     const lat = parseFloat(pozo.identificacion?.latitud?.value || pozo.latitud?.value || '0');
     const lng = parseFloat(pozo.identificacion?.longitud?.value || pozo.longitud?.value || '0');
-    const coords = calcularCoordenadas(lat, lng);
-    if (!coords) return pozo;
+    if (!lat || !lng) return pozo;
 
     const fv = (v: string) => ({ value: v, source: 'manual' as const });
+
+    const xVal = pozo.coordenadaX?.value || pozo.identificacion?.coordenadaX?.value;
+    const yVal = pozo.coordenadaY?.value || pozo.identificacion?.coordenadaY?.value;
+    const enlaceVal = pozo.enlace?.value || pozo.identificacion?.enlace?.value;
+    const mapsUrl = `https://www.google.com/maps?q=${lat},${lng}`;
+
+    const needsCoords = !xVal || xVal === 'DESCONOCIDO' || !yVal || yVal === 'DESCONOCIDO';
+    const needsEnlace = !enlaceVal || enlaceVal === 'DESCONOCIDO' || enlaceVal === '';
+
+    if (!needsCoords && !needsEnlace) return pozo;
+
+    const coords = needsCoords ? calcularCoordenadas(lat, lng) : null;
+
     return {
         ...pozo,
-        coordenadaX: fv(coords.x),
-        coordenadaY: fv(coords.y),
+        ...(coords ? { coordenadaX: fv(coords.x), coordenadaY: fv(coords.y) } : {}),
+        ...(needsEnlace ? { enlace: fv(mapsUrl) } : {}),
         identificacion: {
             ...pozo.identificacion,
-            coordenadaX: fv(coords.x),
-            coordenadaY: fv(coords.y),
+            ...(coords ? { coordenadaX: fv(coords.x), coordenadaY: fv(coords.y) } : {}),
+            ...(needsEnlace ? { enlace: fv(mapsUrl) } : {}),
         }
     };
 }
@@ -175,8 +187,16 @@ export default function PozosPage() {
   };
 
   // Handle generate PDF for selected pozo(s)
-  const handleGeneratePDF = async (batchIds?: string[], isFlexible: boolean = false) => {
-    // PRIORIDAD: 
+  // photoMode:
+  //   'local' → solo usa fotos del dispositivo (drag&drop / cache OPFS). Nada de Drive ni GAS.
+  //   'cloud' → si falta una foto local, la baja desde Drive/GAS.
+  //   'auto'  → respeta el flag lastImportWithPhotos (compatibilidad).
+  const handleGeneratePDF = async (
+    batchIds?: string[],
+    isFlexible: boolean = false,
+    photoMode: 'local' | 'cloud' | 'auto' = 'auto'
+  ) => {
+    // PRIORIDAD:
     // 1. IDs pasados explícitamente (batchIds)
     // 2. IDs seleccionados mediante checkboxes (selectedIds)
     // 3. ID seleccionado para vista previa (selectedPozoId)
@@ -187,7 +207,7 @@ export default function PozosPage() {
       return;
     }
 
-    logger.info('Solicitud de generación de PDF', { count: idsToProcess.length, flexible: isFlexible }, 'PozosPage');
+    logger.info('Solicitud de generación de PDF', { count: idsToProcess.length, flexible: isFlexible, photoMode }, 'PozosPage');
     setLoading(true);
 
     try {
@@ -197,6 +217,13 @@ export default function PozosPage() {
 
       // Obtener campos dinámicos del store para pasarlos al generador
       const allFields = useFieldsStore.getState().getAllFields();
+
+      // Asegurar que todas las fotos arrastradas localmente estén en disco
+      // antes de que el motor PDF las busque. Evita la condición de carrera
+      // donde pendingSaves aún no se ha flusheado al iniciar la generación.
+      console.log('⏳ Asegurando persistencia de fotos locales...');
+      await blobStore.flushPending();
+      console.log('✅ Fotos locales persistidas en disco.');
 
       // Generar todos los PDFs
       const pdfBlobs: Array<{ name: string; blob: Blob }> = [];
@@ -337,51 +364,130 @@ export default function PozosPage() {
             reader.readAsDataURL(blob);
           });
 
-          // PASO 1: Intentar leer TODAS las fotos desde blobStore local (instantáneo si ya fueron importadas)
-          console.log(`🏪 Buscando ${proxyPhotos.length} fotos en caché local (blobStore)...`);
+          // ═══════════════════════════════════════════════════════════
+          // v2: caché OPFS persistente + photoCache (not-found) + PhotoQueue
+          // ═══════════════════════════════════════════════════════════
+          await photoCache.init();
+          const donePreload = perf.start('pdf_preload.total');
+
           const desdeCache: { id: string; dataUrl: string }[] = [];
           const pendientes: typeof proxyPhotos = [];
+          let missingSkipped = 0;
+
           for (const foto of proxyPhotos) {
+            const fname = foto.filename || '';
+            const did = (foto as any).driveId as string | undefined;
+
+            // Pre-filtro: saltar fotos ya marcadas como no existentes
+            if (photoCache.isMissing(fname) || (did && photoCache.isMissing(did))) {
+              missingSkipped++;
+              continue;
+            }
+
+            // Caché OPFS persistente (sobrevive reload)
             try {
-              const cached = blobStore.getBlob(foto.filename || '');
+              const cached = await blobStore.getBlobAsync(fname);
               if (cached && cached.size > 100) {
                 const du = await blobToDataUrl(cached);
                 desdeCache.push({ id: foto.id, dataUrl: du });
-                console.log(`✅ CACHÉ: ${foto.filename} (${cached.size} bytes)`);
                 continue;
               }
             } catch {}
             pendientes.push(foto);
           }
-          console.log(`🏪 Caché resolvió ${desdeCache.length}/${proxyPhotos.length} fotos. Pendientes: ${pendientes.length}`);
+          perf.info('preload.cache_phase', {
+            total: proxyPhotos.length,
+            cache_hits: desdeCache.length,
+            missing_skipped: missingSkipped,
+            pending: pendientes.length,
+          });
 
-          // PASO 2: Las pendientes sí van por GAS (Level 0 con municipio/categoria — rápido)
-          const CONCURRENCY = 2;
           const preloadResults: PromiseSettledResult<{ id: string; dataUrl: string } | null>[] = [];
-
-          // Resultados del caché como fulfilled
           desdeCache.forEach(r => preloadResults.push({ status: 'fulfilled', value: r }));
 
-          for (let i = 0; i < pendientes.length; i += CONCURRENCY) {
-            const chunk = pendientes.slice(i, i + CONCURRENCY);
-            const chunkResults = await Promise.allSettled(
-              chunk.map(async (foto) => {
-                // Ir directo a GAS — el proxy siempre da 404 porque las Cloud Functions están caídas
-                console.log(`🌐 GAS: ${foto.filename}`);
-                const directDataUrl = await fetchPhotoFromGasDirect(foto.filename || '');
-                if (directDataUrl) {
-                  // Guardar en caché para próxima vez
-                  try {
-                    const b = await (await fetch(directDataUrl)).blob();
-                    await blobStore.store(b, foto.filename || '');
-                  } catch {}
-                  return { id: foto.id, dataUrl: directDataUrl };
-                }
-                return null;
-              })
-            );
-            preloadResults.push(...chunkResults);
+          // Decidir si bajar fotos faltantes desde la nube (Drive/GAS).
+          // - 'local' → NUNCA va a la nube (solo fotos arrastradas / cache OPFS)
+          // - 'cloud' → SIEMPRE intenta bajar lo faltante
+          // - 'auto'  → usa el flag de la última importación (compat retro)
+          const wantsCloudFetch = photoMode === 'cloud'
+            || (photoMode === 'auto' && useGlobalStore.getState().lastImportWithPhotos);
+
+          if (!wantsCloudFetch && pendientes.length > 0) {
+            console.log(`⏭️ Modo "solo local" (${photoMode}): omitiendo ${pendientes.length} fotos no presentes localmente (no se irá a la nube)`);
           }
+
+          if (pendientes.length > 0 && wantsCloudFetch) {
+            // PASO 2A: Drive API — lotes 20 × 4 paralelos
+            const conDriveId = pendientes.filter(f => !!(f as any).driveId);
+            const sinDriveId = pendientes.filter(f => !(f as any).driveId);
+
+            if (conDriveId.length > 0) {
+              const doneDrive = perf.start('pdf_preload.drive_api');
+              const ids = conDriveId.map(f => (f as any).driveId as string);
+              const driveMap = await fetchPhotosByDriveIds(ids, (p) => {
+                if (p.waitingNetwork) perf.net.wait();
+              });
+              let driveOk = 0, driveMiss = 0;
+              for (const foto of conDriveId) {
+                const dataUrl = driveMap[(foto as any).driveId];
+                if (dataUrl) {
+                  try {
+                    const b = await (await fetch(dataUrl)).blob();
+                    await blobStore.store(b, foto.filename || '');
+                    photoCache.recordAvailable(foto.filename || '', {
+                      driveId: (foto as any).driveId,
+                      size: b.size,
+                    });
+                  } catch {}
+                  preloadResults.push({ status: 'fulfilled', value: { id: foto.id, dataUrl } });
+                  driveOk++;
+                } else {
+                  sinDriveId.push(foto);
+                  driveMiss++;
+                }
+              }
+              doneDrive({ n: conDriveId.length, ok: driveOk, missed: driveMiss });
+            }
+
+            // PASO 2B: GAS con queue dinámica (concurrencia 16, SIN retry en 404)
+            if (sinDriveId.length > 0) {
+              const doneGas = perf.start('pdf_preload.gas_queue');
+              const queue = new PhotoQueue({ concurrency: 16 });
+              let gasDone = 0, gasOk = 0, gasFail = 0;
+
+              await Promise.all(
+                sinDriveId.map(foto =>
+                  queue.enqueue(foto.filename || '', async () => {
+                    const dataUrl = await fetchPhotoFromGasDirect(foto.filename || '');
+                    gasDone++;
+                    if (dataUrl) {
+                      try {
+                        const b = await (await fetch(dataUrl)).blob();
+                        await blobStore.store(b, foto.filename || '');
+                        photoCache.recordAvailable(foto.filename || '', { size: b.size });
+                      } catch {}
+                      preloadResults.push({ status: 'fulfilled', value: { id: foto.id, dataUrl } });
+                      gasOk++;
+                      return { id: foto.id, dataUrl };
+                    }
+                    // 404 de GAS → marcar missing, nunca reintentar en este u otros PDFs
+                    photoCache.markMissing(foto.filename || '', 'gas_404');
+                    preloadResults.push({ status: 'fulfilled', value: null });
+                    gasFail++;
+                    return null;
+                  })
+                )
+              );
+              doneGas({ n: sinDriveId.length, ok: gasOk, fail: gasFail });
+            }
+          }
+
+          donePreload({
+            n: proxyPhotos.length,
+            cache_hits: desdeCache.length,
+            missing_skipped: missingSkipped,
+            fetched: pendientes.length,
+          });
 
           // Reemplazar blobIds de proxy con data URLs pre-cargadas
           const dataUrlMap = new Map<string, string>();
@@ -392,13 +498,24 @@ export default function PozosPage() {
           });
 
           // Actualizar las fotos con data URLs pre-cargadas
+          let omittedRemote = 0;
           const finalFotos = saneFotos.map(f => {
             const preloaded = dataUrlMap.get(f.id);
             if (preloaded) {
               return { ...f, blobId: preloaded };
             }
+            // Modo "solo local": si la foto no está en cache local y su blobId
+            // es un URL remoto, vaciarlo para que BlobStore NO caiga a GAS/Drive
+            // como fallback. El PDF se genera sin esa foto.
+            if (!wantsCloudFetch && typeof f.blobId === 'string' && (f.blobId.startsWith('/api/') || f.blobId.startsWith('http'))) {
+              omittedRemote++;
+              return { ...f, blobId: '' };
+            }
             return f;
           });
+          if (omittedRemote > 0) {
+            console.log(`🚫 Modo solo local: ${omittedRemote} foto(s) remotas omitidas (no se va a Drive/GAS)`);
+          }
 
           // Reemplazar el enrichedPozo con fotos pre-cargadas
           enrichedPozo.fotos = { ...enrichedPozo.fotos, fotos: finalFotos };
@@ -614,14 +731,25 @@ export default function PozosPage() {
                   </button>
 
                   <button
-                    onClick={() => handleGeneratePDF(undefined, true)}
+                    onClick={() => handleGeneratePDF(undefined, true, 'local')}
                     className="px-4 py-2 text-white bg-amber-600 rounded-lg hover:bg-amber-700 shadow-md transition-all active:scale-95 flex items-center gap-2"
-                    title="Generar PDF Flexible (Colapsa espacios vacíos)"
+                    title="FLEXIBLE LOCAL: usa solo fotos del dispositivo (drag & drop). No descarga de Drive."
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
-                    FLEXIBLE ({selectedIds.size})
+                    FLEXIBLE LOCAL ({selectedIds.size})
+                  </button>
+
+                  <button
+                    onClick={() => handleGeneratePDF(undefined, true, 'cloud')}
+                    className="px-4 py-2 text-white bg-sky-600 rounded-lg hover:bg-sky-700 shadow-md transition-all active:scale-95 flex items-center gap-2"
+                    title="FLEXIBLE NUBE: si una foto no está local, la baja desde Drive."
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+                    </svg>
+                    FLEXIBLE NUBE ({selectedIds.size})
                   </button>
 
                   <button
@@ -650,13 +778,25 @@ export default function PozosPage() {
                   </button>
 
                   <button
-                    onClick={() => handleGeneratePDF([selectedPozoId], true)}
+                    onClick={() => handleGeneratePDF([selectedPozoId], true, 'local')}
                     className="px-4 py-2 text-white bg-amber-600 rounded-lg hover:bg-amber-700 transition-colors flex items-center gap-2"
+                    title="FLEXIBLE LOCAL: usa solo fotos del dispositivo. No descarga de Drive."
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
-                    PDF Flexible
+                    PDF Flexible Local
+                  </button>
+
+                  <button
+                    onClick={() => handleGeneratePDF([selectedPozoId], true, 'cloud')}
+                    className="px-4 py-2 text-white bg-sky-600 rounded-lg hover:bg-sky-700 transition-colors flex items-center gap-2"
+                    title="FLEXIBLE NUBE: si falta una foto local, la baja desde Drive."
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" />
+                    </svg>
+                    PDF Flexible Nube
                   </button>
 
                   <button
