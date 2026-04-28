@@ -13,6 +13,15 @@ Este proyecto comparte **la misma base de datos Firestore** que `catastro-ut-sta
 - **Diagnostics**: El historial de bugs resueltos está en `/diagnostics`. Solo consúltalo para bugs históricos.
 - **No Build Logs**: Los archivos `build_log*.txt`, `build_error.txt`, `output.txt` son basura temporal. Ignóralos.
 
+## Photo Mapping Logic
+Para asegurar que las fotos correctas aparezcan en los reportes:
+- **Foto de Tapa (Página 1)**: Debe ser un match estricto con el código `T` (ej: `PZ001-T.JPG`). Ignorar fotos que contengan prefijos de entradas/salidas (como `E1-T` o `S2-T`).
+- **Fotos Técnicas (Página 2)**: Para los slots de Entradas (`E1-E8`) y Salidas (`S1-S8`), priorizar según:
+  1. `TUBERIA_TAPA` (Sufijo `-T`) -> Prioridad máxima para el cuadro técnico.
+  2. `SUMIDERO/DETALLE` (Sufijo `-D`)
+  3. `PROFUNDIDAD` (Sufijo `-Z`)
+- **Localización (Código L)**: Acepta palabras clave: `MAPA`, `LOCALIZACION`, `ESQUEMA` y **`ARGIS`**.
+
 ## Folder Structure
 - `/src` - Código fuente de la aplicación.
 - `/diagnostics` - Análisis histórico de bugs (movidos desde la raíz).

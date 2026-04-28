@@ -98,40 +98,64 @@ function findPhotoByCode(pozo: Pozo, targetCode: string) {
     const pozoId = String(pozo.idPozo?.value || pozo.identificacion?.idPozo?.value || '').toUpperCase();
     const cleanPozoId = pozoId.split('_').pop() || '';
 
-    // Función de match: ¿esta foto corresponde al código buscado?
-    const matches = (f: any): boolean => {
-        if (!f) return false;
+    // Función de match con sistema de prioridades
+    const getPriority = (f: any): number => {
+        if (!f) return -1;
         const fname = String(f.filename || f.name || f.id || '').toUpperCase();
         const sub = String(f.subcategoria || '').toUpperCase();
-        
-        if (sub === upperTarget) return true;
+        const type = String(f.tipo || '').toUpperCase();
 
+        // Caso especial: Esquemas/Mapas
         if (upperTarget === 'L') {
-            return fname.includes('MAPA') || fname.includes('LOCALIZACION') || fname.includes('ESQUEMA') || fname.includes('-L.') || fname.includes('_L.');
+            if (fname.includes('MAPA') || fname.includes('LOCALIZACION') || fname.includes('ESQUEMA') || fname.includes('ARGIS') || fname.includes('-L.') || fname.includes('_L.')) return 100;
+            return -1;
         }
 
-        const hasPozo = fname.includes(cleanPozoId) || fname.includes(pozoId);
-        const hasCode = fname.includes(`-${upperTarget}.`) || fname.includes(`_${upperTarget}.`) 
-                     || fname.includes(`-${upperTarget}-`) || fname.includes(`_${upperTarget}-`);
-        const isExactCode = fname.startsWith(`${upperTarget}.`);
+        // CASO CRÍTICO: Foto de TAPA (T)
+        if (upperTarget === 'T') {
+            // Excluir si es una tapa de tubería (ej: E1-T, S2-T)
+            const isPipeTapa = fname.includes('-E') || fname.includes('-S') || fname.includes('-SUM');
+            if (isPipeTapa) return -1;
 
-        return (hasPozo && hasCode) || isExactCode;
+            if (sub === 'T') return 100;
+            if (fname.includes(`-${upperTarget}.`) || fname.includes(`_${upperTarget}.`)) return 50;
+            return -1;
+        }
+
+        // CASO: Entradas, Salidas, Sumideros (E1, S1, SUM1, etc.)
+        const hasPozo = fname.includes(cleanPozoId) || fname.includes(pozoId);
+        const hasCodeInFilename = fname.includes(`-${upperTarget}.`) || fname.includes(`_${upperTarget}.`)
+                     || fname.includes(`-${upperTarget}-`) || fname.includes(`_${upperTarget}-`);
+
+        if (sub === upperTarget || (hasPozo && hasCodeInFilename)) {
+            // PRIORIDADES: Tubería (-T) > Sumidero/Detalle (-D) > Profundidad (-Z)
+            if (type === 'TUBERIA_TAPA' || fname.includes('-T.')) return 100;
+            if (type === 'SUMIDERO' || type === 'DETALLE' || fname.includes('-D.')) return 80;
+            if (type === 'MEDICION' || fname.includes('-Z.')) return 50;
+            return 10;
+        }
+
+        return -1;
     };
 
-    // ★ CLAVE: Buscar PRIMERO fotos con blobId válido (locales),
-    //   DESPUÉS las que tienen blobId vacío o remoto (Firestore)
-    const allMatches = pozo.fotos.fotos.filter(f => matches(f));
-    
-    if (allMatches.length === 0) return null;
-    if (allMatches.length === 1) return allMatches[0];
+    // Obtener todos los candidatos con sus prioridades
+    const candidates = pozo.fotos.fotos
+        .map(f => ({ photo: f, priority: getPriority(f) }))
+        .filter(c => c.priority > 0)
+        .sort((a, b) => b.priority - a.priority);
 
-    // Priorizar: fotos con blobId real > fotos con blobId vacío/remoto
-    const withValidBlob = allMatches.find(f => {
-        const bid = f.blobId || '';
+    if (candidates.length === 0) return null;
+
+    // Priorizar fotos con blobId válido (locales) entre los de máxima prioridad
+    const topPriority = candidates[0].priority;
+    const topCandidates = candidates.filter(c => c.priority === topPriority);
+
+    const withValidBlob = topCandidates.find(c => {
+        const bid = c.photo.blobId || '';
         return bid.length > 0 && !bid.startsWith('/api/') && !bid.startsWith('http');
     });
-    
-    return withValidBlob || allMatches[0];
+
+    return withValidBlob ? withValidBlob.photo : topCandidates[0].photo;
 }
 
 /**
